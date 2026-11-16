@@ -1,0 +1,586 @@
+import * as THREE from 'three';
+import { setAniso } from './textures.js';
+import { World, lineAt, LANE, PIER, lightConeMaterial } from './world.js';
+import { DayCycle } from './sky.js';
+import { Vehicle, setTrafficLights, collideVehicles, setCarLOD } from './car.js';
+import { Traffic } from './traffic.js';
+import { Peds } from './peds.js';
+import { Player } from './player.js';
+import { Effects } from './effects.js';
+import { createPost } from './post.js';
+import { HUD } from './hud.js';
+import { AudioEngine } from './audio.js';
+import { Gameplay } from './gameplay.js';
+import { Input } from './input.js';
+import { clamp, damp, dampAngle, lerp } from './utils.js';
+
+/* ---------- Quality presets ---------- */
+const PRESETS = {
+  ultra: { pr: 2, minPr: 1, shadow: 4096, ao: true, peds: 44, traffic: 26 },
+  high: { pr: 1.5, minPr: 0.75, shadow: 2048, ao: false, peds: 38, traffic: 24 },
+  medium: { pr: 1, minPr: 0.6, shadow: 1024, ao: false, peds: 26, traffic: 18 },
+};
+let quality = 'high';
+try {
+  quality = localStorage.getItem('nt_quality') || 'high';
+} catch {
+  /* storage unavailable */
+}
+if (!PRESETS[quality]) quality = 'high';
+let preset = PRESETS[quality];
+
+/* ---------- Renderer ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
+let pixelRatio = Math.min(window.devicePixelRatio, preset.pr);
+renderer.setPixelRatio(pixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.55;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+document.getElementById('app').appendChild(renderer.domElement);
+setAniso(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.2, 7000);
+const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+
+let world, day, fx, post, hud, gameplay, traffic, peds, player;
+const vehicles = [];
+const audio = new AudioEngine();
+const input = new Input(renderer.domElement);
+let state = 'loading';
+let elapsed = 0;
+let frameNo = 0;
+
+/* ---------- Game context shared with the player controller ---------- */
+const game = {
+  vehicles,
+  audio,
+  night: 0,
+  partyOn: false,
+  get peds() {
+    return peds;
+  },
+  get traffic() {
+    return traffic;
+  },
+  get hud() {
+    return hud;
+  },
+  get gameplay() {
+    return gameplay;
+  },
+  adoptTrafficCar(car, vel, angVel, released = false) {
+    if (!released) traffic.release(car, player.focus);
+    const v = new Vehicle(scene, world, fx, car.type, car.color, car.mesh);
+    v.place(car.x, car.z, car.yaw, vel);
+    v.angVel = angVel || 0;
+    vehicles.push(v);
+    pruneVehicles();
+    return v;
+  },
+  onEnterVehicle(v) {
+    attachHeadlights(v);
+    hud.notify(v.label.toUpperCase(), '', '#38f3ff');
+  },
+  onExitVehicle() {
+    attachHeadlights(null);
+  },
+  endParty() {
+    game.partyOn = false;
+    peds.stopParty();
+  },
+};
+
+function pruneVehicles() {
+  while (vehicles.length > 16) {
+    let far = null;
+    let fd = 120;
+    for (const v of vehicles) {
+      if (v === player.vehicle) continue;
+      const d = Math.hypot(v.pos.x - player.focus.x, v.pos.z - player.focus.z);
+      if (d > fd) {
+        fd = d;
+        far = v;
+      }
+    }
+    if (!far) break;
+    scene.remove(far.car.root);
+    vehicles.splice(vehicles.indexOf(far), 1);
+  }
+}
+
+/* ---------- Headlight rig (moves to whatever the player drives) ---------- */
+const headlights = new THREE.Group();
+const spots = [];
+const beamMat = lightConeMaterial(new THREE.Color(1.0, 0.92, 0.78));
+for (const x of [0.62, -0.62]) {
+  const sp = new THREE.SpotLight(0xfff0d8, 0, 90, 0.48, 0.55, 1.4);
+  sp.position.set(x, 0.75, 2.3);
+  sp.target.position.set(x * 1.5, 0, 22);
+  headlights.add(sp, sp.target);
+  spots.push(sp);
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 2.6, 15, 16, 1, true).rotateX(-Math.PI / 2).translate(0, 0, 7.5), beamMat);
+  cone.position.set(x, 0.74, 2.42);
+  cone.rotation.x = 0.06;
+  cone.renderOrder = 4;
+  headlights.add(cone);
+}
+function attachHeadlights(v) {
+  headlights.removeFromParent();
+  if (v) v.car.root.add(headlights);
+}
+
+/* ---------- Camera rig ---------- */
+const cam = { mode: 0, yaw: Math.PI, pitch: 0.18, look: 0, lookPitch: 0, lookTimer: 0, shake: 0, fov: 62, pos: new THREE.Vector3(), init: false };
+const CAR_CAMS = [
+  { dist: 7.4, height: 2.5, look: 1.2 },
+  { dist: 12, height: 4.2, look: 1.4 },
+  { dist: 0, height: 1.22, look: 0 },
+];
+
+function updateCamera(dt) {
+  if (state === 'title') {
+    const a = elapsed * 0.04;
+    camera.position.set(Math.cos(a) * 420 + 80, 95 + Math.sin(elapsed * 0.1) * 15, Math.sin(a) * 420);
+    camera.lookAt(40, 25, 0);
+    camera.fov = 55;
+    camera.updateProjectionMatrix();
+    return;
+  }
+  const mdx = input.mouse.dx;
+  const mdy = input.mouse.dy;
+  const p = player;
+  let targetFov = 60;
+  if (!p.driving) {
+    // Third-person orbit around the character
+    cam.yaw -= mdx * 0.0026;
+    cam.pitch = clamp(cam.pitch + mdy * 0.0022, -0.45, 1.1);
+    const sprint = p.speed > 5;
+    const dist = (sprint ? 4.9 : 4.3) * (cam.mode === 1 ? 1.5 : 1);
+    const tx = p.pos.x;
+    const ty = p.pos.y + 1.55;
+    const tz = p.pos.z;
+    const fx = Math.sin(cam.yaw);
+    const fz = Math.cos(cam.yaw);
+    const cp = Math.cos(cam.pitch);
+    // over-the-shoulder offset to the right
+    const sx = -fz * 0.45;
+    const sz = fx * 0.45;
+    let cx = tx - fx * cp * dist + sx;
+    let cz = tz - fz * cp * dist + sz;
+    const hit = world.raycast(tx, tz, cx, cz);
+    if (hit < 1) {
+      const f = Math.max(0.1, hit - 0.05);
+      cx = tx + (cx - tx) * f;
+      cz = tz + (cz - tz) * f;
+    }
+    // keep the lens out of poles, palms and walls
+    for (let i = 0; i < 2; i++) {
+      const push = world.collideCircle(cx, cz, 0.45);
+      if (!push) break;
+      cx += push.px;
+      cz += push.pz;
+    }
+    const cy = Math.max(ty + Math.sin(cam.pitch) * dist, world.height(cx, cz) + 0.3);
+    if (!cam.init) cam.pos.set(cx, cy, cz);
+    cam.pos.set(damp(cam.pos.x, cx, 20, dt), damp(cam.pos.y, cy, 20, dt), damp(cam.pos.z, cz, 20, dt));
+    camera.position.copy(cam.pos);
+    camera.lookAt(tx + sx, ty, tz + sz);
+    targetFov = sprint ? 66 : 60;
+  } else {
+    const v = p.vehicle;
+    if (mdx || mdy) {
+      cam.look -= mdx * 0.004;
+      cam.lookPitch = clamp(cam.lookPitch + mdy * 0.003, -0.3, 0.6);
+      cam.lookTimer = 1.6;
+    }
+    cam.lookTimer -= dt;
+    if (cam.lookTimer <= 0) {
+      cam.look = damp(cam.look, 0, 3, dt);
+      cam.lookPitch = damp(cam.lookPitch, 0, 3, dt);
+    }
+    let heading = v.yaw;
+    if (v.speed > 3 && v.vf > -1) heading = dampAngle(v.yaw, Math.atan2(v.vel.x, v.vel.y), 1, 0.35);
+    cam.yaw = dampAngle(cam.yaw, heading, 5, dt);
+    const m = CAR_CAMS[cam.mode];
+    const fx = Math.sin(v.yaw);
+    const fz = Math.cos(v.yaw);
+    if (cam.mode === 2) {
+      camera.position.set(v.pos.x + fx * 0.2 + Math.cos(v.yaw) * 0.38, v.pos.y + m.height + (v.def.seatY + 0.42), v.pos.z + fz * 0.2 - Math.sin(v.yaw) * 0.38);
+      const ly = cam.yaw + cam.look;
+      camera.lookAt(camera.position.x + Math.sin(ly) * 20, camera.position.y - 0.4 - cam.lookPitch * 10, camera.position.z + Math.cos(ly) * 20);
+    } else {
+      const yaw = cam.yaw + cam.look;
+      const dist = m.dist + clamp(v.speed / 60, 0, 1) * 1.6 + (v.type === 'van' ? 1.2 : 0);
+      const height = m.height + cam.lookPitch * 6 + (v.type === 'van' ? 0.6 : 0);
+      let tx = v.pos.x - Math.sin(yaw) * dist;
+      let tz = v.pos.z - Math.cos(yaw) * dist;
+      const hit = world.raycast(v.pos.x, v.pos.z, tx, tz);
+      if (hit < 1) {
+        const f = Math.max(0.2, hit - 0.08);
+        tx = v.pos.x + (tx - v.pos.x) * f;
+        tz = v.pos.z + (tz - v.pos.z) * f;
+      }
+      const ty = Math.max(v.pos.y + height, world.height(tx, tz) + 0.8);
+      cam.pos.set(damp(cam.pos.x, tx, 14, dt), damp(cam.pos.y, ty, 8, dt), damp(cam.pos.z, tz, 14, dt));
+      camera.position.copy(cam.pos);
+      camera.lookAt(v.pos.x + fx * 2, v.pos.y + m.look, v.pos.z + fz * 2);
+    }
+    targetFov = 60 + clamp(v.speed / 70, 0, 1) * 16 + (v.nitroOn ? 8 : 0);
+  }
+  cam.init = true;
+  cam.shake = Math.max(cam.shake - dt * 2.5, 0);
+  if (cam.shake > 0) {
+    camera.position.x += (Math.random() - 0.5) * cam.shake;
+    camera.position.y += (Math.random() - 0.5) * cam.shake;
+  }
+  cam.fov = damp(cam.fov, targetFov, 3, dt);
+  camera.fov = cam.fov;
+  camera.updateProjectionMatrix();
+}
+
+/* ---------- Resize & quality ---------- */
+function resize() {
+  renderer.setPixelRatio(pixelRatio);
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  if (post) post.setSize(innerWidth, innerHeight, pixelRatio);
+  if (fx) fx.setScale(innerHeight * pixelRatio);
+}
+addEventListener('resize', resize);
+
+function applyQuality(q) {
+  quality = q;
+  preset = PRESETS[q];
+  try {
+    localStorage.setItem('nt_quality', q);
+  } catch {
+    /* storage unavailable */
+  }
+  document.querySelectorAll('#quality button').forEach((b) => b.classList.toggle('on', b.dataset.q === q));
+  pixelRatio = Math.min(window.devicePixelRatio, preset.pr);
+  if (day) {
+    const sh = day.sun.shadow;
+    sh.mapSize.set(preset.shadow, preset.shadow);
+    if (sh.map) {
+      sh.map.dispose();
+      sh.map = null;
+    }
+  }
+  if (post) post.gtao.enabled = preset.ao;
+  resize();
+}
+document.querySelectorAll('#quality button').forEach((b) => b.addEventListener('click', () => applyQuality(b.dataset.q)));
+
+let perfT = 0;
+let perfFrames = 0;
+function adaptQuality(dt) {
+  perfT += dt;
+  perfFrames++;
+  if (perfT < 2) return;
+  const fps = perfFrames / perfT;
+  perfT = 0;
+  perfFrames = 0;
+  const cap = Math.min(window.devicePixelRatio, preset.pr);
+  let next = pixelRatio;
+  if (fps < 40) next = Math.max(preset.minPr, pixelRatio - 0.15);
+  else if (fps > 57) next = Math.min(cap, pixelRatio + 0.1);
+  if (Math.abs(next - pixelRatio) > 0.01) {
+    pixelRatio = next;
+    resize();
+  }
+}
+
+/* ---------- Boot ---------- */
+async function boot() {
+  const setLoading = (p, t) => {
+    document.querySelector('#loading .fill').style.width = `${p * 100}%`;
+    document.querySelector('#loading .text').textContent = t;
+  };
+  setLoading(0.1, 'Paving the streets');
+  await frame();
+  world = new World(scene);
+  setLoading(0.45, 'Painting the sky');
+  await frame();
+  day = new DayCycle(scene, renderer);
+  day.time = 17.7;
+  const startHour = parseFloat(new URLSearchParams(location.search).get('t'));
+  if (!Number.isNaN(startHour)) day.time = startHour % 24;
+  fx = new Effects(scene);
+  hud = new HUD(world);
+  setLoading(0.6, 'Fuelling the cars');
+  await frame();
+  traffic = new Traffic(scene, world, fx, preset.traffic);
+  traffic.onRelease = (car, vel, ang) => game.adoptTrafficCar(car, vel, ang, true);
+  traffic.honk = (car) => audio.honk(Math.hypot(car.x - player.focus.x, car.z - player.focus.z));
+  // Parked rides around town
+  const parked = [
+    ['convertible', 0xff4f9a, lineAt(8) - 5.6, 98, Math.PI],
+    ['coupe', 0x22d3e6, 447, -7, Math.PI / 2],
+    ['taxi', 0xffcf2e, lineAt(4) + 5.6, lineAt(4) + 30, 0],
+    ['van', 0xf2f2f2, lineAt(2) - 5.6, lineAt(5) + 25, Math.PI],
+    ['convertible', 0x7fffd4, lineAt(8) - 5.6, -150, Math.PI],
+    ['coupe', 0x18181d, lineAt(6) + 5.6, lineAt(2) + 25, 0],
+    ['sedan', 0x8b5cf6, lineAt(5) - 5.6, lineAt(6) + 30, Math.PI],
+  ];
+  for (const [type, color, x, z, yaw] of parked) {
+    const v = new Vehicle(scene, world, fx, type, color);
+    v.place(x, z, yaw);
+    if (x > 400) v.pos.y = PIER.deck;
+    vehicles.push(v);
+  }
+  setLoading(0.75, 'Waking up the locals');
+  await frame();
+  player = new Player(scene, world, game);
+  player.spawn(lineAt(8) - 8.5, 106, Math.PI);
+  peds = new Peds(scene, world, hud, audio, preset.peds);
+  peds.spawnAll(player.pos);
+  gameplay = new Gameplay(scene, world, hud, audio);
+  post = createPost(renderer, scene, camera);
+  applyQuality(quality);
+  hideFromReflections();
+  setLoading(0.9, 'Compiling shaders');
+  await frame();
+  day.update(0, player.pos, camera.position);
+  day.bakeEnv(day.sunDir.y);
+  updateCamera(0);
+  renderer.compile(scene, camera);
+  setLoading(1, 'Ready');
+  hud.ready();
+  input.onWheel = (open, vec) => hud.wheel(open && state === 'play' && player.mode === 'foot', vec);
+  state = 'title';
+  last = performance.now();
+  requestAnimationFrame(loop);
+}
+
+let reflectFrame = false;
+/** Characters, traffic and particles are skipped in the ocean's reflection pass for speed. */
+function hideFromReflections() {
+  const water = world.water;
+  const orig = water.onBeforeRender;
+  water.onBeforeRender = (...args) => {
+    const hidden = [];
+    const hide = (o) => {
+      if (o.visible) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    };
+    for (const n of peds.list) hide(n.ch.mesh);
+    for (const c of traffic.cars) hide(c.mesh.root);
+    hide(day.flareAnchor);
+    hide(fx.smokeP.points);
+    hide(headlights);
+    // The ocean mirror re-renders the whole scene; refreshing it every other frame halves that cost
+    reflectFrame = !reflectFrame;
+    if (!reflectFrame) {
+      for (const o of hidden) o.visible = true;
+      return;
+    }
+    orig(...args);
+    for (const o of hidden) o.visible = true;
+  };
+}
+
+function startGame() {
+  if (state !== 'title') return;
+  audio.init();
+  state = 'play';
+  hud.start();
+  input.lock();
+  cam.yaw = player.yaw;
+  setTimeout(() => hud.notify('WELCOME TO VIBE CITY', 'Walk up to any car and press F', '#ff3fa4'), 900);
+}
+document.getElementById('play').addEventListener('click', startGame);
+renderer.domElement.addEventListener('click', () => {
+  if (state === 'play') input.lock();
+});
+document.getElementById('pause').addEventListener('click', () => setPaused(false));
+let wasLocked = false;
+document.addEventListener('pointerlockchange', () => {
+  const locked = document.pointerLockElement === renderer.domElement;
+  if (!locked && wasLocked && state === 'play') setPaused(true);
+  wasLocked = locked;
+});
+function setPaused(p) {
+  if (p && state !== 'play') return;
+  if (!p && state !== 'pause') return;
+  state = p ? 'pause' : 'play';
+  hud.setPaused(p);
+  if (audio.ctx) p ? audio.ctx.suspend() : audio.ctx.resume();
+  if (!p) input.lock();
+}
+
+/* ---------- Main loop ---------- */
+let last = 0;
+const blipsFn = () => gameplay.blips();
+const movingVehicles = [];
+const obstacles = [];
+const footObstacle = { pos: null, isPed: true };
+const pedObstacles = [];
+let nitroWas = false;
+let hornWas = false;
+function loop() {
+  requestAnimationFrame(loop);
+  const now = performance.now();
+  // Cap at ~60 fps: high-refresh displays would otherwise double CPU/GPU work
+  if (now - last < 15.5) return;
+  const dt = Math.min((now - last) / 1000, 1 / 20);
+  last = now;
+  frameNo++;
+
+  if (state === 'title' && input.hit('Enter')) startGame();
+  if ((state === 'play' || state === 'pause') && (input.hit('Escape') || input.hit('KeyP'))) {
+    if (!input.locked || state === 'pause') setPaused(state === 'play');
+  }
+  if (state === 'pause') {
+    input.endFrame();
+    return;
+  }
+  elapsed += dt;
+  const inp = input.poll();
+  game.night = day.night;
+
+  if (state === 'play') {
+    if (input.hit('KeyC')) cam.mode = (cam.mode + 1) % (player.driving ? 3 : 2);
+    if (input.hit('KeyM')) audio.setMuted(!audio.muted);
+    if (input.hit('KeyQ')) hud.notify(audio.toggleRadio() ? 'RADIO ON' : 'RADIO OFF', 'Vibe City FM', '#b45bff');
+    if (input.hit('KeyR') && player.driving) resetToRoad(player.vehicle);
+    if (input.hit('Backspace') && gameplay.race.state !== 'idle') gameplay.cancelRace('Cancelled');
+    if (input.hit('KeyT')) hud.notify('TIME WARP', 'Hold T to fast-forward', '#38f3ff');
+    day.warp = input.keys.has('KeyT') ? 40 : 1;
+    const wasDriving = player.driving;
+    player.update(dt, elapsed, inp, input, cam.yaw);
+    if (player.driving && !wasDriving && cam.mode > 2) cam.mode = 0;
+    if (!player.driving && cam.mode > 1) cam.mode = 0;
+    // Horn scares nearby people
+    const horn = player.driving && inp.horn;
+    audio.horn(horn);
+    if (horn && !hornWas) {
+      const v = player.vehicle;
+      for (const n of peds.list) {
+        const d = Math.hypot(n.x - v.pos.x, n.z - v.pos.z);
+        if (d < 12 && n.state !== 'down' && Math.random() < 0.6) {
+          n.ch.play('cower');
+          if (Math.random() < 0.5) peds.say(n, ['Watch it!', 'Hey!', 'Easy!', 'Jeez!'][Math.floor(Math.random() * 4)], 1.8);
+        }
+      }
+    }
+    hornWas = horn;
+    if (player.driving) {
+      if (player.vehicle.nitroOn && !nitroWas) audio.whoosh();
+      nitroWas = player.vehicle.nitroOn;
+    }
+  }
+
+  // Free vehicles (parked / knocked loose)
+  for (const v of vehicles) {
+    if (v === player.vehicle && (player.mode === 'driving' || player.mode === 'exiting')) continue;
+    v.update(dt, null, day.night);
+  }
+  for (let i = 0; i < vehicles.length; i++) {
+    for (let j = i + 1; j < vehicles.length; j++) {
+      const a = vehicles[i];
+      const b = vehicles[j];
+      if (a.asleep && b.asleep) continue;
+      const hit = collideVehicles(a, b);
+      if (hit > 3 && (a === player.vehicle || b === player.vehicle)) a.impact = b.impact = Math.max(a.impact, hit);
+    }
+  }
+  const focus = player.focus;
+  obstacles.length = 0;
+  for (const v of vehicles) obstacles.push(v);
+  if (player.mode === 'foot') {
+    footObstacle.pos = player.pos;
+    obstacles.push(footObstacle);
+  }
+  let pi = 0;
+  for (const n of peds.list) {
+    if (n.state !== 'down' && n.state !== 'flee') continue;
+    const o = pedObstacles[pi] || (pedObstacles[pi] = { pos: { x: 0, z: 0 }, isPed: true });
+    o.pos.x = n.x;
+    o.pos.z = n.z;
+    obstacles.push(o);
+    pi++;
+  }
+  traffic.update(dt, focus, obstacles, camera.position);
+  movingVehicles.length = 0;
+  for (let i = vehicles.length - 1; i >= 0; i--) {
+    const v = vehicles[i];
+    if (!v.asleep || v.driven) traffic.collideVehicle(v, focus);
+    if (!v.asleep && v.speed > 3) movingVehicles.push(v);
+    setCarLOD(v.car, Math.hypot(v.pos.x - camera.position.x, v.pos.z - camera.position.z));
+  }
+
+  const pv = player.driving ? player.vehicle : null;
+  if (pv && pv.impact > 3) {
+    cam.shake = Math.min(0.6, cam.shake + pv.impact * 0.03);
+    audio.impact(pv.impact);
+  }
+  peds.update(dt, elapsed, {
+    focus,
+    foot: player.mode === 'foot' ? player.pos : null,
+    vehicles: movingVehicles,
+    camPos: camera.position,
+    frame: frameNo,
+  });
+  if (state === 'play') gameplay.update(dt, elapsed, player);
+
+  fx.update(dt);
+  fx.smokeP.mat.uniforms.uColor.value.setScalar(lerp(0.85, 0.12, day.night));
+  day.update(dt, focus, camera.position);
+  world.update(dt, elapsed, day.night, day.sunDir);
+  setTrafficLights(day.night);
+  for (const s of spots) s.intensity = day.night * 260;
+  beamMat.uniforms.uIntensity.value = day.night * 0.35;
+  updateCamera(dt);
+  hud.prompt(state === 'play' ? player.prompt : null);
+  const mm = pv ? { pos: pv.pos, yaw: pv.yaw, speed: pv.speed } : { pos: player.pos, yaw: cam.yaw, speed: player.speed };
+  hud.update(dt, mm, day.hours, blipsFn, pv, camera);
+  audio.update({
+    rpm: pv ? pv.rpm : 0.2,
+    throttle: pv && state === 'play' ? inp.throttle : 0,
+    speed: pv ? pv.speed : 0,
+    skid: pv ? pv.skid : 0,
+    nitro: pv ? pv.nitroOn : false,
+    engineOn: !!pv,
+  });
+
+  // Post FX
+  const g = post.grade.uniforms;
+  const spd = pv ? pv.speed : 0;
+  g.uTime.value = elapsed % 100;
+  g.uNight.value = day.night;
+  g.uBlur.value = pv && pv.nitroOn ? 1.6 : clamp((spd - 35) / 40, 0, 1) * 0.6;
+  g.uAberration.value = 0.0012 + (pv && pv.nitroOn ? 0.004 : 0) + cam.shake * 0.01;
+  // The midday sky is very bright in linear HDR: keep bloom for real light sources only
+  const sunHigh = clamp(day.sunDir.y / 0.4, 0, 1);
+  post.bloom.strength = lerp(lerp(0.4, 0.22, sunHigh), 0.6, day.night);
+  post.bloom.threshold = lerp(lerp(1.0, 5.0, sunHigh), 0.85, day.night);
+
+  renderer.shadowMap.needsUpdate = true;
+  post.composer.render(dt);
+  input.endFrame();
+  adaptQuality(dt);
+}
+
+function resetToRoad(v) {
+  const cell = lineAt(1) - lineAt(0);
+  const kx = clamp(Math.round((v.pos.x - lineAt(0)) / cell), 0, 8);
+  const mz = clamp(Math.round((v.pos.z - lineAt(0)) / cell), 0, 8);
+  const dx = Math.abs(v.pos.x - lineAt(kx));
+  const dz = Math.abs(v.pos.z - lineAt(mz));
+  if (dx < dz) v.place(lineAt(kx) + LANE, clamp(v.pos.z, lineAt(0), lineAt(8)), Math.PI);
+  else v.place(clamp(v.pos.x, lineAt(0), lineAt(8)), lineAt(mz) + LANE, Math.PI / 2);
+  hud.notify('RESET', '', '#ffffff');
+}
+
+boot().catch((e) => {
+  console.error(e);
+  document.querySelector('#loading .text').textContent = `Error: ${e.message}`;
+});
