@@ -142,10 +142,59 @@ export class Effects {
     this.smokeP = new Particles(scene, { max: 420, map: T.smoke(), color: 0xd8d8d8, drag: 1.2 });
     this.sparkP = new Particles(scene, { max: 300, map: glow, color: new THREE.Color(6, 3, 0.8), blending: THREE.AdditiveBlending, gravity: 14, drag: 0.6 });
     this.flameP = new Particles(scene, { max: 200, map: glow, color: new THREE.Color(1.5, 2.5, 8), blending: THREE.AdditiveBlending, drag: 3 });
+    this.fireP = new Particles(scene, { max: 500, map: T.smoke(), color: new THREE.Color(9, 3.4, 0.7), blending: THREE.AdditiveBlending, gravity: -4, drag: 1.6 });
+    this.darkP = new Particles(scene, { max: 500, map: T.smoke(), color: 0x161412, gravity: -1.2, drag: 0.9 });
+    this.dustP = new Particles(scene, { max: 200, map: T.smoke(), color: 0x9a8f80, gravity: 2, drag: 3 });
+    this.bloodP = new Particles(scene, { max: 220, map: glow, color: 0x6e0505, gravity: 9, drag: 1.5 });
     this.skidmarks = new Skidmarks(scene);
+    this.systems = [this.smokeP, this.sparkP, this.flameP, this.fireP, this.darkP, this.dustP, this.bloodP];
   }
   setScale(h) {
-    for (const p of [this.smokeP, this.sparkP, this.flameP]) p.mat.uniforms.uScale.value = h * 0.5;
+    for (const p of this.systems) p.mat.uniforms.uScale.value = h * 0.5;
+  }
+  /** Bullet hitting a hard surface: a puff of dust and a few sparks. */
+  impact(x, y, z, nx, ny, nz, metal = false) {
+    for (let i = 0; i < 3; i++) this.dustP.spawn(x, y, z, nx * 2 + (Math.random() - 0.5) * 1.5, ny * 2 + Math.random(), nz * 2 + (Math.random() - 0.5) * 1.5, 0.5 + Math.random() * 0.4, 0.15, 1.1, 0.55);
+    const n = metal ? 10 : 3;
+    for (let i = 0; i < n; i++) this.sparkP.spawn(x, y, z, nx * 4 + (Math.random() - 0.5) * 6, ny * 4 + Math.random() * 4, nz * 4 + (Math.random() - 0.5) * 6, 0.15 + Math.random() * 0.25, 0.12, 0.03, 1);
+  }
+  blood(x, y, z, dx, dz, amount = 1) {
+    const n = Math.round(8 * amount);
+    for (let i = 0; i < n; i++) this.bloodP.spawn(x, y, z, dx * 2.5 + (Math.random() - 0.5) * 2.4, Math.random() * 2.5, dz * 2.5 + (Math.random() - 0.5) * 2.4, 0.35 + Math.random() * 0.35, 0.16, 0.06, 0.9);
+  }
+  muzzle(x, y, z, dx, dy, dz, big = false) {
+    const n = big ? 6 : 3;
+    for (let i = 0; i < n; i++) {
+      const s = 4 + Math.random() * 6;
+      this.fireP.spawn(x, y, z, dx * s, dy * s, dz * s, 0.05, big ? 0.55 : 0.32, 0.05, 1);
+    }
+    this.smokeP.spawn(x, y, z, dx * 1.5, 0.4, dz * 1.5, 0.8, 0.15, 1.4, 0.18);
+  }
+  /** Burning vehicle or debris: call every frame while it burns. */
+  burn(x, y, z, k = 1) {
+    if (Math.random() < 0.7 * k) this.fireP.spawn(x + (Math.random() - 0.5) * 1.2, y, z + (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 0.8, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 0.8, 0.5 + Math.random() * 0.4, 0.9, 0.2, 0.9);
+    if (Math.random() < 0.5 * k) this.darkP.spawn(x, y + 0.8, z, (Math.random() - 0.5) * 0.8, 1.5 + Math.random(), (Math.random() - 0.5) * 0.8, 3 + Math.random() * 2, 1.2, 7, 0.55);
+  }
+  /** Light grey engine smoke from a damaged vehicle. */
+  engineSmoke(x, y, z, dark) {
+    if (dark) this.darkP.spawn(x, y, z, (Math.random() - 0.5) * 0.5, 1.2 + Math.random(), (Math.random() - 0.5) * 0.5, 2 + Math.random(), 0.6, 4, 0.45);
+    else this.smokeP.spawn(x, y, z, (Math.random() - 0.5) * 0.4, 1 + Math.random() * 0.6, (Math.random() - 0.5) * 0.4, 1.4 + Math.random(), 0.5, 3, 0.3);
+  }
+  explosion(x, y, z, size = 1) {
+    for (let i = 0; i < 60 * size; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const u = Math.random() * 2 - 1;
+      const r = Math.sqrt(1 - u * u);
+      const s = (4 + Math.random() * 9) * size;
+      this.fireP.spawn(x, y + 0.6, z, Math.cos(a) * r * s, Math.abs(u) * s * 0.9 + 2, Math.sin(a) * r * s, 0.5 + Math.random() * 0.6, 2.2 * size, 4.5 * size, 1);
+    }
+    for (let i = 0; i < 40 * size; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = (2 + Math.random() * 5) * size;
+      this.darkP.spawn(x + Math.cos(a), y + 1 + Math.random() * 2, z + Math.sin(a), Math.cos(a) * s, 2 + Math.random() * 5, Math.sin(a) * s, 3 + Math.random() * 3, 2.5 * size, 11 * size, 0.7);
+    }
+    this.sparks(x, y + 0.8, z, 40);
+    this.sparks(x, y + 0.8, z, 40);
   }
   smoke(x, y, z, vx, vz) {
     this.smokeP.spawn(x + (Math.random() - 0.5) * 0.4, y, z + (Math.random() - 0.5) * 0.4, vx + (Math.random() - 0.5) * 1.5, 0.8 + Math.random(), vz + (Math.random() - 0.5) * 1.5, 1.6 + Math.random(), 1.2, 6.5, 0.4);
@@ -160,8 +209,6 @@ export class Effects {
     this.flameP.spawn(x, y, z, vx + (Math.random() - 0.5), (Math.random() - 0.5) * 0.5, vz + (Math.random() - 0.5), 0.14, 0.7, 0.15, 0.9);
   }
   update(dt) {
-    this.smokeP.update(dt);
-    this.sparkP.update(dt);
-    this.flameP.update(dt);
+    for (const p of this.systems) p.update(dt);
   }
 }

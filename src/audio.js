@@ -92,10 +92,10 @@ export class AudioEngine {
     return { g, f };
   }
 
-  update({ rpm, throttle, speed, skid, nitro, engineOn = true }) {
+  update({ rpm, throttle, speed, skid, nitro, engineOn = true, pitch = 1 }) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    const f = 42 + rpm * 150;
+    const f = (42 + rpm * 150) * pitch;
     for (const { o, mul } of this.oscs) o.frequency.setTargetAtTime(f * mul, t, 0.04);
     this.lfo.frequency.setTargetAtTime(f * 0.5, t, 0.04);
     this.engFilter.frequency.setTargetAtTime(300 + rpm * 2200 * (0.35 + throttle * 0.65) + (nitro ? 900 : 0), t, 0.05);
@@ -176,6 +176,98 @@ export class AudioEngine {
     src.connect(f).connect(g).connect(this.master);
     src.start(t);
     src.stop(t + 0.8);
+  }
+
+  /** Filtered noise burst routed to the master bus. */
+  burst(t, { type = 'lowpass', freq = 1000, endFreq = null, q = 0.8, vol = 0.3, dur = 0.3 }) {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.Q.value = q;
+    f.frequency.setValueAtTime(freq, t);
+    if (endFreq) f.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t, Math.random() * 1.5);
+    src.stop(t + dur + 0.05);
+  }
+
+  /** Gunshot: a sharp crack, a body thump and a couple of quieter street echoes. */
+  gunshot(kind, dist = 0) {
+    if (!this.ctx) return;
+    const S = {
+      pistol: { crack: 2600, body: 900, vol: 0.5, dur: 0.16, thump: 120, echo: 0.35 },
+      smg: { crack: 3200, body: 1100, vol: 0.38, dur: 0.1, thump: 140, echo: 0.2 },
+      shotgun: { crack: 1500, body: 600, vol: 0.75, dur: 0.38, thump: 70, echo: 0.5 },
+      rifle: { crack: 3000, body: 1000, vol: 0.55, dur: 0.15, thump: 100, echo: 0.4 },
+      sniper: { crack: 3600, body: 700, vol: 0.85, dur: 0.32, thump: 60, echo: 0.8 },
+    }[kind] || { crack: 2600, body: 900, vol: 0.5, dur: 0.16, thump: 120, echo: 0.3 };
+    const att = 1 / (1 + dist * 0.05);
+    const t = this.ctx.currentTime;
+    const v = S.vol * att;
+    this.burst(t, { type: 'highpass', freq: S.crack, q: 0.7, vol: v * 0.9, dur: 0.05 + S.dur * 0.25 });
+    this.burst(t, { type: 'lowpass', freq: S.body * (dist > 40 ? 0.5 : 1), endFreq: 120, vol: v, dur: S.dur });
+    this.tone(S.thump, S.dur * 1.2, 'sine', v * 0.8, 35);
+    for (let i = 1; i <= 2; i++) this.burst(t + 0.09 * i + Math.random() * 0.05, { type: 'bandpass', freq: 700, q: 0.6, vol: v * S.echo * (0.45 / i), dur: S.dur * 2 });
+  }
+  dryFire() {
+    this.tone(1800, 0.03, 'square', 0.05);
+  }
+  reload() {
+    if (!this.ctx) return;
+    [0, 0.35, 0.7].forEach((d, i) => {
+      this.tone(i === 1 ? 900 : 1400, 0.04, 'square', 0.05, null, d);
+      this.burst(this.ctx.currentTime + d, { type: 'highpass', freq: 3000, vol: 0.08, dur: 0.05 });
+    });
+  }
+  swing() {
+    if (!this.ctx) return;
+    this.burst(this.ctx.currentTime, { type: 'bandpass', freq: 600, endFreq: 1800, q: 1.5, vol: 0.12, dur: 0.18 });
+  }
+  hitFlesh(strong = false) {
+    if (!this.ctx) return;
+    this.burst(this.ctx.currentTime, { type: 'lowpass', freq: strong ? 700 : 1100, vol: strong ? 0.5 : 0.3, dur: 0.12 });
+    this.tone(strong ? 90 : 140, 0.12, 'sine', 0.3, 50);
+  }
+  ricochet(dist = 0) {
+    if (!this.ctx || Math.random() > 0.35) return;
+    const v = 0.06 / (1 + dist * 0.05);
+    this.tone(2400 + Math.random() * 1500, 0.22, 'sine', v, 700);
+  }
+  metalHit(dist = 0) {
+    if (!this.ctx) return;
+    const v = 0.18 / (1 + dist * 0.05);
+    this.tone(1300 + Math.random() * 600, 0.15, 'triangle', v, 600);
+    this.burst(this.ctx.currentTime, { type: 'highpass', freq: 2500, vol: v, dur: 0.06 });
+  }
+  explosion(dist = 0) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const v = Math.min(1, 1.6 / (1 + dist * 0.03));
+    this.burst(t, { type: 'lowpass', freq: 1400, endFreq: 80, vol: v, dur: 1.8 });
+    this.burst(t, { type: 'highpass', freq: 1500, vol: v * 0.4, dur: 0.12 });
+    this.tone(55, 1.2, 'sine', v * 0.9, 25);
+    this.burst(t + 0.25, { type: 'bandpass', freq: 400, q: 0.5, vol: v * 0.3, dur: 1.4 });
+  }
+  trainHorn(dist = 0) {
+    if (!this.ctx) return;
+    const v = Math.min(0.12, 2.5 / Math.max(dist, 8));
+    for (const f of [277, 349, 415]) this.tone(f, 1.3, 'sawtooth', v * 0.5);
+  }
+  tramBell(dist = 0) {
+    if (!this.ctx) return;
+    const v = Math.min(0.12, 2 / Math.max(dist, 6));
+    [0, 0.28].forEach((d) => {
+      this.tone(1568, 0.6, 'sine', v, null, d);
+      this.tone(3136, 0.3, 'sine', v * 0.4, null, d);
+    });
+  }
+  hurt() {
+    this.tone(220, 0.18, 'sawtooth', 0.06, 110);
   }
 
   setMuted(m) {

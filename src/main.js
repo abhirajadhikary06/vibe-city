@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { setAniso } from './textures.js';
 import { World, lineAt, LANE, PIER, lightConeMaterial } from './world.js';
 import { DayCycle } from './sky.js';
-import { Vehicle, setTrafficLights, collideVehicles, setCarLOD } from './car.js';
+import { Vehicle, setTrafficLights, collideVehicles, setCarLOD, hooks } from './car.js';
 import { Traffic } from './traffic.js';
 import { Peds } from './peds.js';
 import { Player } from './player.js';
@@ -12,6 +12,8 @@ import { HUD } from './hud.js';
 import { AudioEngine } from './audio.js';
 import { Gameplay } from './gameplay.js';
 import { Input } from './input.js';
+import { Rail } from './rail.js';
+import { Combat } from './combat.js';
 import { clamp, damp, dampAngle, lerp } from './utils.js';
 
 /* ---------- Quality presets ---------- */
@@ -47,7 +49,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.2, 7000);
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-let world, day, fx, post, hud, gameplay, traffic, peds, player;
+let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat;
 const vehicles = [];
 const audio = new AudioEngine();
 const input = new Input(renderer.domElement);
@@ -59,8 +61,22 @@ let frameNo = 0;
 const game = {
   vehicles,
   audio,
+  camera,
   night: 0,
   partyOn: false,
+  camYaw: 0,
+  get player() {
+    return player;
+  },
+  get rail() {
+    return rail;
+  },
+  get combat() {
+    return combat;
+  },
+  get fx() {
+    return fx;
+  },
   get peds() {
     return peds;
   },
@@ -84,10 +100,31 @@ const game = {
   },
   onEnterVehicle(v) {
     attachHeadlights(v);
-    hud.notify(v.label.toUpperCase(), '', '#38f3ff');
+    hud.notify(v.label.toUpperCase(), v.rail ? 'W / S to drive along the line' : '', '#38f3ff');
   },
   onExitVehicle() {
     attachHeadlights(null);
+  },
+  shake(a) {
+    cam.shake = Math.min(1, cam.shake + a);
+  },
+  recoil(a) {
+    cam.pitch -= a;
+    cam.recoil = Math.min(0.15, (cam.recoil || 0) + a * 0.6);
+    cam.shake = Math.min(1, cam.shake + a * 0.6);
+  },
+  onPlayerDown() {
+    cam.mode = 0;
+  },
+  respawnPlayer() {
+    // Wake up on the sidewalk of the nearest block, a little poorer
+    const p = player.pos;
+    let best = world.blocks[0];
+    for (const b of world.blocks) if (b.type !== 'beach' && Math.hypot(b.cx - p.x, b.cz - p.z) < Math.hypot(best.cx - p.x, best.cz - p.z)) best = b;
+    player.revive(best.x0 + 2.4, best.z0 + 2.4, Math.PI / 4);
+    const fee = Math.min(gameplay.money, 100 + Math.floor(gameplay.money * 0.05));
+    if (fee > 0) gameplay.addMoney(-fee);
+    hud.notify('BACK ON YOUR FEET', fee > 0 ? `Medical bill -$${fee}` : 'Take it easy', '#5dff9e');
   },
   endParty() {
     game.partyOn = false;
@@ -131,7 +168,10 @@ for (const x of [0.62, -0.62]) {
 }
 function attachHeadlights(v) {
   headlights.removeFromParent();
-  if (v) v.car.root.add(headlights);
+  if (!v) return;
+  // The rig is laid out for a car; shift it to this vehicle's lamps
+  headlights.position.set(0, v.def.headY - 0.75, v.def.headZ - 2.36);
+  v.car.root.add(headlights);
 }
 
 /* ---------- Camera rig ---------- */
@@ -151,25 +191,41 @@ function updateCamera(dt) {
     camera.updateProjectionMatrix();
     return;
   }
-  const mdx = input.mouse.dx;
-  const mdy = input.mouse.dy;
+  // Zoomed views turn the mouse down so aiming stays precise
+  const sens = camera.fov / 60;
+  const mdx = input.mouse.dx * sens;
+  const mdy = input.mouse.dy * sens;
   const p = player;
   let targetFov = 60;
-  if (!p.driving) {
-    // Third-person orbit around the character
+  let fovK = 3;
+  cam.recoil = Math.max(0, (cam.recoil || 0) - dt * 0.6);
+  if (!p.driving && p.scoped) {
+    // Sniper scope: look straight out of the player's eyes
     cam.yaw -= mdx * 0.0026;
-    cam.pitch = clamp(cam.pitch + mdy * 0.0022, -0.45, 1.1);
+    cam.pitch = clamp(cam.pitch + mdy * 0.0022, -0.9, 1.1);
+    const head = p.ch.bones.head.getWorldPosition(cam.pos);
+    const cp = Math.cos(cam.pitch);
+    camera.position.set(head.x, head.y + 0.08, head.z);
+    camera.lookAt(head.x + Math.sin(cam.yaw) * cp * 10, head.y + 0.08 - Math.sin(cam.pitch) * 10, head.z + Math.cos(cam.yaw) * cp * 10);
+    targetFov = 11;
+    fovK = 14;
+  } else if (!p.driving) {
+    // Third-person orbit around the character; tighter over the shoulder when aiming
+    cam.yaw -= mdx * 0.0026;
+    cam.pitch = clamp(cam.pitch + mdy * 0.0022, p.aiming ? -0.9 : -0.45, 1.1);
     const sprint = p.speed > 5;
-    const dist = (sprint ? 4.9 : 4.3) * (cam.mode === 1 ? 1.5 : 1);
+    const combatView = p.aiming || p.combatT > 0;
+    const dist = p.aiming ? 2.1 : combatView && p.arsenal.def.kind === 'gun' ? 3.3 : (sprint ? 4.9 : 4.3) * (cam.mode === 1 ? 1.5 : 1);
     const tx = p.pos.x;
-    const ty = p.pos.y + 1.55;
+    const ty = p.pos.y + (p.aiming ? 1.62 : 1.55);
     const tz = p.pos.z;
     const fx = Math.sin(cam.yaw);
     const fz = Math.cos(cam.yaw);
     const cp = Math.cos(cam.pitch);
     // over-the-shoulder offset to the right
-    const sx = -fz * 0.45;
-    const sz = fx * 0.45;
+    const sh = p.aiming ? 0.62 : 0.45;
+    const sx = -fz * sh;
+    const sz = fx * sh;
     let cx = tx - fx * cp * dist + sx;
     let cz = tz - fz * cp * dist + sz;
     const hit = world.raycast(tx, tz, cx, cz);
@@ -187,10 +243,12 @@ function updateCamera(dt) {
     }
     const cy = Math.max(ty + Math.sin(cam.pitch) * dist, world.height(cx, cz) + 0.3);
     if (!cam.init) cam.pos.set(cx, cy, cz);
-    cam.pos.set(damp(cam.pos.x, cx, 20, dt), damp(cam.pos.y, cy, 20, dt), damp(cam.pos.z, cz, 20, dt));
+    const ck = p.aiming ? 30 : 20;
+    cam.pos.set(damp(cam.pos.x, cx, ck, dt), damp(cam.pos.y, cy, ck, dt), damp(cam.pos.z, cz, ck, dt));
     camera.position.copy(cam.pos);
     camera.lookAt(tx + sx, ty, tz + sz);
-    targetFov = sprint ? 66 : 60;
+    targetFov = p.aiming ? 44 : sprint ? 66 : 60;
+    if (p.aiming) fovK = 12;
   } else {
     const v = p.vehicle;
     if (mdx || mdy) {
@@ -210,13 +268,14 @@ function updateCamera(dt) {
     const fx = Math.sin(v.yaw);
     const fz = Math.cos(v.yaw);
     if (cam.mode === 2) {
-      camera.position.set(v.pos.x + fx * 0.2 + Math.cos(v.yaw) * 0.38, v.pos.y + m.height + (v.def.seatY + 0.42), v.pos.z + fz * 0.2 - Math.sin(v.yaw) * 0.38);
+      const eye = v.local(v.def.seatX, v.def.seatZ + 0.2);
+      camera.position.set(eye.x, v.pos.y + m.height + (v.def.seatY + 0.42), eye.z);
       const ly = cam.yaw + cam.look;
       camera.lookAt(camera.position.x + Math.sin(ly) * 20, camera.position.y - 0.4 - cam.lookPitch * 10, camera.position.z + Math.cos(ly) * 20);
     } else {
       const yaw = cam.yaw + cam.look;
-      const dist = m.dist + clamp(v.speed / 60, 0, 1) * 1.6 + (v.type === 'van' ? 1.2 : 0);
-      const height = m.height + cam.lookPitch * 6 + (v.type === 'van' ? 0.6 : 0);
+      const dist = m.dist + clamp(v.speed / 60, 0, 1) * 1.6 + v.def.camDist;
+      const height = m.height + cam.lookPitch * 6 + v.def.camH;
       let tx = v.pos.x - Math.sin(yaw) * dist;
       let tz = v.pos.z - Math.cos(yaw) * dist;
       const hit = world.raycast(v.pos.x, v.pos.z, tx, tz);
@@ -238,7 +297,7 @@ function updateCamera(dt) {
     camera.position.x += (Math.random() - 0.5) * cam.shake;
     camera.position.y += (Math.random() - 0.5) * cam.shake;
   }
-  cam.fov = damp(cam.fov, targetFov, 3, dt);
+  cam.fov = damp(cam.fov, targetFov, fovK, dt);
   camera.fov = cam.fov;
   camera.updateProjectionMatrix();
 }
@@ -305,6 +364,7 @@ async function boot() {
   setLoading(0.1, 'Paving the streets');
   await frame();
   world = new World(scene);
+  rail = new Rail(scene, world, null);
   setLoading(0.45, 'Painting the sky');
   await frame();
   day = new DayCycle(scene, renderer);
@@ -312,6 +372,8 @@ async function boot() {
   const startHour = parseFloat(new URLSearchParams(location.search).get('t'));
   if (!Number.isNaN(startHour)) day.time = startHour % 24;
   fx = new Effects(scene);
+  rail.fx = fx;
+  for (const c of rail.consists) c.fx = fx;
   hud = new HUD(world);
   setLoading(0.6, 'Fuelling the cars');
   await frame();
@@ -327,6 +389,13 @@ async function boot() {
     ['convertible', 0x7fffd4, lineAt(8) - 5.6, -150, Math.PI],
     ['coupe', 0x18181d, lineAt(6) + 5.6, lineAt(2) + 25, 0],
     ['sedan', 0x8b5cf6, lineAt(5) - 5.6, lineAt(6) + 30, Math.PI],
+    ['bike', 0xff3fa4, lineAt(8) - 5.4, 114, Math.PI],
+    ['bike', 0x18181d, lineAt(8) - 5.4, 117, Math.PI],
+    ['schoolbus', 0xf2b705, lineAt(8) - 5.6, 140, Math.PI],
+    ['pickup', 0x9c2b23, lineAt(7) + 5.6, lineAt(5) + 20, 0],
+    ['truck', 0x1b2440, lineAt(6) - 5.6, lineAt(4) + 30, Math.PI],
+    ['bus', 0x1f8a8a, lineAt(3) + 5.6, lineAt(6) + 32, 0],
+    ['bike', 0x38c8ff, lineAt(2) + 5.4, lineAt(3) + 20, 0],
   ];
   for (const [type, color, x, z, yaw] of parked) {
     const v = new Vehicle(scene, world, fx, type, color);
@@ -341,6 +410,11 @@ async function boot() {
   peds = new Peds(scene, world, hud, audio, preset.peds);
   peds.spawnAll(player.pos);
   gameplay = new Gameplay(scene, world, hud, audio);
+  combat = new Combat(scene, world, fx, audio, game);
+  hooks.explode = (x, y, z, size, v) => combat.explode(x, y, z, size, v);
+  hooks.burning = (v) => {
+    if (v === player.vehicle && player.driving) hud.notify('ON FIRE!', 'Press F to get out', '#ff5f6d');
+  };
   post = createPost(renderer, scene, camera);
   applyQuality(quality);
   hideFromReflections();
@@ -373,6 +447,8 @@ function hideFromReflections() {
     };
     for (const n of peds.list) hide(n.ch.mesh);
     for (const c of traffic.cars) hide(c.mesh.root);
+    for (const cs of rail.consists) for (const c of cs.cars) hide(c.root);
+    hide(combat.tracers.lines);
     hide(day.flareAnchor);
     hide(fx.smokeP.points);
     hide(headlights);
@@ -394,7 +470,8 @@ function startGame() {
   hud.start();
   input.lock();
   cam.yaw = player.yaw;
-  setTimeout(() => hud.notify('WELCOME TO VIBE CITY', 'Walk up to any car and press F', '#ff3fa4'), 900);
+  setTimeout(() => hud.notify('WELCOME TO VIBE CITY', 'Walk up to any vehicle and press F', '#ff3fa4'), 900);
+  setTimeout(() => hud.notify('ARMED & READY', '1–7 or mouse wheel to switch weapons', '#ffd36b'), 4600);
 }
 document.getElementById('play').addEventListener('click', startGame);
 renderer.domElement.addEventListener('click', () => {
@@ -450,11 +527,12 @@ function loop() {
     if (input.hit('KeyC')) cam.mode = (cam.mode + 1) % (player.driving ? 3 : 2);
     if (input.hit('KeyM')) audio.setMuted(!audio.muted);
     if (input.hit('KeyQ')) hud.notify(audio.toggleRadio() ? 'RADIO ON' : 'RADIO OFF', 'Vibe City FM', '#b45bff');
-    if (input.hit('KeyR') && player.driving) resetToRoad(player.vehicle);
+    if (input.hit('KeyR') && player.driving && !player.vehicle.rail) resetToRoad(player.vehicle);
     if (input.hit('Backspace') && gameplay.race.state !== 'idle') gameplay.cancelRace('Cancelled');
     if (input.hit('KeyT')) hud.notify('TIME WARP', 'Hold T to fast-forward', '#38f3ff');
     day.warp = input.keys.has('KeyT') ? 40 : 1;
     const wasDriving = player.driving;
+    game.camYaw = cam.yaw;
     player.update(dt, elapsed, inp, input, cam.yaw);
     if (player.driving && !wasDriving && cam.mode > 2) cam.mode = 0;
     if (!player.driving && cam.mode > 1) cam.mode = 0;
@@ -493,8 +571,10 @@ function loop() {
     }
   }
   const focus = player.focus;
+  rail.update(dt, day.night, { player, peds, vehicles, traffic, game, audio });
   obstacles.length = 0;
   for (const v of vehicles) obstacles.push(v);
+  for (const o of rail.obstacles()) obstacles.push(o);
   if (player.mode === 'foot') {
     footObstacle.pos = player.pos;
     obstacles.push(footObstacle);
@@ -528,10 +608,13 @@ function loop() {
     vehicles: movingVehicles,
     camPos: camera.position,
     frame: frameNo,
+    player,
+    combat,
   });
   if (state === 'play') gameplay.update(dt, elapsed, player);
 
   fx.update(dt);
+  combat.update(dt);
   fx.smokeP.mat.uniforms.uColor.value.setScalar(lerp(0.85, 0.12, day.night));
   day.update(dt, focus, camera.position);
   world.update(dt, elapsed, day.night, day.sunDir);
@@ -540,6 +623,25 @@ function loop() {
   beamMat.uniforms.uIntensity.value = day.night * 0.35;
   updateCamera(dt);
   hud.prompt(state === 'play' ? player.prompt : null);
+  {
+    const ars = player.arsenal;
+    const w = ars.def;
+    const clip = ars.clip;
+    const onFoot = player.mode === 'foot' && !player.dead && state === 'play';
+    hud.combat({
+      name: w.name.toUpperCase(),
+      gun: w.kind === 'gun',
+      mag: clip ? clip.mag : 0,
+      reserve: clip ? clip.reserve : 0,
+      reloading: ars.reloadT > 0,
+      cross: onFoot && w.kind === 'gun' && !player.scoped && (player.aiming || player.combatT > 0),
+      aiming: player.aiming,
+      scoped: onFoot && player.scoped,
+      spread: (player.aiming ? w.aim : w.spread) || 0,
+      hp: player.hp,
+      dead: player.dead,
+    });
+  }
   const mm = pv ? { pos: pv.pos, yaw: pv.yaw, speed: pv.speed } : { pos: player.pos, yaw: cam.yaw, speed: player.speed };
   hud.update(dt, mm, day.hours, blipsFn, pv, camera);
   audio.update({
@@ -549,6 +651,7 @@ function loop() {
     skid: pv ? pv.skid : 0,
     nitro: pv ? pv.nitroOn : false,
     engineOn: !!pv,
+    pitch: pv ? pv.def.engine : 1,
   });
 
   // Post FX

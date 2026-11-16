@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { buildCarMesh, OFFS, setCarLOD } from './car.js';
+import { buildCarMesh, setCarLOD, TYPES, crashDamage } from './car.js';
 import { N, lineAt, LANE, ROAD } from './world.js';
 import { clamp, dampAngle } from './utils.js';
 
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 const COLORS = [0xf5f5f5, 0x1d1f24, 0x8a8f96, 0x2a4fa8, 0xb8262e, 0x3fa7c9, 0xe8c547, 0x2f6b46, 0x6b3fa0, 0xf08a3a, 0xc9c2b0, 0x14324d, 0xff7eb3, 0x5fd3e8];
-const TYPE_POOL = ['sedan', 'sedan', 'sedan', 'taxi', 'van', 'coupe', 'sedan', 'taxi'];
+const TYPE_POOL = ['sedan', 'sedan', 'sedan', 'taxi', 'van', 'coupe', 'sedan', 'taxi', 'pickup', 'pickup', 'truck', 'bus', 'schoolbus', 'sedan', 'van'];
+const FIXED_COLOR = { taxi: 0xffcf2e, schoolbus: 0xf2b705, truck: 0x1b2440, bus: [0x1f8a8a, 0xd8336b, 0x2f5fb3] };
 const inside = (i, k) => i >= 0 && i <= N && k >= 0 && k <= N;
 const right = (d) => [-d[1], d[0]];
 
@@ -69,10 +70,12 @@ export class Traffic {
 
   makeCar(near) {
     const type = TYPE_POOL[Math.floor(Math.random() * TYPE_POOL.length)];
-    const color = type === 'taxi' ? 0xffcf2e : COLORS[Math.floor(Math.random() * COLORS.length)];
+    const fixed = FIXED_COLOR[type];
+    const color = fixed === undefined ? COLORS[Math.floor(Math.random() * COLORS.length)] : Array.isArray(fixed) ? fixed[Math.floor(Math.random() * fixed.length)] : fixed;
     const mesh = buildCarMesh(type, color);
     this.scene.add(mesh.root);
-    const car = { mesh, type, color, x: 0, z: 0, yaw: 0, speed: 0, cruise: 0, vel: new THREE.Vector2(), stopT: 0, ghost: 0, spin: 0, honkT: 0 };
+    const def = TYPES[type];
+    const car = { mesh, type, def, color, x: 0, z: 0, yaw: 0, speed: 0, cruise: 0, vel: new THREE.Vector2(), stopT: 0, ghost: 0, spin: 0, honkT: 0, panicT: 0 };
     this.spawn(car, near);
     return car;
   }
@@ -94,7 +97,7 @@ export class Traffic {
       car.seg = line(laneStart(i, k, d), laneEnd(car.J[0], car.J[1], d));
       car.next = null;
       car.s = Math.random() * car.seg.len * 0.8;
-      car.cruise = 11 + Math.random() * 6;
+      car.cruise = (11 + Math.random() * 6) * (car.def.mass > 3 ? 0.75 : 1);
       car.speed = car.cruise;
       car.ghost = 0;
       evalSeg(car.seg, car.s / car.seg.len, this.tmp);
@@ -141,6 +144,11 @@ export class Traffic {
     return car;
   }
 
+  /** Gunfire nearby: drivers floor it for a while. */
+  panic(x, z, r) {
+    for (const c of this.cars) if ((c.x - x) ** 2 + (c.z - z) ** 2 < r * r) c.panicT = 6 + Math.random() * 4;
+  }
+
   nearest(x, z, r) {
     let best = null;
     let bd = r * r;
@@ -169,11 +177,12 @@ export class Traffic {
       let block = 99;
       let aiBlock = false;
       let playerBlock = false;
-      const check = (ox, oz, kind) => {
+      const half = car.def.hl;
+      const check = (ox, oz, kind, oh) => {
         const dx = ox - car.x;
         const dz = oz - car.z;
-        const ahead = dx * fx + dz * fz;
-        if (ahead <= 0 || ahead > 16) return;
+        const ahead = dx * fx + dz * fz - half - oh;
+        if (ahead <= -half || ahead > 14) return;
         const lat = Math.abs(dx * fz - dz * fx);
         if (lat < (kind === 2 ? 1.6 : 2.0) && ahead < block) {
           block = ahead;
@@ -181,10 +190,12 @@ export class Traffic {
           playerBlock = kind === 2;
         }
       };
-      for (const o of obstacles) check(o.pos.x, o.pos.z, o.isPed ? 2 : 0);
-      if (car.ghost <= 0) for (const o of this.cars) if (o !== car) check(o.x, o.z, 1);
-      let target = car.seg.c ? Math.min(car.cruise, 8) : car.cruise;
-      target *= clamp((block - 6.5) / 8, 0, 1);
+      for (const o of obstacles) check(o.pos.x, o.pos.z, o.isPed ? 2 : 0, o.def ? o.def.hl : o.isPed ? 0 : 2.4);
+      if (car.ghost <= 0) for (const o of this.cars) if (o !== car) check(o.x, o.z, 1, o.def.hl);
+      car.panicT -= dt;
+      const cruise = car.panicT > 0 ? Math.min(car.def.top * 0.6, car.cruise * 1.8) : car.cruise;
+      let target = car.seg.c ? Math.min(cruise, 8) : cruise;
+      target *= clamp((block - 1.6) / 8, 0, 1);
       car.speed = car.speed < target ? Math.min(target, car.speed + 5 * dt) : Math.max(target, car.speed - 16 * dt);
       car.honkT -= dt;
       if (car.speed < 0.3 && (aiBlock || playerBlock)) {
@@ -210,7 +221,7 @@ export class Traffic {
       car.z = t.z;
       car.yaw = dampAngle(car.yaw, Math.atan2(t.tx, t.tz), 12, dt);
       car.vel.set(Math.sin(car.yaw) * car.speed, Math.cos(car.yaw) * car.speed);
-      car.spin += (car.speed * dt) / 0.36;
+      car.spin += (car.speed * dt) / car.def.wr;
       const m = car.mesh;
       m.root.position.set(car.x, this.world.height(car.x, car.z), car.z);
       m.root.rotation.y = car.yaw;
@@ -230,20 +241,24 @@ export class Traffic {
   collideVehicle(v, focus) {
     const pfx = Math.sin(v.yaw);
     const pfz = Math.cos(v.yaw);
+    const vd = v.def;
     let best = 0;
     for (const car of [...this.cars]) {
+      const cd = car.def;
       const dx0 = v.pos.x - car.x;
       const dz0 = v.pos.z - car.z;
-      if (dx0 * dx0 + dz0 * dz0 > 49) continue;
+      const reach = vd.hl + cd.hl + 2;
+      if (dx0 * dx0 + dz0 * dz0 > reach * reach) continue;
       const cfx = Math.sin(car.yaw);
       const cfz = Math.cos(car.yaw);
+      const rr = vd.rad + cd.rad;
       let deep = 0;
       let nx = 0;
       let nz = 0;
       let hx = 0;
       let hz = 0;
-      for (const a of OFFS) {
-        for (const b of OFFS) {
+      for (const a of vd.offs) {
+        for (const b of cd.offs) {
           const ax = v.pos.x + pfx * a;
           const az = v.pos.z + pfz * a;
           const bx = car.x + cfx * b;
@@ -251,8 +266,8 @@ export class Traffic {
           const dx = ax - bx;
           const dz = az - bz;
           const d = Math.hypot(dx, dz);
-          if (d < 2.0 && 2.0 - d > deep && d > 1e-4) {
-            deep = 2.0 - d;
+          if (d < rr && rr - d > deep && d > 1e-4) {
+            deep = rr - d;
             nx = dx / d;
             nz = dz / d;
             hx = (ax + bx) / 2;
@@ -266,18 +281,25 @@ export class Traffic {
       v.asleep = false;
       const vn = (v.vel.x - car.vel.x) * nx + (v.vel.y - car.vel.y) * nz;
       if (vn < 0) {
-        const j = (-(1.3) * vn) / 2;
-        v.vel.x += nx * j;
-        v.vel.y += nz * j;
-        v.angVel += (Math.random() - 0.5) * -vn * 0.04;
+        const ma = vd.mass;
+        const mb = cd.mass;
+        const j = (-1.3 * vn) / (1 / ma + 1 / mb);
+        v.vel.x += (nx * j) / ma;
+        v.vel.y += (nz * j) / ma;
+        v.angVel += ((Math.random() - 0.5) * -vn * 0.04) / Math.sqrt(ma);
         best = Math.max(best, -vn);
+        crashDamage(v, (-vn * 2 * mb) / (ma + mb));
         if (-vn > 4) this.fx.sparks(hx, v.pos.y + 0.7, hz, -vn);
-        if (-vn > 2.5 && this.onRelease) {
+        // A light car barely moves a bus; only knock it loose if the hit is big enough for its mass
+        if ((-vn * ma) / mb > 2.5 && this.onRelease) {
           const vel = car.vel.clone();
-          vel.x -= nx * j;
-          vel.y -= nz * j;
+          vel.x -= (nx * j) / mb;
+          vel.y -= (nz * j) / mb;
           const released = this.release(car, focus);
-          if (released) this.onRelease(released, vel, (Math.random() - 0.5) * -vn * 0.25);
+          if (released) {
+            const nv = this.onRelease(released, vel, ((Math.random() - 0.5) * -vn * 0.25) / Math.sqrt(mb));
+            if (nv) crashDamage(nv, (-vn * 2 * ma) / (ma + mb));
+          }
         } else car.speed = 0;
       }
     }

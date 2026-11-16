@@ -1,17 +1,32 @@
 import * as THREE from 'three';
 import * as T from './textures.js';
 import { merge, clamp, damp, lerp } from './utils.js';
+import { buildFleetMesh } from './fleet.js';
 
 /* =========================================================
    Vehicle definitions
    ========================================================= */
+const BASE = { wr: 0.36, tw: 0.84, offs: [-1.5, 0, 1.5], rad: 1.0, mass: 1, hw: 0.97, hl: 2.45, h: 1.45, seatX: 0.38, camDist: 0, camH: 0, headZ: 2.36, headY: 0.75, engine: 1, hp: 100, nitro: true };
 export const TYPES = {
   coupe: { label: 'Sports Coupe', wz: 1.45, accel: 19, top: 62, grip: 11, steer: 0.6, seatZ: -0.35, seatY: -0.42 },
   convertible: { label: 'Convertible', wz: 1.45, accel: 16, top: 56, grip: 10.5, steer: 0.6, seatZ: -0.3, seatY: -0.42 },
   sedan: { label: 'Sedan', wz: 1.5, accel: 13, top: 50, grip: 10, steer: 0.55, seatZ: -0.2, seatY: -0.38 },
   taxi: { label: 'Taxi', wz: 1.5, accel: 13.5, top: 52, grip: 10, steer: 0.55, seatZ: -0.2, seatY: -0.38 },
-  van: { label: 'Van', wz: 1.65, accel: 10, top: 42, grip: 9, steer: 0.5, seatZ: 0.75, seatY: -0.05 },
+  van: { label: 'Van', wz: 1.65, accel: 10, top: 42, grip: 9, steer: 0.5, seatZ: 0.75, seatY: -0.05, hw: 1.02, hl: 2.6, h: 2.1, mass: 1.4, camDist: 1.2, camH: 0.6, headZ: 2.5, headY: 0.85, hp: 130, engine: 0.85 },
+  pickup: { label: 'Pickup Truck', axles: [1.75, -1.65], accel: 12, top: 47, grip: 9.5, steer: 0.52, seatZ: 0.15, seatY: 0.02, wr: 0.42, tw: 0.86, hw: 1.0, hl: 2.78, h: 1.95, offs: [-1.7, 0, 1.7], rad: 1.05, mass: 1.6, camDist: 1, camH: 0.5, headZ: 2.72, headY: 1.0, hp: 140, engine: 0.75 },
+  truck: { label: 'Box Truck', axles: [2.85, -2.2], dual: true, accel: 7, top: 33, grip: 8, steer: 0.45, seatX: 0.5, seatZ: 2.75, seatY: 0.62, wr: 0.52, tw: 0.92, hw: 1.25, hl: 4.0, h: 3.6, offs: [-3, -1, 1, 3], rad: 1.3, mass: 4, camDist: 5, camH: 2, headZ: 3.98, headY: 1.0, hp: 220, engine: 0.55, nitro: false },
+  schoolbus: { label: 'School Bus', axles: [4.35, -2.7], dual: true, accel: 6, top: 30, grip: 8, steer: 0.42, seatX: 0.55, seatZ: 3.25, seatY: 0.4, wr: 0.52, tw: 0.92, hw: 1.25, hl: 5.62, h: 3.1, offs: [-4.4, -2.2, 0, 2.2, 4.4], rad: 1.3, mass: 5, camDist: 7, camH: 2.2, headZ: 5.62, headY: 1.25, hp: 260, engine: 0.5, nitro: false },
+  bus: { label: 'City Bus', axles: [3.9, -2.3], dual: true, accel: 6, top: 30, grip: 8, steer: 0.42, seatX: 0.55, seatZ: 4.85, seatY: 0.42, wr: 0.52, tw: 0.92, hw: 1.27, hl: 6.05, h: 3.25, offs: [-4.6, -2.3, 0, 2.3, 4.6], rad: 1.3, mass: 6, camDist: 7.5, camH: 2.4, headZ: 6.05, headY: 0.8, hp: 280, engine: 0.45, nitro: false },
+  bike: { label: 'Motorbike', axles: [0.74, -0.72], accel: 22, top: 66, grip: 12, steer: 0.55, seatX: 0, seatZ: -0.2, seatY: -0.04, wr: 0.33, tw: 0, hw: 0.42, hl: 1.1, h: 1.2, offs: [-0.55, 0.55], rad: 0.55, mass: 0.4, camDist: -1.6, camH: -0.4, headZ: 0.98, headY: 1.0, hp: 60, engine: 1.45, lean: true },
 };
+for (const k of Object.keys(TYPES)) {
+  const d = (TYPES[k] = { ...BASE, ...TYPES[k] });
+  d.axles ||= [d.wz, -d.wz];
+  d.wz ??= d.axles[0];
+}
+/** Vehicle types that use the bigger builders in fleet.js. */
+const FLEET = new Set(['pickup', 'truck', 'schoolbus', 'bus', 'bike']);
+export const hooks = { explode: null, burning: null };
 
 const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 
@@ -292,6 +307,7 @@ function mats() {
     glass: new THREE.MeshStandardMaterial({ color: 0x0b1016, metalness: 0.9, roughness: 0.06 }),
     clearGlass: new THREE.MeshStandardMaterial({ color: 0x88aacc, metalness: 0.9, roughness: 0.04, transparent: true, opacity: 0.35 }),
     trim: new THREE.MeshStandardMaterial({ color: 0x121315, roughness: 0.6, metalness: 0.2 }),
+    chrome: new THREE.MeshStandardMaterial({ color: 0xe6e8ec, metalness: 1, roughness: 0.12 }),
     interior: new THREE.MeshStandardMaterial({ color: 0xe8dcc6, roughness: 0.6 }),
     tire: new THREE.MeshStandardMaterial({ color: 0xffffff, map: treadTexture(), roughness: 0.88, side: THREE.DoubleSide }),
     rim: new THREE.MeshStandardMaterial({ color: 0xd8dade, metalness: 1, roughness: 0.2, side: THREE.DoubleSide }),
@@ -314,6 +330,7 @@ export function setTrafficLights(night) {
 }
 
 export function buildCarMesh(type, color) {
+  if (FLEET.has(type)) return buildFleetMesh(type, color, { mats: mats(), wheels: wheelGeos(), paintV, def: TYPES[type] });
   const g = geosFor(type);
   const m = mats();
   const root = new THREE.Group();
@@ -382,6 +399,7 @@ export function setCarLOD(car, dist) {
 export const OFFS = [-1.5, 0, 1.5];
 const GEARS = [0, 9, 18, 28, 40, 54, 200];
 const PARKED = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false };
+const DARK_LIGHT = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 });
 
 export class Vehicle {
   constructor(scene, world, fx, type, color, mesh = null) {
@@ -415,10 +433,17 @@ export class Vehicle {
     this.locked = false;
     this.asleep = false;
     this.ownLights = null;
+    // Damage: hp -> smoking -> on fire (fuse) -> explodes into a wreck
+    this.hp = this.def.hp;
+    this.fuse = 0;
+    this.burnT = 0;
+    this.wrecked = false;
+    this.hy = 0;
+    this.hvy = 0;
   }
 
   get label() {
-    return this.def.label;
+    return this.wrecked ? `Burnt-out ${this.def.label}` : this.def.label;
   }
 
   place(x, z, yaw, vel = null) {
@@ -436,6 +461,7 @@ export class Vehicle {
   setDriven(on) {
     this.driven = on;
     this.asleep = false;
+    if (this.wrecked) return;
     const mm = this.car.meshes;
     if (on && !this.ownLights) {
       this.ownLights = { head: mm.head.material.clone(), tail: mm.tail.material.clone() };
@@ -455,8 +481,65 @@ export class Vehicle {
     return { x: this.pos.x + x * c + z * s, z: this.pos.z - x * s + z * c };
   }
 
+  /** Bullets, crashes and blasts all land here. */
+  damage(amount) {
+    if (this.wrecked || amount <= 0) return;
+    this.hp -= amount;
+    this.asleep = false;
+    if (this.hp <= 0 && this.fuse <= 0) {
+      this.hp = 0;
+      this.fuse = 3 + Math.random() * 2.5;
+      if (hooks.burning) hooks.burning(this);
+    }
+  }
+
+  /** Launch upward (explosions). */
+  pop(vy) {
+    this.hvy = Math.max(this.hvy, vy);
+    this.asleep = false;
+  }
+
+  wreck() {
+    this.wrecked = true;
+    this.fuse = 0;
+    this.burnT = 14;
+    this.setDriven(false);
+    const c = this.car;
+    c.paint.color.setHex(0x1d1b1a);
+    c.paint.metalness = 0.2;
+    c.paint.roughness = 0.95;
+    c.paint.clearcoat = 0;
+    c.meshes.head.material = DARK_LIGHT;
+    c.meshes.tail.material = DARK_LIGHT;
+    for (const w of c.wheels) if (w.spin.children[0]) w.spin.children[0].visible = false;
+    this.ownLights = null;
+  }
+
+  updateDamage(dt) {
+    const d = this.def;
+    if (this.hp < d.hp * 0.45 && !this.wrecked) {
+      const p = this.local(0, d.hl * 0.7);
+      const dark = this.hp < d.hp * 0.2;
+      if (Math.random() < (dark ? 0.6 : 0.3)) this.fx.engineSmoke(p.x, this.pos.y + d.h * 0.6, p.z, dark);
+    }
+    if (this.fuse > 0) {
+      const p = this.local(0, d.hl * 0.6);
+      this.fx.burn(p.x, this.pos.y + d.h * 0.55, p.z, 1);
+      this.fuse -= dt;
+      if (this.fuse <= 0) {
+        this.wreck();
+        if (hooks.explode) hooks.explode(this.pos.x, this.pos.y, this.pos.z, Math.min(1.6, 0.8 + d.mass * 0.15), this);
+      }
+    }
+    if (this.burnT > 0) {
+      this.burnT -= dt;
+      this.fx.burn(this.pos.x, this.pos.y + d.h * 0.5, this.pos.z, Math.min(1, this.burnT / 6));
+    }
+  }
+
   update(dt, inp, night) {
-    if (!this.driven) {
+    if (this.fuse > 0 || this.burnT > 0 || this.hp < this.def.hp * 0.45) this.updateDamage(dt);
+    if (!this.driven || this.wrecked) {
       if (this.asleep) return;
       inp = PARKED;
     }
@@ -472,16 +555,18 @@ export class Vehicle {
     const brake = lock ? 0 : inp.brake;
     const hand = lock ? true : inp.handbrake;
 
-    this.nitroOn = this.driven && !lock && inp.nitro && this.nitro > 0.02 && throttle > 0 && vf > -1;
+    this.nitroOn = d.nitro && this.driven && !lock && inp.nitro && this.nitro > 0.02 && throttle > 0 && vf > -1;
     const top = this.nitroOn ? d.top * 1.4 : d.top;
     if (throttle > 0) {
       if (vf < -0.5) vf += 30 * dt;
       else vf += (this.nitroOn ? d.accel * 1.75 : d.accel) * throttle * Math.max(0, 1 - (vf / top) ** 2) * dt;
     }
     this.braking = false;
+    // Heavier vehicles brake a little less hard
+    const brakeF = 36 / Math.max(1, Math.sqrt(d.mass) * 0.8);
     if (brake > 0) {
       if (vf > 0.5) {
-        vf -= 36 * brake * dt;
+        vf -= brakeF * brake * dt;
         this.braking = true;
       } else vf -= 11 * brake * Math.max(0, 1 + vf / 15) * dt;
     }
@@ -495,9 +580,10 @@ export class Vehicle {
     else this.nitro = Math.min(1, this.nitro + dt * 0.05);
 
     const speed = Math.abs(vf);
+    const wb = d.axles[0] - d.axles[d.axles.length - 1];
     const maxSteer = lerp(d.steer, 0.15, clamp(speed / 55, 0, 1));
     this.steer = damp(this.steer, (lock ? 0 : inp.steer) * maxSteer, 9, dt);
-    const targetYaw = (-this.steer * vf) / 2.7;
+    const targetYaw = (-this.steer * vf) / Math.max(2.7, wb * 0.9);
     const drifting = Math.abs(vl) > 4;
     const yawK = hand ? 3.2 : drifting ? 5 : 10;
     this.angVel = damp(this.angVel, targetYaw * (hand && this.driven ? 1.45 : drifting ? 1.2 : 1), yawK, dt);
@@ -513,8 +599,8 @@ export class Vehicle {
     const nfx = Math.sin(this.yaw);
     const nfz = Math.cos(this.yaw);
     for (let it = 0; it < 2; it++) {
-      for (const off of OFFS) {
-        const hit = this.world.collideCircle(this.pos.x + nfx * off, this.pos.z + nfz * off, 1.0);
+      for (const off of d.offs) {
+        const hit = this.world.collideCircle(this.pos.x + nfx * off, this.pos.z + nfz * off, d.rad);
         if (!hit) continue;
         this.pos.x += hit.px;
         this.pos.z += hit.pz;
@@ -524,14 +610,18 @@ export class Vehicle {
           this.vel.y -= 1.3 * vn * hit.nz;
           this.vel.multiplyScalar(0.97);
           const cross = nfx * off * hit.nz - nfz * off * hit.nx;
-          this.angVel -= cross * -vn * 0.05;
+          this.angVel -= (cross * -vn * 0.05) / Math.sqrt(d.mass);
           this.impact = Math.max(this.impact, -vn);
           if (-vn > 4) this.fx.sparks(this.pos.x + nfx * off - hit.nx, this.pos.y + 0.6, this.pos.z + nfz * off - hit.nz, -vn);
         }
       }
     }
+    crashDamage(this, this.impact);
 
     const gy = this.world.height(this.pos.x, this.pos.z);
+    this.hvy -= 22 * dt;
+    this.hy = Math.max(0, this.hy + this.hvy * dt);
+    if (this.hy === 0) this.hvy = 0;
     this.pos.y = damp(this.pos.y, gy, 16, dt);
 
     this.vf = vf;
@@ -540,8 +630,10 @@ export class Vehicle {
     this.slip = Math.atan2(Math.abs(vl), Math.max(2, Math.abs(vf)));
     const accel = (vf - this.vfPrev) / Math.max(dt, 1e-3);
     this.vfPrev = vf;
-    this.pitch = damp(this.pitch, clamp(-accel * 0.0045, -0.06, 0.06), 6, dt);
-    this.roll = damp(this.roll, clamp(vf * this.angVel * 0.004, -0.07, 0.07), 6, dt);
+    this.pitch = damp(this.pitch, clamp((-accel * 0.0045) / Math.sqrt(d.mass), -0.06, 0.06) + (this.hy > 0 ? -this.hvy * 0.02 : 0), 6, dt);
+    // Bikes lean into the turn; four-wheelers roll outward
+    if (d.lean) this.roll = damp(this.roll, clamp(-Math.atan((vf * this.angVel) / 9.8), -0.8, 0.8), 8, dt);
+    else this.roll = damp(this.roll, clamp(vf * this.angVel * 0.004 * (d.mass > 3 ? 1.4 : 1), -0.07, 0.07), 6, dt);
 
     let g = 1;
     while (g < GEARS.length - 2 && speed > GEARS[g]) g++;
@@ -552,16 +644,18 @@ export class Vehicle {
     this.skid = clamp((Math.abs(vl) - 3) / 6, 0, 1) * clamp(speed / 6, 0, 1);
     if (hand && speed > 6) this.skid = Math.max(this.skid, 0.6);
     this.applyVisuals(dt, night);
-    if (!this.driven && this.speed < 0.05 && Math.abs(this.angVel) < 0.01 && this.impact === 0) this.asleep = true;
+    if (!this.driven && this.speed < 0.05 && Math.abs(this.angVel) < 0.01 && this.impact === 0 && this.hy === 0) this.asleep = true;
   }
 
   applyVisuals(dt, night) {
     const c = this.car;
+    const d = this.def;
     c.root.position.copy(this.pos);
+    c.root.position.y += this.hy;
     c.root.rotation.y = this.yaw;
     c.body.rotation.x = this.pitch;
     c.body.rotation.z = this.roll;
-    this.wheelSpin += (this.vf * dt) / 0.36;
+    this.wheelSpin += (this.vf * dt) / d.wr;
     for (const w of c.wheels) {
       w.spin.rotation.x = this.wheelSpin;
       if (w.front) w.pivot.rotation.y = -this.steer * 1.2;
@@ -575,12 +669,12 @@ export class Vehicle {
     const fz = Math.cos(this.yaw);
     const rx = -fz;
     const rz = fx;
-    const wz = this.def.wz;
+    const wz = -d.axles[d.axles.length - 1];
     const skidId = this.driven ? 0 : 2;
     if (this.skid > 0.15) {
       for (const side of [-1, 1]) {
-        const wx = this.pos.x - fx * wz + rx * 0.84 * side;
-        const wzz = this.pos.z - fz * wz + rz * 0.84 * side;
+        const wx = this.pos.x - fx * wz + rx * d.tw * side;
+        const wzz = this.pos.z - fz * wz + rz * d.tw * side;
         this.fx.skidmarks.add(skidId + (side < 0 ? 0 : 1), wx, this.pos.y, wzz);
         if (Math.random() < this.skid * 0.9) this.fx.smoke(wx, this.pos.y + 0.3, wzz, this.vel.x * 0.15, this.vel.y * 0.15);
       }
@@ -589,52 +683,64 @@ export class Vehicle {
       this.fx.skidmarks.lift(skidId + 1);
     }
     if (this.nitroOn) {
-      for (const side of [-1, 1]) {
-        const ex = this.pos.x - fx * 2.55 + rx * 0.42 * side;
-        const ez = this.pos.z - fz * 2.55 + rz * 0.42 * side;
+      for (const side of d.lean ? [0] : [-1, 1]) {
+        const ex = this.pos.x - fx * (d.hl + 0.1) + rx * 0.42 * side;
+        const ez = this.pos.z - fz * (d.hl + 0.1) + rz * 0.42 * side;
         this.fx.flame(ex, this.pos.y + 0.42, ez, -fx * 6 + this.vel.x, -fz * 6 + this.vel.y);
       }
     }
   }
 }
 
-/** Equal-mass collision between two physics vehicles. Returns impact speed. */
+/** Hard knocks dent the vehicle; heavier vehicles shrug off more. */
+export function crashDamage(v, impact) {
+  if (impact > 9) v.damage(((impact - 9) * 2.2) / Math.sqrt(v.def.mass));
+}
+
+/** Mass-weighted collision between two physics vehicles. Returns impact speed. */
 export function collideVehicles(a, b) {
   const dx0 = a.pos.x - b.pos.x;
   const dz0 = a.pos.z - b.pos.z;
-  if (dx0 * dx0 + dz0 * dz0 > 49) return 0;
+  const reach = a.def.hl + b.def.hl + 2;
+  if (dx0 * dx0 + dz0 * dz0 > reach * reach) return 0;
   const afx = Math.sin(a.yaw);
   const afz = Math.cos(a.yaw);
   const bfx = Math.sin(b.yaw);
   const bfz = Math.cos(b.yaw);
+  const rr = a.def.rad + b.def.rad;
   let deep = 0;
   let nx = 0;
   let nz = 0;
-  for (const p of OFFS) {
-    for (const q of OFFS) {
+  for (const p of a.def.offs) {
+    for (const q of b.def.offs) {
       const dx = a.pos.x + afx * p - (b.pos.x + bfx * q);
       const dz = a.pos.z + afz * p - (b.pos.z + bfz * q);
       const d = Math.hypot(dx, dz);
-      if (d < 2 && 2 - d > deep && d > 1e-4) {
-        deep = 2 - d;
+      if (d < rr && rr - d > deep && d > 1e-4) {
+        deep = rr - d;
         nx = dx / d;
         nz = dz / d;
       }
     }
   }
   if (deep <= 0) return 0;
-  a.pos.x += nx * deep * 0.5;
-  a.pos.z += nz * deep * 0.5;
-  b.pos.x -= nx * deep * 0.5;
-  b.pos.z -= nz * deep * 0.5;
+  const ma = a.def.mass;
+  const mb = b.def.mass;
+  const ka = mb / (ma + mb);
+  a.pos.x += nx * deep * ka;
+  a.pos.z += nz * deep * ka;
+  b.pos.x -= nx * deep * (1 - ka);
+  b.pos.z -= nz * deep * (1 - ka);
   a.asleep = b.asleep = false;
   const vn = (a.vel.x - b.vel.x) * nx + (a.vel.y - b.vel.y) * nz;
   if (vn >= 0) return 0;
-  const j = (-(1.3) * vn) / 2;
-  a.vel.x += nx * j;
-  a.vel.y += nz * j;
-  b.vel.x -= nx * j;
-  b.vel.y -= nz * j;
-  b.angVel += (Math.random() - 0.5) * -vn * 0.2;
+  const j = (-1.3 * vn) / (1 / ma + 1 / mb);
+  a.vel.x += (nx * j) / ma;
+  a.vel.y += (nz * j) / ma;
+  b.vel.x -= (nx * j) / mb;
+  b.vel.y -= (nz * j) / mb;
+  b.angVel += ((Math.random() - 0.5) * -vn * 0.2) / Math.sqrt(mb);
+  crashDamage(a, -vn * 2 * ka);
+  crashDamage(b, -vn * 2 * (1 - ka));
   return -vn;
 }

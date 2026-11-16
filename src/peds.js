@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Character, randomLook } from './character.js';
 import { COAST_X, SHORE_X, HALF } from './world.js';
 import { clamp, damp, dampAngle } from './utils.js';
-import { OFFS } from './car.js';
+import { buildWeaponMesh, WEAPONS } from './weapons.js';
 
 export const LINES = {
   greet: ['Hey there, sunshine!', 'Nice shirt, man.', 'Lookin’ sharp!', 'What’s up?', 'Beautiful night, huh?', 'Hey! Love the shades.', 'Totally radical!'],
@@ -24,6 +24,9 @@ export const LINES = {
   hijack: ['Hey! That’s my car!', 'Not my ride!', 'I just washed that!', 'Unbelievable!'],
   honk: ['Watch it!', 'Learn to drive!', 'Whoa, buddy!', 'Hey, careful!'],
   punch: ['Ow!', 'What was that for?!', 'Ugh!'],
+  fight: ['You want some?!', 'Big mistake, pal!', 'Come on then!', 'Oh, it’s ON!', 'You picked the wrong guy!'],
+  draw: ['Back off!', 'I’m armed, buddy!', 'You’re gonna regret that!', 'Eat lead!'],
+  calm: ['Yeah, keep walking!', 'That’s what I thought.', 'Hmph.'],
   dance: ['Ooh, I love this one!', 'Let’s go!', 'Party time!', 'Yeah!'],
   wave: ['Hey!', 'Hi there!', 'Yo!', 'Heyyy!'],
   cheer: ['Woo!', 'Yeah, baby!', 'Alright!'],
@@ -94,7 +97,7 @@ export class Peds {
     this.paths = world.blocks.map((b) => ({ path: rectPath(b), cx: b.cx, cz: b.cz }));
     for (let i = 0; i < count; i++) {
       const ch = new Character(scene, randomLook());
-      const n = { ch, x: 0, z: 0, y: 0, yaw: 0, state: 'walk', timer: 0, vx: 0, vz: 0, speed: 1.3, dir: 1, s: 0, path: null, frame: i };
+      const n = { ch, x: 0, z: 0, y: 0, yaw: 0, state: 'walk', timer: 0, vx: 0, vz: 0, speed: 1.3, dir: 1, s: 0, path: null, frame: i, hp: 100, gun: null };
       this.list.push(n);
     }
     this.focus = null;
@@ -128,6 +131,13 @@ export class Peds {
     n.ch.mode = 'move';
     n.ch.stopEmote();
     n.ch.mesh.visible = true;
+    // Some locals fight back when attacked; a few carry a pistol
+    n.hp = 100;
+    n.tough = Math.random() < 0.3;
+    n.armed = Math.random() < 0.12;
+    n.aggro = 0;
+    n.ch.hold = null;
+    if (n.gun) n.gun.visible = false;
   }
 
   say(n, text, dur = 2.6) {
@@ -153,7 +163,7 @@ export class Peds {
     n.faceYaw = Math.atan2(x - n.x, z - n.z);
   }
   react(n, kind, from) {
-    if (n.state === 'down' || n.state === 'flee') return;
+    if (n.state === 'down' || n.state === 'flee' || n.state === 'dead' || n.state === 'fight' || n.state === 'shoot') return;
     this.face(n, from.x, from.z);
     n.state = 'react';
     n.ch.speed = 0;
@@ -176,7 +186,7 @@ export class Peds {
     }, delay * 1000);
   }
   talk(n, from) {
-    if (n.state === 'down' || n.state === 'flee') return null;
+    if (n.state === 'down' || n.state === 'flee' || n.state === 'dead' || n.state === 'fight' || n.state === 'shoot') return null;
     this.face(n, from.x, from.z);
     n.state = 'react';
     n.ch.speed = 0;
@@ -197,7 +207,7 @@ export class Peds {
   danceParty(x, z, r) {
     let n = 0;
     for (const p of this.list) {
-      if (p.state === 'down' || p.state === 'flee') continue;
+      if (p.state === 'down' || p.state === 'flee' || p.state === 'dead' || p.state === 'fight' || p.state === 'shoot') continue;
       if ((p.x - x) ** 2 + (p.z - z) ** 2 > r * r) continue;
       this.face(p, x, z);
       p.state = 'dance';
@@ -212,9 +222,14 @@ export class Peds {
   stopParty() {
     for (const p of this.list) if (p.state === 'dance') p.timer = Math.min(p.timer, Math.random() * 1.2);
   }
-  panic(x, z, r, scream = true) {
+  panic(x, z, r, scream = true, gunfire = false) {
     for (const p of this.list) {
-      if (p.state === 'down') continue;
+      if (p.state === 'down' || p.state === 'dead' || p.state === 'fight' || p.state === 'shoot') continue;
+      // Armed locals who hear shots nearby may join in instead of running
+      if (gunfire && p.armed && Math.random() < 0.5 && Math.hypot(p.x - x, p.z - z) < r * 0.7) {
+        this.provoke(p);
+        continue;
+      }
       const d = Math.hypot(p.x - x, p.z - z);
       if (d > r) continue;
       this.flee(p, x, z);
@@ -227,6 +242,58 @@ export class Peds {
     n.fleeYaw = Math.atan2(n.x - x, n.z - z) + (Math.random() - 0.5) * 0.8;
     n.ch.stopEmote();
   }
+  /** Turn on the player: armed locals draw a pistol, tough ones put their fists up. */
+  provoke(n) {
+    if (n.state === 'dead') return false;
+    if (!n.armed && !n.tough) return false;
+    const was = n.state === 'fight' || n.state === 'shoot';
+    n.aggro = 25;
+    if (n.state === 'down') {
+      n.afterDown = n.armed ? 'shoot' : 'fight';
+      return true;
+    }
+    n.state = n.armed ? 'shoot' : 'fight';
+    n.atkCool = 0.6 + Math.random() * 0.6;
+    n.ch.stopEmote();
+    if (!was) this.say(n, pick(n.armed ? LINES.draw : LINES.fight), 2);
+    return true;
+  }
+
+  /**
+   * Damage a pedestrian. kind: bullet | melee | vehicle | blast. Returns true if killed.
+   * from: the attacker's position (the player), or null.
+   */
+  damage(n, amount, vx, vz, from = null, kind = 'melee', head = false) {
+    if (n.state === 'dead') return false;
+    n.hp -= amount;
+    if (n.hp <= 0) {
+      this.die(n, vx, vz);
+      return true;
+    }
+    const heavy = kind === 'vehicle' || kind === 'blast' || amount >= 40;
+    if (heavy) this.knock(n, vx, vz, pick(LINES.punch));
+    else {
+      n.ch.play('hit');
+      n.x += vx * 0.08;
+      n.z += vz * 0.08;
+      if (Math.random() < 0.5) this.say(n, pick(LINES.punch), 1.4);
+    }
+    if (from && this.provoke(n)) return false;
+    if (!heavy && n.state !== 'fight' && n.state !== 'shoot') this.flee(n, from ? from.x : n.x - vx, from ? from.z : n.z - vz);
+    return false;
+  }
+  die(n, vx, vz) {
+    n.state = 'dead';
+    n.hp = 0;
+    n.timer = 40;
+    n.vx = vx;
+    n.vz = vz;
+    n.ch.mode = 'down';
+    n.ch.stopEmote();
+    n.ch.hold = null;
+    if (n.gun) n.gun.visible = false;
+  }
+
   knock(n, vx, vz, line = null) {
     n.state = 'down';
     n.timer = 3 + Math.random();
@@ -250,11 +317,108 @@ export class Peds {
     far.x = x;
     far.z = z;
     far.yaw = yaw;
+    far.hp = 100;
+    far.aggro = 0;
+    far.afterDown = null;
+    far.ch.hold = null;
+    far.ch.mesh.visible = true;
+    if (far.gun) far.gun.visible = false;
     const p = this.paths.reduce((a, b) => (Math.hypot(b.cx - x, b.cz - z) < Math.hypot(a.cx - x, a.cz - z) ? b : a));
     far.path = p.path;
     this.knock(far, Math.cos(yaw) * 3, -Math.sin(yaw) * 3, pick(LINES.hijack));
     far.timer = 1.4;
     return far;
+  }
+
+  /* ---------- Combat AI ---------- */
+  updateFight(n, dt, ctx) {
+    const pl = ctx.player;
+    const tx = pl.focus.x;
+    const tz = pl.focus.z;
+    const dx = tx - n.x;
+    const dz = tz - n.z;
+    const d = Math.hypot(dx, dz);
+    n.aggro -= dt;
+    // Give up when the player is gone, down, or out of reach
+    if (pl.dead || n.aggro <= 0 || d > (n.state === 'shoot' ? 70 : 35) || (n.state === 'fight' && pl.mode !== 'foot')) {
+      n.state = 'walk';
+      n.timer = 5;
+      n.ch.hold = null;
+      if (n.gun) n.gun.visible = false;
+      n.s = n.path.nearest(n.x, n.z);
+      n.state = 'return';
+      if (d < 30) this.say(n, pick(LINES.calm), 1.8);
+      return { yaw: n.yaw, speed: 0 };
+    }
+    const yaw = Math.atan2(dx, dz);
+    n.atkCool -= dt;
+    if (n.state === 'fight') {
+      n.ch.hold = { kind: 'fists', raised: true };
+      if (d > 1.15) {
+        const sp = d > 4 ? 5.2 : 2.4;
+        n.x += (dx / d) * sp * dt;
+        n.z += (dz / d) * sp * dt;
+        return { yaw, speed: sp };
+      }
+      if (n.atkCool <= 0 && n.ch.attack(Math.random() < 0.5 ? 'jab' : 'cross')) {
+        n.atkCool = 0.8 + Math.random() * 0.7;
+        n.pendingHit = 0.15;
+      }
+      if (n.pendingHit !== undefined && n.pendingHit > 0) {
+        n.pendingHit -= dt;
+        if (n.pendingHit <= 0) {
+          n.pendingHit = undefined;
+          if (d < 1.6 && Math.random() < 0.75) {
+            pl.hurt(7 + Math.random() * 5, n.x, n.z);
+            this.audio.hitFlesh(false);
+          } else this.audio.swing();
+        }
+      }
+      return { yaw, speed: 0 };
+    }
+    // Shooting: keep a distance, stop and fire in bursts
+    n.ch.hold = { kind: 'pistol', raised: true, pitch: 0 };
+    if (!n.gun) {
+      n.gun = buildWeaponMesh('pistol');
+      this.scene.add(n.gun);
+    }
+    let speed = 0;
+    if (d > 24) speed = 4.5;
+    else if (d < 6) speed = -2.2;
+    if (speed) {
+      n.x += (dx / d) * speed * dt;
+      n.z += (dz / d) * speed * dt;
+      const hit = this.world.collideCircle(n.x, n.z, 0.35);
+      if (hit) {
+        n.x += hit.px;
+        n.z += hit.pz;
+      }
+    }
+    if (n.atkCool <= 0 && d < 40 && ctx.combat) {
+      n.atkCool = 0.55 + Math.random() * 0.8;
+      const pv = pl.mode === 'driving' ? pl.vehicle.speed : pl.speed;
+      const chance = clamp(0.7 - d * 0.015 - pv * 0.03, 0.12, 0.65);
+      n.wantShot = chance;
+    }
+    return { yaw, speed: Math.abs(speed) };
+  }
+
+  /** Place a ped's pistol in their right hand and fire any queued shot. */
+  updateGun(n, ctx) {
+    const g = n.gun;
+    if (!g) return;
+    g.visible = n.state === 'shoot' && n.ch.mesh.visible;
+    if (!g.visible) return;
+    const hand = n.ch.bones.haR;
+    hand.updateWorldMatrix(true, false);
+    hand.localToWorld(g.position.set(0, -0.07, 0.02));
+    const f = ctx.player.focus;
+    g.lookAt(f.x, f.y + 1.2, f.z);
+    if (n.wantShot) {
+      const muzzle = g.localToWorld(g.userData.muzzle.clone());
+      ctx.combat.npcFire(n, muzzle, WEAPONS.pistol, n.wantShot);
+      n.wantShot = 0;
+    }
   }
 
   /* ---------- Update ---------- */
@@ -263,7 +427,8 @@ export class Peds {
     const tmp = this.tmp;
     for (const n of this.list) {
       const dFocus = Math.hypot(n.x - focus.x, n.z - focus.z);
-      if (dFocus > 170 && n.state !== 'down') {
+      const out = dFocus > 170 || (n.state === 'dead' && n.timer <= 0 && dFocus > 40);
+      if (out && n.state !== 'down') {
         this.respawn(n, focus);
         continue;
       }
@@ -344,6 +509,7 @@ export class Peds {
           }
           break;
         }
+        case 'dead':
         case 'down': {
           n.vx *= Math.exp(-3 * dt);
           n.vz *= Math.exp(-3 * dt);
@@ -354,33 +520,49 @@ export class Peds {
             n.x += hit.px;
             n.z += hit.pz;
           }
-          if (n.timer <= 0) {
+          if (n.state === 'down' && n.timer <= 0) {
             n.ch.mode = 'move';
-            n.state = 'flee';
-            n.timer = 4;
-            n.fleeYaw = n.yaw + Math.PI + (Math.random() - 0.5);
+            if (n.afterDown) {
+              n.state = n.afterDown;
+              n.afterDown = null;
+              n.atkCool = 0.8;
+            } else {
+              n.state = 'flee';
+              n.timer = 4;
+              n.fleeYaw = n.yaw + Math.PI + (Math.random() - 0.5);
+            }
           }
+          break;
+        }
+        case 'fight':
+        case 'shoot': {
+          const r = this.updateFight(n, dt, ctx);
+          wantYaw = r.yaw;
+          moveSpeed = r.speed;
           break;
         }
       }
 
       // Threat from moving physics vehicles: dodge-dive or get knocked
-      if (n.state !== 'down') {
+      if (n.state !== 'down' && n.state !== 'dead') {
         for (const v of vehicles) {
           if (v.speed < 3.5) continue;
           const rx = n.x - v.pos.x;
           const rz = n.z - v.pos.z;
           const d2 = rx * rx + rz * rz;
-          if (d2 > 200) continue;
+          const reach = v.def.hl + 10;
+          if (d2 > reach * reach) continue;
           const fx = Math.sin(v.yaw);
           const fz = Math.cos(v.yaw);
           let hitCar = false;
-          for (const o of OFFS) {
-            if ((n.x - v.pos.x - fx * o) ** 2 + (n.z - v.pos.z - fz * o) ** 2 < 1.6) hitCar = true;
+          const rr = (v.def.rad + 0.27) ** 2;
+          for (const o of v.def.offs) {
+            if ((n.x - v.pos.x - fx * o) ** 2 + (n.z - v.pos.z - fz * o) ** 2 < rr) hitCar = true;
           }
           if (hitCar) {
-            this.knock(n, v.vel.x * 0.7, v.vel.y * 0.7, pick(LINES.punch));
-            v.vel.multiplyScalar(0.92);
+            // Faster and heavier hits hurt more
+            this.damage(n, v.speed * 4 * Math.sqrt(v.def.mass), v.vel.x * 0.7, v.vel.y * 0.7, null, 'vehicle');
+            v.vel.multiplyScalar(1 - 0.08 / v.def.mass);
             this.panic(n.x, n.z, 14, false);
             break;
           }
@@ -414,7 +596,7 @@ export class Peds {
         }
       }
 
-      if (n.state !== 'down') n.yaw = dampAngle(n.yaw, wantYaw, 8, dt);
+      if (n.state !== 'down' && n.state !== 'dead') n.yaw = dampAngle(n.yaw, wantYaw, n.state === 'fight' || n.state === 'shoot' ? 14 : 8, dt);
       n.ch.speed = damp(n.ch.speed, moveSpeed, 8, dt);
       n.y = damp(n.y, this.world.height(n.x, n.z), 12, dt);
       const m = n.ch.mesh;
@@ -431,6 +613,7 @@ export class Peds {
         n.ch.update(n.acc, T);
         n.acc = 0;
       }
+      if (n.gun) this.updateGun(n, ctx);
     }
   }
 }

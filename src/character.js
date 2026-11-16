@@ -510,6 +510,19 @@ export const EMOTES = {
       elbow(P, 'L', 1.6);
     },
   },
+  hit: {
+    dur: 0.45,
+    fn(P, t) {
+      const k = Math.sin(Math.min(1, t / 0.45) * Math.PI);
+      P.spine[0] = -0.3 * k;
+      P.head[0] = -0.45 * k;
+      P.chest[1] = 0.25 * k;
+      arm(P, 'L', 0.2, 0.5 * k);
+      arm(P, 'R', 0.3, 0.6 * k);
+      knee(P, 'L', 0.3 * k);
+      P.hipsY = -0.05 * k;
+    },
+  },
   cower: {
     dur: 1.6,
     fn(P) {
@@ -558,10 +571,12 @@ export class Character {
 
     this.speed = 0;
     this.phase = 0;
-    this.mode = 'move'; // move | air | sit | down
+    this.mode = 'move'; // move | air | sit | ride | down
     this.emote = null;
     this.emoteT = 0;
-    this.punchT = -1;
+    this.atk = null; // jab | cross | kick | swing
+    this.atkT = -1;
+    this.hold = null; // { kind: pistol | rifle | bat, raised, pitch }
     this.steer = 0;
     this.P = zeroPose({});
     this.hipsY = 0;
@@ -576,13 +591,20 @@ export class Character {
     this.emote = null;
   }
   punch() {
-    if (this.punchT >= 0) return false;
-    this.punchT = 0;
+    return this.attack('jab');
+  }
+  attack(kind) {
+    if (this.atkT >= 0) return false;
+    this.atk = kind;
+    this.atkT = 0;
     this.emote = null;
     return true;
   }
+  get attacking() {
+    return this.atkT >= 0;
+  }
   get busy() {
-    return !!this.emote || this.punchT >= 0;
+    return !!this.emote || this.atkT >= 0;
   }
 
   update(dt, T) {
@@ -600,6 +622,21 @@ export class Character {
         elbow(P, side, 0.65);
       }
       P.head[1] = -this.steer * 0.25;
+    } else if (this.mode === 'ride') {
+      // Motorbike: knees tucked against the tank, leaning on the bars
+      leg(P, 'L', 1.1, 0.22);
+      leg(P, 'R', 1.1, 0.22);
+      knee(P, 'L', 1.75);
+      knee(P, 'R', 1.75);
+      P.ftL[0] = -0.4;
+      P.ftR[0] = -0.4;
+      P.spine[0] = 0.4;
+      P.chest[0] = 0.1;
+      P.head[0] = -0.45;
+      for (const side of ['L', 'R']) {
+        arm(P, side, 1.05 + (side === 'L' ? this.steer : -this.steer) * 0.15, 0.32);
+        elbow(P, side, 0.55);
+      }
     } else if (this.mode === 'down') {
       P.hips[0] = -1.5;
       P.hipsY = -0.8;
@@ -631,27 +668,11 @@ export class Character {
         if (!e.loop && this.emoteT > e.dur) this.emote = null;
       }
     }
-    // Punch overlay (upper body)
-    if (this.punchT >= 0) {
-      const t = this.punchT;
-      this.punchT += dt;
+    if (this.mode === 'move' || this.mode === 'air') this.holdPose(P);
+    if (this.atkT >= 0) {
       k = 26;
-      arm(P, 'L', 0.9, 0.2);
-      elbow(P, 'L', 2.1);
-      if (t < 0.1) {
-        arm(P, 'R', 0.6, 0.25);
-        elbow(P, 'R', 2.2);
-        P.chest[1] = 0.35;
-      } else if (t < 0.26) {
-        arm(P, 'R', 1.55, 0.05);
-        elbow(P, 'R', 0.05);
-        P.chest[1] = -0.5;
-        P.spine[0] = 0.12;
-      } else {
-        arm(P, 'R', 0.7, 0.2);
-        elbow(P, 'R', 1.9);
-      }
-      if (this.punchT > 0.5) this.punchT = -1;
+      if (this.attackPose(P, this.atk, this.atkT)) this.atkT = -1;
+      else this.atkT += dt;
     }
 
     // Blend toward target
@@ -665,6 +686,127 @@ export class Character {
     }
     this.hipsY = damp(this.hipsY, P.hipsY, k, dt);
     b.hips.position.y = 0.95 + this.hipsY;
+  }
+
+  /** Upper-body pose for whatever is in the hands. */
+  holdPose(P) {
+    const h = this.hold;
+    if (!h || this.atkT >= 0) return;
+    const p = clamp(h.pitch || 0, -1, 1);
+    if (h.kind === 'pistol') {
+      if (h.raised) {
+        arm(P, 'R', 1.5 + p, -0.08);
+        elbow(P, 'R', 0.05);
+        arm(P, 'L', 1.42 + p, -0.42);
+        elbow(P, 'L', 0.4);
+        P.chest[1] = 0.12;
+        P.head[0] = -p * 0.4;
+      } else {
+        arm(P, 'R', 0.3, 0.1);
+        elbow(P, 'R', 0.45);
+      }
+    } else if (h.kind === 'rifle') {
+      if (h.raised) {
+        arm(P, 'R', 1.0 + p, 0.35);
+        elbow(P, 'R', 1.3);
+        arm(P, 'L', 1.35 + p, -0.5);
+        elbow(P, 'L', 0.45);
+        P.chest[1] = -0.25;
+        P.head[1] = 0.25;
+        P.head[0] = -p * 0.4;
+      } else {
+        arm(P, 'R', 0.5, 0.2);
+        elbow(P, 'R', 1.3);
+        arm(P, 'L', 0.8, -0.45);
+        elbow(P, 'L', 1.4);
+        P.chest[1] = -0.1;
+      }
+    } else if (h.kind === 'bat') {
+      // resting on the right shoulder
+      arm(P, 'R', 0.35, 0.25);
+      elbow(P, 'R', 2.1);
+    } else if (h.kind === 'fists' && h.raised) {
+      // fighting guard
+      arm(P, 'L', 0.9, 0.2);
+      elbow(P, 'L', 2.1);
+      arm(P, 'R', 0.75, 0.25);
+      elbow(P, 'R', 2.2);
+      P.chest[1] = -0.15;
+    }
+  }
+
+  /** Strike animations. Returns true when finished. */
+  attackPose(P, kind, t) {
+    const guard = (side) => {
+      arm(P, side, 0.9, 0.2);
+      elbow(P, side, 2.1);
+    };
+    if (kind === 'jab' || kind === 'cross') {
+      const S = kind === 'jab' ? 'R' : 'L';
+      const O = kind === 'jab' ? 'L' : 'R';
+      const tw = kind === 'jab' ? 1 : -1;
+      guard(O);
+      if (t < 0.1) {
+        arm(P, S, 0.6, 0.25);
+        elbow(P, S, 2.2);
+        P.chest[1] = -0.3 * tw;
+      } else if (t < 0.26) {
+        arm(P, S, 1.55, 0.35);
+        elbow(P, S, 0.05);
+        P.chest[1] = 0.45 * tw;
+        P.spine[0] = 0.12;
+        leg(P, S === 'R' ? 'L' : 'R', 0.25);
+      } else {
+        arm(P, S, 0.8, 0.2);
+        elbow(P, S, 2.0);
+      }
+      return t > 0.42;
+    }
+    if (kind === 'kick') {
+      guard('L');
+      guard('R');
+      if (t < 0.16) {
+        leg(P, 'R', 1.2);
+        knee(P, 'R', 1.7);
+        P.spine[0] = -0.1;
+      } else if (t < 0.38) {
+        leg(P, 'R', 1.5);
+        knee(P, 'R', 0.08);
+        P.ftR[0] = 0.3;
+        P.spine[0] = -0.3;
+        P.hipsY = -0.04;
+        knee(P, 'L', 0.2);
+      } else {
+        leg(P, 'R', 0.6);
+        knee(P, 'R', 1.0);
+      }
+      return t > 0.62;
+    }
+    if (kind === 'swing') {
+      // two-handed horizontal swing, right to left
+      if (t < 0.18) {
+        P.chest[1] = -0.85;
+        arm(P, 'R', 1.0, 0.7);
+        elbow(P, 'R', 1.6);
+        arm(P, 'L', 1.1, -0.1);
+        elbow(P, 'L', 1.4);
+      } else if (t < 0.34) {
+        P.chest[1] = 0.75;
+        arm(P, 'R', 1.45, -0.1);
+        elbow(P, 'R', 0.3);
+        arm(P, 'L', 1.45, -0.5);
+        elbow(P, 'L', 0.35);
+        P.spine[0] = 0.12;
+      } else {
+        P.chest[1] = 0.95;
+        arm(P, 'R', 1.0, -0.2);
+        elbow(P, 'R', 0.9);
+        arm(P, 'L', 1.0, -0.5);
+        elbow(P, 'L', 0.9);
+      }
+      return t > 0.62;
+    }
+    return true;
   }
 
   get handR() {

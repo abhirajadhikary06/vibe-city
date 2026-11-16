@@ -1,6 +1,6 @@
 # Vibe City
 
-An open-world, 80s neon-coast game that runs entirely in the browser. Walk the streets, get into any car, talk and dance with the locals, and drive along the beach from golden hour to neon night.
+An open-world, 80s neon-coast game that runs entirely in the browser. Walk the streets, get into anything with wheels (cars, motorbikes, trucks, buses, the tram and the train), fight or shoot it out with the locals or dance with them instead, and drive along the beach from golden hour to neon night.
 
 No backend, no server and no downloaded assets. Every building, car, person, texture and sound is generated in code when the game loads.
 
@@ -35,12 +35,14 @@ The `dist/` folder is plain static files, so you can host it on any static host 
 | **Mouse** | Look around (click the screen to lock the mouse) | Look around (recentres automatically) |
 | **Shift** | Sprint | Nitro boost |
 | **Space** | Jump | Handbrake (drift) |
-| **F** | Enter the nearest vehicle (you'll pull out a traffic car's driver) | Exit (bail out and roll if you're going fast) |
-| **E** | Talk to a nearby person | — |
-| **Left click** / **J** | Punch | — |
-| **1–8** or hold **Tab** | Gestures: Wave, Dance, Point, Thumbs Up, Cheer, Shrug, Flex, Laugh | — |
+| **F** | Enter the nearest vehicle (you'll pull out a traffic car's driver; trams and trains must be stopped) | Exit (bail out and roll if you're going fast) |
+| **E** | Talk to a nearby person (with fists or bat in hand) | — |
+| **1–7** / **mouse wheel** | Fists, Baseball Bat, Pistol, SMG, Shotgun, Assault Rifle, Sniper Rifle | — |
+| **Right click** (hold) | Aim (sniper: scope). With fists: raise your guard | — |
+| **Left click** / **J** | Fire, or punch / kick (a 4-hit combo) / swing the bat | — |
+| Hold **Tab** | Gestures: Wave, Dance, Point, Thumbs Up, Cheer, Shrug, Flex, Laugh | — |
 | **H** | — | Horn (startles nearby people) |
-| **R** | — | Reset the car onto the nearest road |
+| **R** | Reload | Reset the vehicle onto the nearest road |
 | **C** | Change camera distance | Cycle chase / far / hood camera |
 | **T** (hold) | Fast-forward time | Fast-forward time |
 | **Q** | Toggle the radio | Toggle the radio |
@@ -48,7 +50,7 @@ The `dist/` folder is plain static files, so you can host it on any static host 
 | **Backspace** | Cancel an active Time Trial | Cancel an active Time Trial |
 | **Esc** | Pause | Pause |
 
-Gamepads work too: left stick to steer, triggers for throttle and brake, A for handbrake, B or RB for nitro, Y to enter or exit, X to talk, LB for the camera.
+Gamepads work too: left stick to steer, triggers for throttle and brake (aim and fire on foot), D-pad left/right to switch weapons, A for handbrake, B or RB for nitro, Y to enter or exit, X to talk, LB for the camera.
 
 ---
 
@@ -72,15 +74,32 @@ Gamepads work too: left stick to steer, triggers for throttle and brake, A for h
 - **City at night:** lit windows and shops, glowing neon, light shafts under street lights, and wet-looking streets.
 
 ### Vehicles
-- **Five types:** Convertible, Sports Coupe, Sedan, Taxi and Van, each with its own handling.
-- **Arcade physics:** weight transfer, handbrake drifts, nitro, collisions, tyre smoke, skid marks and sparks.
-- **Details:** rounded tyres with tread, ten-spoke alloys, brake discs and callipers, door seams, chrome trim, number plates, brake lights and headlights.
-- **Any car is driveable:** parked cars, cars knocked out of traffic, or traffic you hijack.
+- **Cars:** Convertible, Sports Coupe, Sedan, Taxi and Van.
+- **Heavy and two-wheeled:** Motorbike (leans into corners), Pickup Truck, Box Truck, School Bus and City Bus. Each has its own handling, mass, engine note and camera distance.
+- **Mass-based collisions:** a bus shoves a sedan aside, and a motorbike bounces off a truck.
+- **Damage:** crashes and bullets wear vehicles down. They smoke, then catch fire, then explode into a burnt-out wreck. Explosions hurt everything nearby and can set off other vehicles.
+- **Arcade physics:** weight transfer, handbrake drifts, nitro (cars and bikes), tyre smoke, skid marks and sparks.
+- **Details:** rounded tyres with tread, ten-spoke alloys, dual rear wheels on trucks and buses, brake discs and callipers, door seams, chrome trim, number plates, brake lights and headlights.
+- **Anything is driveable:** parked vehicles, vehicles knocked out of traffic, or traffic you hijack.
+
+### Rail
+- **Tram:** a three-section articulated tram runs down the central avenue on rails set into the road, under overhead wires, stopping every couple of blocks.
+- **Commuter train:** a three-car train runs on a ballasted line around the west, north and south edges of the city, with five stations (platforms, shelters and name boards).
+- Both run on their own, brake for things on the line, ring the bell or sound the horn, and stop at stations. Walk up to the cab while one is stopped and press **F** to drive it (W/S).
+
+### Combat
+- **Seven weapons:** fists (jab, cross, jab, kick combo), baseball bat, pistol, SMG, shotgun, assault rifle and a scoped sniper rifle. Each has its own damage, fire rate, spread, recoil, magazine and sound.
+- **Aiming:** an over-the-shoulder aim camera with a crosshair that tightens when you aim, hit markers (red on a kill) and headshot damage.
+- **Ballistics:** hitscan bullets that hit people, vehicles, trams, trains, buildings, lamp posts and palm trunks. Tracers, muzzle flashes that light up the street, dust and sparks on impact, bullet holes, blood, and ricochets.
+- **Ammo:** reload with R. Yellow ammo crates around town (also on the minimap) top up every gun.
+- **People fight back:** some locals put their fists up when attacked, and a few draw a pistol and shoot. Others panic and run from gunfire, and drivers floor it. Shoot a car in traffic and its driver bails out.
+- **Health:** a health bar that regenerates when you stay out of trouble, red flashes showing which way damage came from, and knock-outs. You wake up on a nearby sidewalk with a small medical bill.
 
 ### People
 - **Pedestrians:** around 40 of them, with varied skin tones, clothes, hair and accessories, walking the sidewalks and beach.
 - **Behaviour:** they talk on the phone, dance, dodge cars, cower at your horn and run away when scared.
 - **Interaction:** talk to them (they reply in speech bubbles and sometimes tip you), wave or cheer and they react, or start a dance party they'll join.
+- **Health and temper:** they get hurt or killed by fists, bullets, vehicles and explosions. Some fight back, some carry a pistol, and the rest run.
 
 ### Gameplay
 - **Cash pickups:** glowing cash scattered around the city.
@@ -89,12 +108,13 @@ Gamepads work too: left stick to steer, triggers for throttle and brake, A for h
 - **Saved progress:** money and best time are kept in `localStorage`.
 
 ### HUD
-- **Map:** a rotating minimap with markers for cash and the Time Trial.
+- **Map:** a rotating minimap with markers for cash, ammo crates and the Time Trial.
+- **Combat:** health bar, weapon and ammo readout, crosshair, sniper scope, hit markers and damage-direction indicators.
 - **Speedometer:** a neon gauge with gear and nitro readouts.
 - **Messages:** pop-up notifications, an interaction prompt, a gesture wheel and speech bubbles.
 
 ### Audio
-Everything is synthesised live with the **Web Audio API**: engine sound tied to RPM, tyre screech, wind, impacts, horn, UI sounds and a procedural **synthwave radio**.
+Everything is synthesised live with the **Web Audio API**: engine sound tied to RPM (deeper for trucks, buses and trains), tyre screech, wind, impacts, horn, gunshots with street echo, ricochets, explosions, a tram bell, a train horn, UI sounds and a procedural **synthwave radio**.
 
 ---
 
@@ -121,7 +141,8 @@ Everything is synthesised live with the **Web Audio API**: engine sound tied to 
 - **Shadows:** soft PCF shadows that follow the player.
 - **Post-processing:** bloom, ambient occlusion (Ultra only), and a custom colour grade (chromatic aberration, nitro speed blur, split toning, vignette, film grain), then SMAA.
 - **Custom GLSL shaders:** procedural clouds, fake volumetric light cones and GPU particles.
-- **Characters:** one skinned mesh per person, procedurally rigged, with smooth two-bone weights at the joints and procedural animation (walk and run cycles, eight gestures, sitting, falling, punching).
+- **Characters:** one skinned mesh per person, procedurally rigged, with smooth two-bone weights at the joints and procedural animation (walk and run cycles, eight gestures, sitting, riding, falling, punch/kick/bat strikes, and pistol and rifle aiming poses).
+- **Weapons and vehicles:** every gun, vehicle, tram and train is modelled in code from primitives, extrusions and rounded boxes.
 
 ### Performance
 - **Fewer draw calls:** city geometry is merged by material; palms, street lights and light cones use instancing.
@@ -156,8 +177,12 @@ src/
   character.js      Procedural skinned humanoid, outfits, animation and gestures
   player.js         On-foot controller, entering/exiting vehicles, interactions
   peds.js           Pedestrian AI, reactions and dialogue
-  car.js            Vehicle models, materials, arcade physics, level of detail
+  car.js            Car models, materials, arcade physics, damage, level of detail
+  fleet.js          Pickup, box truck, school bus, city bus and motorbike models
+  rail.js           Tram and train lines, stations, rolling stock and rail AI
   traffic.js        AI traffic on the road graph, hijack/crash hand-off
+  weapons.js        Weapon stats, gun models and the player's arsenal
+  combat.js         Bullets, tracers, decals, explosions and area damage
   gameplay.js       Cash pickups, drift scoring, Time Trial
   effects.js        Particles (smoke, sparks, nitro flame) and skid marks
   post.js           Post-processing chain and colour-grade shader

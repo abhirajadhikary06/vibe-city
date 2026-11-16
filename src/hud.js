@@ -35,6 +35,66 @@ export class HUD {
     this.speedoEl = $('speedo');
     this.v3 = new THREE.Vector3();
     this.buildWheel();
+    this.cw = {
+      weapon: $('weapon'),
+      wname: $('weapon').querySelector('.wname'),
+      wammo: $('weapon').querySelector('.wammo'),
+      health: $('health'),
+      hfill: $('health').querySelector('.fill'),
+      cross: $('crosshair'),
+      hit: $('hitmark'),
+      scope: $('scope'),
+      dmg: $('dmg'),
+      dmgdir: $('dmgdir'),
+    };
+    this.dmgFlash = 0;
+  }
+
+  /* ---------- Combat ---------- */
+  /** Weapon name + ammo readout, crosshair and scope. state from Player each frame. */
+  combat({ name, mag, reserve, gun, reloading, cross, aiming, scoped, spread, hp, dead }) {
+    const c = this.cw;
+    if (name !== this._wname) {
+      c.wname.textContent = this._wname = name;
+      c.weapon.classList.remove('flash');
+      void c.weapon.offsetWidth;
+      c.weapon.classList.add('flash');
+    }
+    const ammo = gun ? (reloading ? 'RELOADING' : `${mag}<span> / ${reserve}</span>`) : '';
+    if (ammo !== this._ammo) {
+      c.wammo.innerHTML = this._ammo = ammo;
+      c.wammo.classList.toggle('low', gun && !reloading && mag <= 2);
+    }
+    if (cross !== this._cross) c.cross.classList.toggle('hidden', !(this._cross = cross));
+    if (cross) {
+      const gap = Math.round(aiming ? 3 + spread * 300 : 7 + spread * 500);
+      if (gap !== this._gap) c.cross.style.setProperty('--gap', `${(this._gap = gap)}px`);
+    }
+    if (scoped !== this._scoped) c.scope.classList.toggle('hidden', !(this._scoped = scoped));
+    const hpw = Math.max(0, Math.round(hp));
+    if (hpw !== this._hp) {
+      c.hfill.style.width = `${(this._hp = hpw)}%`;
+      c.health.classList.toggle('low', hpw < 30);
+    }
+    if (dead !== this._dead) this.el.hud.classList.toggle('dead', (this._dead = dead));
+  }
+  hitmark(kill) {
+    const h = this.cw.hit;
+    h.classList.remove('on', 'kill');
+    void h.offsetWidth;
+    h.classList.add('on');
+    if (kill) h.classList.add('kill');
+  }
+  /** Red edge flash plus an arc pointing at where the damage came from (angle relative to the camera). */
+  damage(angle, amount) {
+    this.dmgFlash = Math.min(1, this.dmgFlash + amount / 30);
+    if (!Number.isFinite(angle) || amount < 2) return;
+    const a = document.createElement('div');
+    a.className = 'dmgarc';
+    a.style.transform = `rotate(${-angle}rad)`;
+    this.cw.dmgdir.appendChild(a);
+    while (this.cw.dmgdir.children.length > 4) this.cw.dmgdir.firstChild.remove();
+    setTimeout(() => a.remove(), 1100);
   }
 
   /* ---------- Speech bubbles ---------- */
@@ -92,7 +152,7 @@ export class HUD {
       const a = (i / EMOTE_LIST.length) * Math.PI * 2 - Math.PI / 2;
       const el = document.createElement('div');
       el.className = 'witem';
-      el.innerHTML = `<span class="wn">${i + 1}</span>${EMOTE_LABELS[name]}`;
+      el.textContent = EMOTE_LABELS[name];
       el.style.left = `${50 + Math.cos(a) * 36}%`;
       el.style.top = `${50 + Math.sin(a) * 36}%`;
       w.appendChild(el);
@@ -208,6 +268,11 @@ export class HUD {
 
   /* ---------- Per-frame ---------- */
   update(dt, player, hours, blips, vehicle, camera) {
+    if (this.dmgFlash > 0.001 || this._flash) {
+      this.dmgFlash *= Math.exp(-2.5 * dt);
+      const o = this.dmgFlash.toFixed(2);
+      if (o !== this._flash) this.cw.dmg.style.opacity = this._flash = o;
+    }
     if (this.shownMoney !== this.targetMoney) {
       const d = this.targetMoney - this.shownMoney;
       this.shownMoney += Math.sign(d) * Math.max(1, Math.abs(d) * Math.min(1, dt * 6));

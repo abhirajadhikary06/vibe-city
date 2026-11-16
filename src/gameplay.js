@@ -76,6 +76,26 @@ export class Gameplay {
       this.pickups.push(p);
     }
 
+    /* ---- Ammo crates ---- */
+    const crateGeo = new THREE.BoxGeometry(1.1, 0.7, 0.7);
+    const crateMat = new THREE.MeshStandardMaterial({ color: 0x3d4a2a, roughness: 0.7, metalness: 0.2, emissive: 0x1a2a08, emissiveIntensity: 0.6 });
+    const bandGeo = new THREE.BoxGeometry(1.12, 0.12, 0.72);
+    const bandMat = new THREE.MeshStandardMaterial({ color: 0xffd36b, emissive: 0x6b4a00, emissiveIntensity: 1.2 });
+    const ammoBeam = new THREE.MeshBasicMaterial({ map: beamTex, color: new THREE.Color(3, 2.2, 0.4), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, opacity: 0.45 });
+    this.crates = [];
+    for (let i = 0; i < 10; i++) {
+      const g = new THREE.Group();
+      const crate = new THREE.Mesh(crateGeo, crateMat);
+      crate.position.y = 0.9;
+      crate.castShadow = true;
+      crate.add(new THREE.Mesh(bandGeo, bandMat));
+      g.add(crate, new THREE.Mesh(beamGeo, ammoBeam));
+      scene.add(g);
+      const p = { g, coin: crate, active: true, timer: 0 };
+      this.place(p, 28 + i * 3);
+      this.crates.push(p);
+    }
+
     /* ---- Time trial ---- */
     const ringGeo = new THREE.CylinderGeometry(7, 7, 7, 40, 1, true).translate(0, 3.5, 0);
     this.startMarker = new THREE.Group();
@@ -129,6 +149,7 @@ export class Gameplay {
   blips() {
     const out = [];
     for (const p of this.pickups) if (p.active) out.push({ x: p.g.position.x, z: p.g.position.z, color: '#5dff9e', r: 6 });
+    for (const p of this.crates) if (p.active) out.push({ x: p.g.position.x, z: p.g.position.z, color: '#ffd36b', r: 6 });
     if (this.race.state === 'idle') out.push({ x: this.startPos.x, z: this.startPos.z, color: '#ff3fa4', r: 10, always: true, label: 'T' });
     else if (this.cpMarker.visible) out.push({ x: this.cpMarker.position.x, z: this.cpMarker.position.z, color: '#ffd36b', r: 10, always: true, label: String(this.race.cp + 1) });
     return out;
@@ -159,6 +180,30 @@ export class Gameplay {
         this.addMoney(p.value);
         this.audio.pickup();
         this.hud.notify(`+$${p.value}`, 'Cash collected', '#7dffb0');
+      }
+    }
+
+    for (const p of this.crates) {
+      if (!p.active) {
+        p.timer -= dt;
+        if (p.timer <= 0) {
+          this.place(p);
+          p.active = true;
+          p.g.visible = true;
+        }
+        continue;
+      }
+      p.coin.rotation.y = t * 1.2 + p.g.position.x;
+      p.coin.position.y = 0.9 + Math.sin(t * 2 + p.g.position.z) * 0.12;
+      const dx = p.g.position.x - f.x;
+      const dz = p.g.position.z - f.z;
+      if (!v && !pl.dead && dx * dx + dz * dz < 4 && Math.abs(p.g.position.y - f.y) < 3) {
+        p.active = false;
+        p.g.visible = false;
+        p.timer = 45;
+        pl.arsenal.refill();
+        this.audio.reload();
+        this.hud.notify('AMMO', 'Every gun topped up', '#ffd36b');
       }
     }
 

@@ -10,6 +10,8 @@ export class Input {
     this.wheelVec = { x: 0, y: 0 };
     this.wheelPick = null;
     this.onWheel = null; // (open, vec) => label | null
+    this.scroll = 0;
+    this.wheelSteps = 0;
 
     addEventListener('keydown', (e) => {
       if (e.code === 'Tab') e.preventDefault();
@@ -19,11 +21,19 @@ export class Input {
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
+    // Mouse buttons are tracked like keys: 'Mouse0' (left), 'Mouse2' (right)
     addEventListener('mousedown', (e) => {
       this.mouse.down = true;
-      this.pressed.add('Mouse' + e.button);
+      const code = 'Mouse' + e.button;
+      if (!this.keys.has(code)) this.pressed.add(code);
+      this.keys.add(code);
     });
-    addEventListener('mouseup', () => (this.mouse.down = false));
+    addEventListener('mouseup', (e) => {
+      this.keys.delete('Mouse' + e.button);
+      this.mouse.down = this.keys.has('Mouse0') || this.keys.has('Mouse2');
+    });
+    addEventListener('contextmenu', (e) => e.preventDefault());
+    addEventListener('wheel', (e) => (this.scroll += e.deltaY), { passive: true });
     addEventListener('mousemove', (e) => {
       if (this.wheelOpen) {
         this.wheelVec.x += e.movementX;
@@ -59,6 +69,12 @@ export class Input {
   poll() {
     const k = this.keys;
     const s = this.state;
+    // Mouse wheel: one weapon step per notch
+    this.wheelSteps = 0;
+    if (Math.abs(this.scroll) >= 40) {
+      this.wheelSteps = Math.sign(this.scroll);
+      this.scroll = 0;
+    }
     s.throttle = k.has('KeyW') || k.has('ArrowUp') ? 1 : 0;
     s.brake = k.has('KeyS') || k.has('ArrowDown') ? 1 : 0;
     s.steer = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
@@ -103,6 +119,17 @@ export class Input {
       edge(3, 'KeyF');
       edge(2, 'KeyE');
       edge(4, 'KeyC');
+      // Triggers fire / aim while on foot
+      if ((gp.buttons[7]?.value || 0) > 0.5) k.add('Mouse0');
+      else if (this._gpFire) k.delete('Mouse0');
+      if ((gp.buttons[6]?.value || 0) > 0.5) k.add('Mouse2');
+      else if (this._gpAim) k.delete('Mouse2');
+      if ((gp.buttons[7]?.value || 0) > 0.5 && !this._gpFire) this.pressed.add('Mouse0');
+      this._gpFire = (gp.buttons[7]?.value || 0) > 0.5;
+      this._gpAim = (gp.buttons[6]?.value || 0) > 0.5;
+      const dpad = (gp.buttons[15]?.pressed ? 1 : 0) - (gp.buttons[14]?.pressed ? 1 : 0);
+      if (dpad && !this._gpDpad) this.wheelSteps = dpad;
+      this._gpDpad = dpad;
     }
     return s;
   }

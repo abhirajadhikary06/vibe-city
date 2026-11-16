@@ -207,6 +207,7 @@ export class World {
     this.updaters = [];
     this.pickupSpots = [];
     this.blocks = [];
+    this.pads = [];
     this.time = { value: 0 };
     this.build();
   }
@@ -294,7 +295,71 @@ export class World {
     return best;
   }
 
+  /** Raised walkable area (station platforms). */
+  addPad(x0, x1, z0, z1, h) {
+    this.pads.push({ x0, x1, z0, z1, h });
+  }
+
+  /**
+   * Bullet ray in 2D against tall boxes and poles/trunks. Returns the first hit as
+   * { t (fraction of the segment), nx, nz } or null.
+   */
+  raycastHit(ax, az, bx, bz) {
+    let best = 1;
+    let nx = 0;
+    let nz = 0;
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len2 = dx * dx + dz * dz;
+    this.grid.query(Math.min(ax, bx), Math.max(ax, bx), Math.min(az, bz), Math.max(az, bz), (o) => {
+      if (o.t === 1) {
+        const fx = ax - o.x;
+        const fz = az - o.z;
+        const b = fx * dx + fz * dz;
+        const c = fx * fx + fz * fz - o.r * o.r;
+        const disc = b * b - len2 * c;
+        if (disc < 0 || c < 0) return;
+        const t = (-b - Math.sqrt(disc)) / len2;
+        if (t >= 0 && t < best) {
+          best = t;
+          const hx = ax + dx * t - o.x;
+          const hz = az + dz * t - o.z;
+          const l = Math.hypot(hx, hz) || 1;
+          nx = hx / l;
+          nz = hz / l;
+        }
+        return;
+      }
+      if (!o.tall) return;
+      let t0 = 0;
+      let t1 = 1;
+      let ax0 = 0;
+      for (const [p, d, lo, hi, axis] of [[ax, dx, o.x0, o.x1, 0], [az, dz, o.z0, o.z1, 1]]) {
+        if (Math.abs(d) < 1e-9) {
+          if (p < lo || p > hi) return;
+        } else {
+          let ta = (lo - p) / d;
+          let tb = (hi - p) / d;
+          if (ta > tb) [ta, tb] = [tb, ta];
+          if (ta > t0) {
+            t0 = ta;
+            ax0 = axis;
+          }
+          t1 = Math.min(t1, tb);
+          if (t0 > t1) return;
+        }
+      }
+      if (t0 > 0 && t0 < best) {
+        best = t0;
+        nx = ax0 === 0 ? -Math.sign(dx) : 0;
+        nz = ax0 === 1 ? -Math.sign(dz) : 0;
+      }
+    });
+    return best < 1 ? { t: best, nx, nz } : null;
+  }
+
   height(x, z) {
+    for (const p of this.pads) if (x > p.x0 && x < p.x1 && z > p.z0 && z < p.z1) return p.h;
     const az = Math.abs(z);
     if (x > PIER.x0 && x < PIER.x1 && az < PIER.hw) {
       return x < 330 ? lerp(beachY(PIER.x0), PIER.deck, (x - PIER.x0) / (330 - PIER.x0)) : PIER.deck;
