@@ -25,7 +25,7 @@ function rod(a, b, r, seg = 6) {
 
 /* ---------- Track: a polyline resampled every STEP metres ---------- */
 const STEP = 0.5;
-class Track {
+export class Track {
   constructor(corners, radius) {
     // Round each interior corner with a quadratic curve
     const pts = [corners[0]];
@@ -88,7 +88,7 @@ class Track {
 }
 
 /** Boxes laid along the track every `step` metres (rails, ballast, sleepers). */
-function alongTrack(track, step, make) {
+export function alongTrack(track, step, make) {
   const out = [];
   const p = {};
   const q = {};
@@ -107,7 +107,7 @@ function alongTrack(track, step, make) {
   return out;
 }
 
-function signTexture(text, sub) {
+export function signTexture(text, sub) {
   const c = document.createElement('canvas');
   c.width = 512;
   c.height = 128;
@@ -127,13 +127,14 @@ function signTexture(text, sub) {
 }
 
 /* ---------- Rolling stock ---------- */
-const KINDS = {
-  tram: { label: 'Tram', L: 9.6, gap: 0.6, cars: 3, hw: 1.2, floor: 0.35, roof: 3.35, base: 0.3, top: 14, accel: 1.3, dec: 1.8, y: 0, seatY: -0.1, camDist: 9, camH: 3.5, engine: 0.7, color: 0xd8336b, look: 22 },
-  train: { label: 'Commuter Train', L: 17, gap: 0.9, cars: 3, hw: 1.45, floor: 1.15, roof: 4.05, base: 0.75, top: 24, accel: 0.9, dec: 1.1, y: 0.3, seatY: 0.62, camDist: 16, camH: 6, engine: 0.45, color: 0x24c3d6, look: 60 },
+export const KINDS = {
+  tram: { label: 'Tram', L: 9.6, gap: 0.6, cars: 3, hw: 1.2, floor: 0.35, roof: 3.35, base: 0.3, top: 14, accel: 1.3, dec: 1.8, y: 0, seatY: -0.1, camDist: 12, camH: 4, engine: 0.7, color: 0xd8336b, look: 22 },
+  metro: { label: 'Metro', L: 15, gap: 0.7, cars: 3, hw: 1.4, floor: 0.93, roof: 3.7, base: 0.3, top: 22, accel: 1.3, dec: 1.7, y: -9.88, seatY: 0.55, camDist: 5, camH: 0.6, engine: 0.85, color: 0x8b5cf6, look: 30, under: true },
+  train: { label: 'Commuter Train', L: 17, gap: 0.9, cars: 3, hw: 1.45, floor: 1.15, roof: 4.05, base: 0.75, top: 24, accel: 0.9, dec: 1.1, y: 0.3, seatY: 0.62, camDist: 24, camH: 7.5, engine: 0.45, color: 0x24c3d6, look: 60 },
 };
 
 let RM = null;
-function railMats() {
+export function railMats() {
   if (RM) return RM;
   RM = {
     white: new THREE.MeshStandardMaterial({ color: 0xf2f2ef, roughness: 0.35, metalness: 0.15 }),
@@ -159,7 +160,7 @@ function buildRailCar(kind, cabF, cabB, paint, middle) {
   const { L, hw, base, roof, floor } = K;
   const W = hw * 2;
   const h2 = L / 2;
-  const nose = kind === 'tram' ? 0.6 : 1.4;
+  const nose = kind === 'tram' ? 0.6 : kind === 'metro' ? 0.7 : 1.4;
   const s = new THREE.Shape();
   const lo = base;
   s.moveTo(-h2 + (cabB ? nose * 0.5 : 0), lo);
@@ -227,7 +228,7 @@ function buildRailCar(kind, cabF, cabB, paint, middle) {
   if (cabF) cabEnd(1);
   if (cabB) cabEnd(-1);
   // Bogies and wheels
-  const bz = h2 - (kind === 'tram' ? 1.7 : 2.6);
+  const bz = h2 - (kind === 'tram' ? 1.7 : kind === 'metro' ? 2.2 : 2.6);
   const wheels = [];
   for (const z of [bz, -bz]) {
     dark.push(box(W - 0.5, 0.35, 2.6, 0, kind === 'tram' ? 0.32 : 0.55, z));
@@ -235,14 +236,14 @@ function buildRailCar(kind, cabF, cabB, paint, middle) {
       for (const sx of [1, -1]) wheels.push(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 16).rotateZ(Math.PI / 2).translate(sx * 0.72, 0.42 - (kind === 'tram' ? 0.12 : 0), z + dz));
     }
   }
-  if (kind === 'train') {
+  if (kind !== 'tram') {
     dark.push(box(W - 0.7, 0.5, L * 0.35, 0, 0.75, 0));
   }
   // Gangway / articulation bellows behind this car
   if (!cabB) dark.push(box(W - 0.35, roof - floor - 0.3, K.gap + 0.1, 0, (roof + floor) / 2, -h2 - K.gap / 2));
   // Roof gear
   const roofGeo = [];
-  if (kind === 'train') roofGeo.push(rbox(1.6, 0.32, 2.4, 0, roof + 0.15, L * 0.22), rbox(1.6, 0.32, 2.4, 0, roof + 0.15, -L * 0.22));
+  if (kind !== 'tram') roofGeo.push(rbox(1.6, 0.32, 2.4, 0, roof + 0.15, L * 0.22), rbox(1.6, 0.32, 2.4, 0, roof + 0.15, -L * 0.22));
   else roofGeo.push(rbox(1.5, 0.35, 3.2, 0, roof + 0.17, 0));
   const panto = [];
   if (kind === 'tram' && middle) {
@@ -262,7 +263,7 @@ function buildRailCar(kind, cabF, cabB, paint, middle) {
     root.add(m);
     return m;
   };
-  add(bodyGeo, kind === 'train' ? M.silver : M.white);
+  add(bodyGeo, kind === 'tram' ? M.white : M.silver);
   add(merge(glass), M.glass);
   add(merge([...dark, ...roofGeo]), M.dark);
   add(merge(wheels), M.steel);
@@ -281,8 +282,8 @@ function buildRailCar(kind, cabF, cabB, paint, middle) {
    Implements the same interface as a road Vehicle so the player
    can drive it and the camera/HUD can follow it.
    ========================================================= */
-class Consist {
-  constructor(scene, track, kind, stops, fx) {
+export class Consist {
+  constructor(scene, track, kind, stops, fx, color = null) {
     const K = KINDS[kind];
     this.K = K;
     this.kind = kind;
@@ -290,13 +291,15 @@ class Consist {
     this.type = kind;
     this.track = track;
     this.fx = fx;
-    this.paint = new THREE.MeshStandardMaterial({ color: K.color, roughness: 0.4, metalness: 0.3 });
+    this.paint = new THREE.MeshStandardMaterial({ color: color ?? K.color, roughness: 0.4, metalness: 0.3 });
     this.cars = [];
     for (let i = 0; i < K.cars; i++) {
       const c = buildRailCar(kind, i === 0, i === K.cars - 1, this.paint, i === 1);
       scene.add(c.root);
       this.cars.push({ ...c, x: 0, z: 0, yaw: 0 });
     }
+    // Driver's cab in use: +1 = front of car 0 (facing +s), -1 = back of the last car (facing -s)
+    this.cab = 1;
     this.car = { root: this.cars[0].root, meshes: this.cars[0].meshes };
     this.pitch = 0;
     this.roll = 0;
@@ -339,8 +342,26 @@ class Consist {
   get speed() {
     return Math.abs(this.v);
   }
+  /** Speed as seen from the driver's seat (negative = backing up). */
   get vf() {
-    return this.v;
+    return this.v * this.cab;
+  }
+  /** Which cab end is closest to a point; and that cab's door-side position. */
+  cabNear(x, z) {
+    const a = this.cars[0];
+    const b = this.cars[this.cars.length - 1];
+    const off = this.def.seatZ;
+    const pa = { x: a.x + Math.sin(a.yaw) * off, z: a.z + Math.cos(a.yaw) * off };
+    const pb = { x: b.x - Math.sin(b.yaw) * off, z: b.z - Math.cos(b.yaw) * off };
+    const da = Math.hypot(pa.x - x, pa.z - z);
+    const db = Math.hypot(pb.x - x, pb.z - z);
+    return da <= db ? { cab: 1, d: da } : { cab: -1, d: db };
+  }
+  setCab(cab) {
+    this.cab = cab;
+    const c = cab > 0 ? this.cars[0] : this.cars[this.cars.length - 1];
+    this.car = { root: c.root, meshes: c.meshes };
+    this.place();
   }
   local(x, z) {
     const s = Math.sin(this.yaw);
@@ -371,10 +392,10 @@ class Consist {
       c.root.position.set(c.x, K.y, c.z);
       c.root.rotation.y = c.yaw;
     }
-    const c0 = this.cars[0];
+    const c0 = this.cab > 0 ? this.cars[0] : this.cars[this.cars.length - 1];
     this.pos.set(c0.x, K.y, c0.z);
-    this.yaw = c0.yaw;
-    this.vel.set(Math.sin(this.yaw) * this.v, Math.cos(this.yaw) * this.v);
+    this.yaw = c0.yaw + (this.cab > 0 ? 0 : Math.PI);
+    this.vel.set(Math.sin(c0.yaw) * this.v, Math.cos(c0.yaw) * this.v);
   }
 
   /** Nearest thing on the track ahead in the direction of travel. */
@@ -400,18 +421,22 @@ class Consist {
     const K = this.K;
     this.impact = 0;
     if (this.driven && inp) {
+      // Controls are relative to the cab: W drives the way the driver faces
       const th = this.locked ? 0 : inp.throttle;
       const br = this.locked ? 0 : inp.brake;
+      let u = this.v * this.cab;
       this.braking = false;
-      if (th > 0) this.v += (this.v < -0.3 ? K.dec * 2 : K.accel * 1.6 * (1 - Math.max(0, this.v) / K.top)) * th * dt;
+      if (th > 0) u += (u < -0.3 ? K.dec * 2.5 : K.accel * 1.8 * Math.max(0, 1 - Math.max(0, u) / K.top)) * th * dt;
       if (br > 0) {
-        if (this.v > 0.3) {
-          this.v -= K.dec * 2 * br * dt;
+        if (u > 0.3) {
+          u -= K.dec * 2.5 * br * dt;
           this.braking = true;
-        } else this.v = Math.max(-5, this.v - K.accel * br * dt);
+        } else u = Math.max(-6, u - K.accel * br * dt);
       }
-      if (inp.handbrake) this.v -= Math.sign(this.v) * Math.min(Math.abs(this.v), K.dec * 3 * dt);
-      if (!th && !br) this.v -= Math.sign(this.v) * Math.min(Math.abs(this.v), 0.15 * dt);
+      if (inp.handbrake) u -= Math.sign(u) * Math.min(Math.abs(u), K.dec * 4 * dt);
+      if (!th && !br) u -= Math.sign(u) * Math.min(Math.abs(u), 0.15 * dt);
+      this.v = u * this.cab;
+      this.dir = Math.sign(this.v) || this.dir;
     } else {
       this.updateAI(dt, ctx);
     }
@@ -428,12 +453,19 @@ class Consist {
     }
     this.s = ns;
     this.rpm = damp(this.rpm, clamp(0.2 + Math.abs(this.v) / K.top, 0, 1), 6, dt);
-    this.gear = this.v < -0.3 ? -1 : 1;
+    this.gear = this.vf < -0.3 ? -1 : 1;
     this.place();
     const lightOn = lerp(0.6, 6, night);
     for (const c of [this.cars[0], this.cars[this.cars.length - 1]]) {
       if (c.meshes.head) c.meshes.head.material.emissiveIntensity = lightOn;
     }
+  }
+
+  signal(ctx) {
+    const d = ctx.near(this.pos);
+    if (this.kind === 'train') ctx.audio.trainHorn(d);
+    else if (this.kind === 'metro') ctx.audio.metroChime(d);
+    else ctx.audio.tramBell(d);
   }
 
   updateAI(dt, ctx) {
@@ -445,7 +477,7 @@ class Consist {
       if (this.dwell <= 0) {
         this.state = 'run';
         if ((this.dir > 0 && this.s >= this.sMax - 0.5) || (this.dir < 0 && this.s <= this.sMin + 0.5)) this.dir *= -1;
-        if (ctx && ctx.near(this.pos) < 70) this.kind === 'tram' ? ctx.audio.tramBell(ctx.near(this.pos)) : ctx.audio.trainHorn(ctx.near(this.pos));
+        if (ctx && ctx.near(this.pos) < 70) this.signal(ctx);
       }
       return;
     }
@@ -463,12 +495,18 @@ class Consist {
     this.ignoreT -= dt;
     this.hornT -= dt;
     if (ctx && this.ignoreT <= 0) {
-      const ahead = this.scanAhead(ctx.objs, this.dir);
+      let ahead = this.scanAhead(ctx.objs, this.dir);
+      // Other rail cars crossing or sharing the line
+      if (ctx.consists) {
+        const others = [];
+        for (const o of ctx.consists) if (o !== this && !!o.K.under === !!this.K.under) for (const c of o.cars) others.push({ x: c.x, z: c.z, r: o.K.hw + o.K.L * 0.3 });
+        ahead = Math.min(ahead, this.scanAhead(others, this.dir));
+      }
       if (ahead < K.look) {
         if (this.kind === 'tram') want = Math.min(want, Math.max(0, (ahead - 3) * 0.7));
         else want = Math.min(want, Math.max(0, ahead - 6) * 0.5);
         if (this.hornT <= 0 && ctx.near(this.pos) < 90) {
-          this.kind === 'tram' ? ctx.audio.tramBell(ctx.near(this.pos)) : ctx.audio.trainHorn(ctx.near(this.pos));
+          this.signal(ctx);
           this.hornT = 3.5;
         }
         if (Math.abs(this.v) < 0.3) this.blockedT += dt;
@@ -522,31 +560,47 @@ export class Rail {
     const M = railMats();
     const statics = [];
 
-    /* ---- Tram line: single track down the middle of the central avenue ---- */
-    const tx = lineAt(N / 2);
+    /* ---- Tram lines: single tracks down the middle of three avenues ---- */
     const tEnd = HALF - 10;
-    this.tramTrack = new Track([[tx, -tEnd], [tx, tEnd]], 1);
-    const tramRails = alongTrack(this.tramTrack, 8, (len) => [box(0.09, 0.025, len, 0.72, 0.012, 0), box(0.09, 0.025, len, -0.72, 0.012, 0)]);
-    const tramGroove = alongTrack(this.tramTrack, 8, (len) => [box(0.035, 0.03, len, 0.77, 0.013, 0), box(0.035, 0.03, len, -0.77, 0.013, 0)]);
-    statics.push(new THREE.Mesh(merge(tramRails), M.steel), new THREE.Mesh(merge(tramGroove), M.dark));
-    // Overhead wire: poles on both kerbs, span wires, contact wire
     const wire = [];
-    for (let k = 0; k < N; k++) {
-      for (const f of [18.5, 55.5]) {
-        const z = lineAt(k) + f;
-        if (Math.abs(z) > tEnd) continue;
-        for (const sx of [1, -1]) {
-          wire.push(new THREE.CylinderGeometry(0.09, 0.13, 7.2, 8).translate(tx + sx * 7.7, 0.18 + 3.6, z));
-          this.world.addCircle(tx + sx * 7.7, z, 0.16);
+    const rails = [];
+    const grooves = [];
+    this.trams = [];
+    this.tramTracks = [];
+    const tramLine = (alongZ, c, color) => {
+      const track = new Track(alongZ ? [[c, -tEnd], [c, tEnd]] : [[-tEnd, c], [tEnd, c]], 1);
+      rails.push(...alongTrack(track, 8, (len) => [box(0.09, 0.025, len, 0.72, 0.012, 0), box(0.09, 0.025, len, -0.72, 0.012, 0)]));
+      grooves.push(...alongTrack(track, 8, (len) => [box(0.035, 0.03, len, 0.77, 0.013, 0), box(0.035, 0.03, len, -0.77, 0.013, 0)]));
+      // Overhead wire: poles on both kerbs mid-block, span wires, contact wire
+      for (let k = 0; k < N; k++) {
+        for (const f of [18.5, 55.5]) {
+          const t = lineAt(k) + f;
+          if (Math.abs(t) > tEnd) continue;
+          for (const sx of [1, -1]) {
+            const px = alongZ ? c + sx * 7.7 : t;
+            const pz = alongZ ? t : c + sx * 7.7;
+            wire.push(new THREE.CylinderGeometry(0.09, 0.13, 7.2, 8).translate(px, 0.18 + 3.6, pz));
+            this.world.addCircle(px, pz, 0.16);
+          }
+          const x = alongZ ? c : t;
+          const z = alongZ ? t : c;
+          wire.push(box(alongZ ? 15.4 : 0.03, 0.03, alongZ ? 0.03 : 15.4, x, 6.75, z), rod([x, 6.75, z], [x, 6.02, z], 0.012, 4));
         }
-        wire.push(box(15.4, 0.03, 0.03, tx, 6.75, z), rod([tx, 6.75, z], [tx, 6.02, z], 0.012, 4));
       }
-    }
-    wire.push(...alongTrack(this.tramTrack, 20, (len) => [box(0.025, 0.025, len, 0, 6.0, 0)]));
-    statics.push(new THREE.Mesh(merge(wire), M.wire));
-    const tramStops = [];
-    for (const k of [0, 2, 4, 6, 7]) tramStops.push(lineAt(k) + CELL / 2 + tEnd);
-    this.tram = new Consist(scene, this.tramTrack, 'tram', tramStops, fx);
+      wire.push(...alongTrack(track, 20, (len) => [box(0.025, 0.025, len, 0, 6.0, 0)]));
+      // A stop every other block
+      const stops = [];
+      for (let k = 0; k < N; k += 2) stops.push(lineAt(k) + CELL / 2 + tEnd);
+      const tram = new Consist(scene, track, 'tram', stops, fx, color);
+      this.trams.push(tram);
+      this.tramTracks.push({ track, color });
+      return track;
+    };
+    this.tramTrack = tramLine(true, lineAt(N / 2), 0xd8336b);
+    tramLine(false, lineAt(3), 0x1f9e8f);
+    tramLine(false, lineAt(N - 3), 0xff8a2a);
+    this.tram = this.trams[0];
+    statics.push(new THREE.Mesh(merge(rails), M.steel), new THREE.Mesh(merge(grooves), M.dark), new THREE.Mesh(merge(wire), M.wire));
 
     /* ---- Commuter line: U-shape round the west, north and south edges ---- */
     const R = HALF + 18;
@@ -555,8 +609,8 @@ export class Rail {
     const tr = this.trainTrack;
     const ballast = alongTrack(tr, 3, (len) => [box(3.4, 0.18, len + 0.05, 0, 0.03, 0)]);
     const sleepers = alongTrack(tr, 0.65, () => [box(2.5, 0.1, 0.24, 0, 0.15, 0)]);
-    const rails = alongTrack(tr, 3, (len) => [box(0.075, 0.13, len + 0.02, 0.7175, 0.25, 0), box(0.075, 0.13, len + 0.02, -0.7175, 0.25, 0)]);
-    statics.push(new THREE.Mesh(merge(ballast), M.ballast), new THREE.Mesh(merge(sleepers), M.sleeper), new THREE.Mesh(merge(rails), M.steel));
+    const trainRails = alongTrack(tr, 3, (len) => [box(0.075, 0.13, len + 0.02, 0.7175, 0.25, 0), box(0.075, 0.13, len + 0.02, -0.7175, 0.25, 0)]);
+    statics.push(new THREE.Mesh(merge(ballast), M.ballast), new THREE.Mesh(merge(sleepers), M.sleeper), new THREE.Mesh(merge(trainRails), M.steel));
     // Buffer stops
     for (const s of [0, tr.len]) {
       const p = tr.at(s, {});
@@ -617,7 +671,7 @@ export class Rail {
     statics.push(new THREE.Mesh(merge(plat), M.concrete), new THREE.Mesh(merge(edge), M.yellow), new THREE.Mesh(merge(shelter), M.dark));
     this.stations = stations;
     this.train = new Consist(scene, tr, 'train', trainStops, fx);
-    this.consists = [this.tram, this.train];
+    this.consists = [...this.trams, this.train];
 
     for (const m of statics) {
       m.receiveShadow = true;
@@ -635,6 +689,7 @@ export class Rail {
   obstacles() {
     let i = 0;
     for (const cs of this.consists) {
+      if (cs.K.under) continue;
       for (const c of cs.cars) {
         const o = this.obstacleList[i] || (this.obstacleList[i] = { pos: { x: 0, z: 0 }, def: { hl: 0 } });
         o.pos.x = c.x;
@@ -663,13 +718,16 @@ export class Rail {
     // Things the AI driver brakes for
     const objs = this.objs;
     objs.length = 0;
-    if (player.mode === 'foot') objs.push({ x: player.pos.x, z: player.pos.z, r: 0.6 });
+    const under = player.mode === 'foot' && player.pos.y < -2.5;
+    if (player.mode === 'foot' && !under) objs.push({ x: player.pos.x, z: player.pos.z, r: 0.6 });
     for (const v of vehicles) if (!v.rail) objs.push({ x: v.pos.x, z: v.pos.z, r: v.def.hw + 0.3 });
     for (const c of traffic.cars) objs.push({ x: c.x, z: c.z, r: c.def.hw + 0.3 });
-    const aiCtx = { objs, audio, near };
+    const aiCtx = { objs, audio, near, consists: this.consists };
+    // Underground trains only meet the player (and each other)
+    const underCtx = { objs: under ? [{ x: player.pos.x, z: player.pos.z, r: 0.6 }] : [], audio, near: (p) => (player.pos.y < -2.5 ? near(p) : 999), consists: this.consists };
     for (const cs of this.consists) {
       if (cs === player.vehicle && player.mode === 'driving') continue;
-      cs.update(dt, null, night, aiCtx);
+      cs.update(dt, null, night, cs.K.under ? underCtx : aiCtx);
     }
     // Collisions: rail cars are effectively immovable
     const caps = this.caps;
@@ -687,7 +745,7 @@ export class Rail {
         const dz = player.pos.z - q.z;
         const d = Math.hypot(dx, dz);
         const rr = c.r + 0.35;
-        if (d < rr && d > 1e-4 && player.pos.y < cs.K.y + cs.K.roof) {
+        if (d < rr && d > 1e-4 && player.pos.y < cs.K.y + cs.K.roof && player.pos.y > cs.K.y - 2) {
           player.pos.x += (dx / d) * (rr - d);
           player.pos.z += (dz / d) * (rr - d);
           if (moving) {
@@ -696,6 +754,7 @@ export class Rail {
           }
         }
       }
+      if (cs.K.under) continue;
       // Pedestrians
       for (const n of peds.list) {
         if (n.state === 'dead' && !moving) continue;

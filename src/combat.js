@@ -146,8 +146,9 @@ class Tracers {
     for (let k = this.list.length - 1; k >= 0; k--) {
       const tr = this.list[k];
       tr.t += dt;
+      // The streak flies down the path; it's gone once its tail passes the hit point
       const head = Math.min(tr.len, tr.t * TRACER_SPEED);
-      const tail = Math.max(0, head - 9);
+      const tail = Math.max(0, tr.t * TRACER_SPEED - 9);
       if (tail >= tr.len - 0.01) {
         this.list.splice(k, 1);
         continue;
@@ -203,8 +204,14 @@ export class Combat {
    */
   raycast(o, d, maxT, opts = {}) {
     const minT = opts.minT || 0;
-    let best = { t: maxT, type: null };
     const g = this.game;
+    // Underground: tunnel walls, floor and ceiling bound the shot
+    const metro = o.y < -2.5 ? this.world.under : null;
+    if (metro) {
+      const c = metro.ceilingAt(o.x, o.z);
+      if (d.y > 1e-4) maxT = Math.min(maxT, (c - o.y) / d.y);
+    }
+    let best = { t: maxT, type: null };
     // People
     if (!opts.skipPeds) {
       for (const n of g.peds.list) {
@@ -240,20 +247,22 @@ export class Combat {
       const h = rayBox(o, d, b);
       if (h && h.t >= minT && h.t < best.t) best = { t: h.t, type: b.vehicle ? 'vehicle' : b.traffic ? 'traffic' : 'rail', target: b.vehicle || b.traffic || b.rail, nx: h.nx, ny: h.ny, nz: h.nz };
     }
-    // Buildings, poles and palm trunks
+    // Buildings, poles and palm trunks (or tunnel walls)
     const ex = o.x + d.x * best.t;
     const ez = o.z + d.z * best.t;
-    const w = this.world.raycastHit(o.x, o.z, ex, ez);
+    const w = (metro || this.world).raycastHit(o.x, o.z, ex, ez);
     if (w) {
       const t = w.t * best.t;
       const y = o.y + d.y * t;
-      if (t >= minT && y > -0.5 && y < 60) best = { t, type: 'world', nx: w.nx, ny: 0, nz: w.nz };
+      if (t >= minT && (metro || (y > -0.5 && y < 60))) best = { t, type: 'world', nx: w.nx, ny: 0, nz: w.nz };
     }
+    // Hitting the tunnel ceiling
+    if (metro && !best.type && d.y > 1e-4) best = { t: best.t, type: 'world', nx: 0, ny: -1, nz: 0 };
     // Ground
     if (d.y < -1e-4) {
-      let t = (o.y - 0.1) / -d.y;
+      let t = (o.y - (metro ? o.y - 1.5 : 0.1)) / -d.y;
       if (t < best.t) {
-        const gy = this.world.height(o.x + d.x * t, o.z + d.z * t);
+        const gy = this.world.groundAt(o.x + d.x * t, o.z + d.z * t, o.y);
         t = (o.y - gy) / -d.y;
         if (t >= minT && t < best.t) best = { t, type: 'ground', nx: 0, ny: 1, nz: 0 };
       }

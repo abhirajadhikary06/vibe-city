@@ -110,7 +110,7 @@ export class Peds {
   respawn(n, focus, minD = 50, maxD = 150) {
     let p = null;
     for (let tries = 0; tries < 30 && !p; tries++) {
-      if (Math.random() < 0.18 && focus.x > 150) {
+      if (Math.random() < 0.18 && focus.x > COAST_X - 150) {
         p = beachPath();
         break;
       }
@@ -340,7 +340,7 @@ export class Peds {
     const d = Math.hypot(dx, dz);
     n.aggro -= dt;
     // Give up when the player is gone, down, or out of reach
-    if (pl.dead || n.aggro <= 0 || d > (n.state === 'shoot' ? 70 : 35) || (n.state === 'fight' && pl.mode !== 'foot')) {
+    if (pl.dead || pl.underground || n.aggro <= 0 || d > (n.state === 'shoot' ? 70 : 35) || (n.state === 'fight' && pl.mode !== 'foot')) {
       n.state = 'walk';
       n.timer = 5;
       n.ch.hold = null;

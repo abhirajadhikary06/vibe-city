@@ -1,6 +1,6 @@
 # Vibe City
 
-An open-world, 80s neon-coast game that runs entirely in the browser. Walk the streets, get into anything with wheels (cars, motorbikes, trucks, buses, the tram and the train), fight or shoot it out with the locals or dance with them instead, and drive along the beach from golden hour to neon night.
+An open-world, 80s neon-coast game that runs entirely in the browser. Walk the streets, get into anything that moves (cars, motorbikes, trucks, buses, trams, the train, the underground metro and boats), fight or shoot it out with the locals or dance with them instead, and drive along the beach from golden hour to neon night.
 
 No backend, no server and no downloaded assets. Every building, car, person, texture and sound is generated in code when the game loads.
 
@@ -34,21 +34,24 @@ The `dist/` folder is plain static files, so you can host it on any static host 
 | **W A S D** / arrows | Move (relative to the camera) | Accelerate, brake/reverse, steer |
 | **Mouse** | Look around (click the screen to lock the mouse) | Look around (recentres automatically) |
 | **Shift** | Sprint | Nitro boost |
+| **X** | Toggle walk / jog | — |
 | **Space** | Jump | Handbrake (drift) |
 | **F** | Enter the nearest vehicle (you'll pull out a traffic car's driver; trams and trains must be stopped) | Exit (bail out and roll if you're going fast) |
 | **E** | Talk to a nearby person (with fists or bat in hand) | — |
 | **1–7** / **mouse wheel** | Fists, Baseball Bat, Pistol, SMG, Shotgun, Assault Rifle, Sniper Rifle | — |
 | **Right click** (hold) | Aim (sniper: scope). With fists: raise your guard | — |
 | **Left click** / **J** | Fire, or punch / kick (a 4-hit combo) / swing the bat | — |
-| Hold **Tab** | Gestures: Wave, Dance, Point, Thumbs Up, Cheer, Shrug, Flex, Laugh | — |
+| Hold **Tab** | Weapon wheel (time slows while it's open) | — |
+| Hold **G** | Gestures: Wave, Dance, Point, Thumbs Up, Cheer, Shrug, Flex, Laugh | — |
 | **H** | — | Horn (startles nearby people) |
 | **R** | Reload | Reset the vehicle onto the nearest road |
 | **C** | Change camera distance | Cycle chase / far / hood camera |
 | **T** (hold) | Fast-forward time | Fast-forward time |
 | **Q** | Toggle the radio | Toggle the radio |
-| **M** | Mute | Mute |
+| **M** | Map: drag, scroll to zoom, click to set a waypoint, right-click to clear | Map |
+| **N** | Mute | Mute |
 | **Backspace** | Cancel an active Time Trial | Cancel an active Time Trial |
-| **Esc** | Pause | Pause |
+| **Esc** | Pause (shows the full key guide) | Pause |
 
 Gamepads work too: left stick to steer, triggers for throttle and brake (aim and fire on foot), D-pad left/right to switch weapons, A for handbrake, B or RB for nitro, Y to enter or exit, X to talk, LB for the camera.
 
@@ -57,7 +60,7 @@ Gamepads work too: left stick to steer, triggers for throttle and brake (aim and
 ## Features
 
 ### World
-- A procedural coastal city on an 8×8 grid of blocks:
+- A procedural coastal city on a 12×12 grid of blocks:
   - **Downtown:** glass towers with setback tiers, crown lights and blinking red aviation lights.
   - **Neighbourhoods:** mixed-use blocks with lit shop fronts.
   - **Beachfront:** pastel art-deco buildings with neon trim.
@@ -83,9 +86,19 @@ Gamepads work too: left stick to steer, triggers for throttle and brake (aim and
 - **Anything is driveable:** parked vehicles, vehicles knocked out of traffic, or traffic you hijack.
 
 ### Rail
-- **Tram:** a three-section articulated tram runs down the central avenue on rails set into the road, under overhead wires, stopping every couple of blocks.
+- **Trams:** three tram lines (one north–south avenue, two east–west) with articulated trams on rails set into the road, under overhead wires, stopping every couple of blocks and giving way to each other where the lines cross.
 - **Commuter train:** a three-car train runs on a ballasted line around the west, north and south edges of the city, with five stations (platforms, shelters and name boards).
-- Both run on their own, brake for things on the line, ring the bell or sound the horn, and stop at stations. Walk up to the cab while one is stopped and press **F** to drive it (W/S).
+- **Underground metro:** an east–west line beneath four parks. Each park has a stairway down to a tiled station hall with platform, columns, benches and name boards; tunnels link the stations.
+- All of them run on their own, brake for things on the line, ring the bell or sound the horn, and stop at stations. Walk up to **either** cab while one is stopped and press **F** to drive it: W drives the way you're facing, S brakes and backs up.
+
+### Boats
+- **Jet ski, speedboat, yacht and harbour ferry**, moored along the pier and at the water's edge. They plane, slide, bob on the swell, leave a wake and throw spray, and can catch fire and sink.
+- Board from the pier or the beach. Step off by slowing down next to the pier or beach.
+- A container ship sails up and down the horizon.
+
+### Map and navigation
+- **Full-screen map (M):** pan, zoom, rail and metro lines, stations, cash, ammo and the Time Trial.
+- **Waypoints:** click anywhere to set one. A route along the streets is drawn on the map and the minimap, with the distance shown, and a light beam marks the spot in the world.
 
 ### Combat
 - **Seven weapons:** fists (jab, cross, jab, kick combo), baseball bat, pistol, SMG, shotgun, assault rifle and a scoped sniper rifle. Each has its own damage, fire rate, spread, recoil, magazine and sound.
@@ -141,7 +154,7 @@ Everything is synthesised live with the **Web Audio API**: engine sound tied to 
 - **Shadows:** soft PCF shadows that follow the player.
 - **Post-processing:** bloom, ambient occlusion (Ultra only), and a custom colour grade (chromatic aberration, nitro speed blur, split toning, vignette, film grain), then SMAA.
 - **Custom GLSL shaders:** procedural clouds, fake volumetric light cones and GPU particles.
-- **Characters:** one skinned mesh per person, procedurally rigged, with smooth two-bone weights at the joints and procedural animation (walk and run cycles, eight gestures, sitting, riding, falling, punch/kick/bat strikes, and pistol and rifle aiming poses).
+- **Characters:** one skinned mesh per person, procedurally rigged, with smooth two-bone weights at the joints and procedural animation: a gait cycle with heel strike, push-off and a running flight phase, body lean into turns, idle weight shifts, eight gestures, sitting, riding, falling, punch/kick/bat strikes, and pistol and rifle aiming poses.
 - **Weapons and vehicles:** every gun, vehicle, tram and train is modelled in code from primitives, extrusions and rounded boxes.
 
 ### Performance
@@ -180,6 +193,9 @@ src/
   car.js            Car models, materials, arcade physics, damage, level of detail
   fleet.js          Pickup, box truck, school bus, city bus and motorbike models
   rail.js           Tram and train lines, stations, rolling stock and rail AI
+  metro.js          Underground stations, stairways, tunnels and the metro line
+  boats.js          Boat models, water physics, wake, and the offshore freighter
+  mapview.js        Full-screen map, waypoints and street route-finding
   traffic.js        AI traffic on the road graph, hijack/crash hand-off
   weapons.js        Weapon stats, gun models and the player's arsenal
   combat.js         Bullets, tracers, decals, explosions and area damage

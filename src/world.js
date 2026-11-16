@@ -4,18 +4,29 @@ import * as T from './textures.js';
 import { merge, colorBox, colorCyl, clamp, lerp, smoothstep } from './utils.js';
 
 /* City layout: an N x N grid of blocks with roads between them, ocean to the east. */
-export const N = 8;
+export const N = 12;
 export const BLOCK = 60;
 export const ROAD = 14;
 export const CELL = BLOCK + ROAD;
-export const HALF = (N * CELL) / 2; // 296
+export const HALF = (N * CELL) / 2; // 444
 export const LANE = 3.5;
-export const COAST_X = HALF + ROAD / 2; // 303
-export const SHORE_X = 326;
+export const COAST_X = HALF + ROAD / 2; // 451
+export const SHORE_X = COAST_X + 23;
 export const BOUND = HALF + 30;
-export const PIER = { x0: 312, x1: 440, hw: 6.2, deck: 1.2, plat0: 439.5, plat1: 470.5, phw: 15.4 };
+export const PIER = { x0: COAST_X + 9, ramp: COAST_X + 27, x1: COAST_X + 137, hw: 6.2, deck: 1.2, plat0: COAST_X + 136.5, plat1: COAST_X + 167.5, phw: 15.4 };
+/** Park blocks [i, j] with a metro station underneath. */
+export const METRO_PARKS = [[1, 7], [4, 7], [7, 7], [10, 7]];
 export const lineAt = (k) => -HALF + k * CELL;
-const SIDEWALK_H = 0.18;
+/** Metro: floor level of the tunnels, and the layout of a station under a park block. */
+export const METRO_DEPTH = -10;
+export const PLATFORM_H = 1.05;
+export function metroStation(i, j) {
+  const cx = lineAt(i) + CELL / 2;
+  const cz = lineAt(j) + CELL / 2;
+  // The stair descends from its +x end (street level) to its -x end (platform level)
+  return { cx, cz, tz: cz + 8, stair: { x0: cx - 10, x1: cx + 4, z0: cz + 12.7, z1: cz + 15.3 } };
+}
+export const SIDEWALK_H = 0.18;
 const beachY = (x) => -Math.max(0, x - COAST_X) * 0.031;
 
 /* ---------- Simple value noise for mountains ---------- */
@@ -88,6 +99,17 @@ class Grid {
 }
 
 /* ---------- Geometry helpers ---------- */
+/** Split a rectangle into up to four pieces that leave out `hole`. */
+function around(x0, x1, z0, z1, hole) {
+  if (!hole) return [[x0, x1, z0, z1]];
+  const h = hole;
+  const out = [];
+  if (h.z0 > z0) out.push([x0, x1, z0, h.z0]);
+  if (h.z1 < z1) out.push([x0, x1, h.z1, z1]);
+  if (h.x0 > x0) out.push([x0, h.x0, h.z0, h.z1]);
+  if (h.x1 < x1) out.push([h.x1, x1, h.z0, h.z1]);
+  return out;
+}
 function facadeBox(w, h, d, x, y, z, uOff) {
   const g = new THREE.BoxGeometry(w, h, d);
   const uv = g.attributes.uv;
@@ -208,6 +230,8 @@ export class World {
     this.pickupSpots = [];
     this.blocks = [];
     this.pads = [];
+    this.ramps = [];
+    this.under = null; // underground layer (metro) — see groundAt()
     this.time = { value: 0 };
     this.build();
   }
@@ -358,11 +382,34 @@ export class World {
     return best < 1 ? { t: best, nx, nz } : null;
   }
 
+  /** A stairway into the ground: height runs from hTop at x1 down to hBot at x0. */
+  addRamp(x0, x1, z0, z1, hBot, hTop) {
+    this.ramps.push({ x0, x1, z0, z1, hBot, hTop });
+  }
+
+  /** Ground under a point for something at height y: underground floors only apply below street level. */
+  groundAt(x, z, y) {
+    for (const r of this.ramps) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return lerp(r.hBot, r.hTop, (x - r.x0) / (r.x1 - r.x0));
+    if (y < -2.5 && this.under) {
+      const h = this.under.floorAt(x, z);
+      if (h !== null) return h;
+    }
+    return this.height(x, z);
+  }
+  /** Collisions for something at height y (street colliders above ground, metro walls below). */
+  collideAt(x, z, r, y) {
+    return y < -2.5 && this.under ? this.under.collideCircle(x, z, r) : this.collideCircle(x, z, r);
+  }
+  raycastAt(ax, az, bx, bz, y) {
+    return y < -2.5 && this.under ? this.under.raycast(ax, az, bx, bz) : this.raycast(ax, az, bx, bz);
+  }
+
   height(x, z) {
+    for (const r of this.ramps) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return lerp(r.hBot, r.hTop, (x - r.x0) / (r.x1 - r.x0));
     for (const p of this.pads) if (x > p.x0 && x < p.x1 && z > p.z0 && z < p.z1) return p.h;
     const az = Math.abs(z);
     if (x > PIER.x0 && x < PIER.x1 && az < PIER.hw) {
-      return x < 330 ? lerp(beachY(PIER.x0), PIER.deck, (x - PIER.x0) / (330 - PIER.x0)) : PIER.deck;
+      return x < PIER.ramp ? lerp(beachY(PIER.x0), PIER.deck, (x - PIER.x0) / (PIER.ramp - PIER.x0)) : PIER.deck;
     }
     if (x >= PIER.plat0 && x <= PIER.plat1 && az < PIER.phw) return PIER.deck;
     if (x > COAST_X) return beachY(x);
@@ -476,27 +523,36 @@ export class World {
         const cz = (z0 + z1) / 2;
         const dist = Math.hypot(cx + 40, cz);
         let type;
-        if ((i === 3 && j === 4) || (i === 1 && j === 6)) type = 'park';
+        if ((i === 3 && j === 4) || METRO_PARKS.some(([a, b]) => a === i && b === j)) type = 'park';
         else if (i === N - 1) type = 'beach';
-        else if (dist < 175) type = 'downtown';
+        else if (dist < HALF * 0.55) type = 'downtown';
         else if (rng() < 0.07) type = 'park';
         else type = 'mixed';
         this.blocks.push({ i, j, x0, x1, z0, z1, cx, cz, type });
 
-        const sw = new THREE.BoxGeometry(BLOCK, SIDEWALK_H, BLOCK);
-        scaleUv(sw, BLOCK / 4);
-        sw.translate(cx, SIDEWALK_H / 2, cz);
-        sideGeos.push(sw);
+        // Metro stations cut a stairwell into their park
+        const isMetro = METRO_PARKS.some(([a, b]) => a === i && b === j);
+        const hole = isMetro ? metroStation(i, j).stair : null;
+        for (const [rx0, rx1, rz0, rz1] of around(cx - BLOCK / 2, cx + BLOCK / 2, cz - BLOCK / 2, cz + BLOCK / 2, hole)) {
+          const sw = new THREE.BoxGeometry(rx1 - rx0, SIDEWALK_H, rz1 - rz0);
+          scaleUv(sw, Math.max(rx1 - rx0, rz1 - rz0) / 4);
+          sw.translate((rx0 + rx1) / 2, SIDEWALK_H / 2, (rz0 + rz1) / 2);
+          sideGeos.push(sw);
+        }
 
         if (type === 'park') {
-          const gp = new THREE.PlaneGeometry(BLOCK - 8, BLOCK - 8);
-          gp.rotateX(-Math.PI / 2);
-          scaleUv(gp, 6);
-          gp.translate(cx, SIDEWALK_H + 0.02, cz);
-          grassGeos.push(gp);
+          const gh = BLOCK / 2 - 4;
+          for (const [rx0, rx1, rz0, rz1] of around(cx - gh, cx + gh, cz - gh, cz + gh, hole)) {
+            const gp = new THREE.PlaneGeometry(rx1 - rx0, rz1 - rz0);
+            gp.rotateX(-Math.PI / 2);
+            scaleUv(gp, (6 * Math.max(rx1 - rx0, rz1 - rz0)) / (BLOCK - 8));
+            gp.translate((rx0 + rx1) / 2, SIDEWALK_H + 0.02, (rz0 + rz1) / 2);
+            grassGeos.push(gp);
+          }
           for (let p = 0; p < 12; p++) {
             const px = cx + rng.range(-24, 24);
             const pz = cz + rng.range(-24, 24);
+            if (hole && px > hole.x0 - 3 && px < hole.x1 + 4 && pz > hole.z0 - 3 && pz < hole.z1 + 3) continue;
             palms.push([px, SIDEWALK_H, pz, rng.range(0.8, 1.3), rng() * 6.28]);
             this.addCircle(px, pz, 0.45);
           }
@@ -543,10 +599,10 @@ export class World {
     scene.add(parks);
 
     /* ---- Ground outside the city ---- */
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 3600, 48, 72), new THREE.MeshStandardMaterial({ map: grassTex, color: 0xc8c0a0, roughness: 1 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(3400, 5000, 48, 72), new THREE.MeshStandardMaterial({ map: grassTex, color: 0xc8c0a0, roughness: 1 }));
     ground.geometry.rotateX(-Math.PI / 2);
     scaleUv(ground.geometry, 220);
-    ground.position.set(COAST_X - 1200, -0.08, 0);
+    ground.position.set(COAST_X - 1700, -0.08, 0);
     ground.receiveShadow = true;
     scene.add(ground);
 
@@ -589,8 +645,8 @@ export class World {
     // Lifeguard towers
     const towerCols = ['#ff7eb3', '#5fd3e8', '#ffd166', '#9be37a'];
     for (let t = 0; t < 4; t++) {
-      const z = -230 + t * 150 + (t >= 2 ? 30 : 0);
-      const x = 316;
+      const z = -HALF * 0.78 + t * HALF * 0.5 + (t >= 2 ? 30 : 0);
+      const x = COAST_X + 13;
       const y = beachY(x);
       for (const [lx, lz] of [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]]) colorBox(props, 0.18, 2.6, 0.18, x + lx, y + 1.3, z + lz, '#f5f1e6');
       colorBox(props, 3, 0.15, 3.4, x, y + 2.6, z, '#f5f1e6');
@@ -751,7 +807,7 @@ export class World {
       const x = rng.range(COAST_X + 6, SHORE_X - 4);
       this.pickupSpots.push([x, beachY(x), rng.range(-HALF, HALF)]);
     }
-    this.pickupSpots.push([400, PIER.deck, 0], [455, PIER.deck, 9], [455, PIER.deck, -9]);
+    this.pickupSpots.push([PIER.x0 + 88, PIER.deck, 0], [PIER.plat0 + 15.5, PIER.deck, 9], [PIER.plat0 + 15.5, PIER.deck, -9]);
 
     // Static geometry never moves: skip per-frame matrix recomputation
     for (const o of scene.children) {
@@ -876,31 +932,31 @@ export class World {
     const wood = '#8a6a4a';
     const y = P.deck;
     // ramp
-    const rampLen = 330 - P.x0;
+    const rampLen = P.ramp - P.x0;
     const y0 = beachY(P.x0);
     const ramp = new THREE.BoxGeometry(Math.hypot(rampLen, y - y0) + 0.4, 0.4, P.hw * 2);
     ramp.rotateZ(Math.atan2(y - y0, rampLen));
-    ramp.translate((P.x0 + 330) / 2, (y0 + y) / 2 - 0.2, 0);
+    ramp.translate((P.x0 + P.ramp) / 2, (y0 + y) / 2 - 0.2, 0);
     ramp.deleteAttribute('uv');
     props.push(paintGeo(ramp, wood));
-    colorBox(props, P.x1 - 330 + 1, 0.5, P.hw * 2, (330 + P.x1) / 2, y - 0.25, 0, wood);
+    colorBox(props, P.x1 - P.ramp + 1, 0.5, P.hw * 2, (P.ramp + P.x1) / 2, y - 0.25, 0, wood);
     colorBox(props, P.plat1 - P.plat0, 0.5, P.phw * 2, (P.plat0 + P.plat1) / 2, y - 0.25, 0, wood);
-    for (let x = 330; x < P.plat1; x += 8) {
+    for (let x = P.ramp; x < P.plat1; x += 8) {
       const zs = x < P.plat0 ? [-P.hw + 0.3, P.hw - 0.3] : [-P.phw + 0.4, 0, P.phw - 0.4];
       for (const z of zs) colorCyl(props, 0.3, 0.3, 8, x, y - 4.2, z, '#5b4632', 8);
     }
     // railings
     for (const s of [-1, 1]) {
-      colorBox(props, P.plat0 - 322, 0.12, 0.12, (322 + P.plat0) / 2, y + 1.0, s * (P.hw + 0.05), '#f2efe8');
+      colorBox(props, P.plat0 - (P.x0 + 10), 0.12, 0.12, (P.x0 + 10 + P.plat0) / 2, y + 1.0, s * (P.hw + 0.05), '#f2efe8');
       colorBox(props, P.plat1 - P.plat0, 0.12, 0.12, (P.plat0 + P.plat1) / 2, y + 1.0, s * (P.phw + 0.05), '#f2efe8');
       colorBox(props, 0.12, 0.12, P.phw - P.hw, P.plat0, y + 1.0, s * (P.hw + P.phw) / 2, '#f2efe8');
-      for (let x = 322; x < P.plat1; x += 3) {
+      for (let x = P.x0 + 10; x < P.plat1; x += 3) {
         const z = x < P.plat0 ? P.hw : P.phw;
         colorBox(props, 0.1, 1.0, 0.1, x, y + 0.5, s * (z + 0.05), '#f2efe8');
       }
     }
     colorBox(props, 0.12, 0.12, P.phw * 2, P.plat1, y + 1.0, 0, '#f2efe8');
-    for (let x = 340; x < P.plat0; x += 24) {
+    for (let x = P.x0 + 28; x < P.plat0; x += 24) {
       lights.push([x, y, -P.hw + 0.4, 0]);
       lights.push([x + 12, y, P.hw - 0.4, Math.PI]);
       this.addCircle(x, -P.hw + 0.4, 0.22);
@@ -913,12 +969,12 @@ export class World {
     this.addBox(P.plat0 - 0.5, P.plat1 + 2, P.phw, 2000, false);
     this.addBox(P.plat0 - 0.5, P.plat1 + 2, -2000, -P.phw, false);
     this.addBox(P.plat1, 3000, -2000, 2000, false);
-    this.addBox(P.x0, 330, P.hw + 0.2, P.hw + 0.6, false);
-    this.addBox(P.x0, 330, -P.hw - 0.6, -P.hw - 0.2, false);
+    this.addBox(P.x0, P.ramp, P.hw + 0.2, P.hw + 0.6, false);
+    this.addBox(P.x0, P.ramp, -P.hw - 0.6, -P.hw - 0.2, false);
 
     // Ferris wheel
     const fw = new THREE.Group();
-    const cx = 458;
+    const cx = P.plat0 + 18.5;
     const cy = y + 27;
     fw.position.set(cx, cy, 0);
     const R = 23;
@@ -1005,8 +1061,8 @@ export class World {
   }
 
   buildMountains() {
-    const S = 4000;
-    const g = new THREE.PlaneGeometry(S, S, 180, 180);
+    const S = 4000 * (HALF / 296);
+    const g = new THREE.PlaneGeometry(S, S, 200, 200);
     g.rotateX(-Math.PI / 2);
     const p = g.attributes.position;
     const cols = new Float32Array(p.count * 3);
@@ -1018,7 +1074,8 @@ export class World {
       const x = p.getX(i);
       const z = p.getZ(i);
       const r = Math.hypot(x, z);
-      const m = smoothstep(650, 1150, r) * (1 - smoothstep(150, 650, x));
+      const k = HALF / 296;
+      const m = smoothstep(650 * k, 1150 * k, r) * (1 - smoothstep(150 * k, 650 * k, x));
       let h = -4;
       if (m > 0.001) {
         const n = fbm(x / 300 + 10, z / 300 + 3, 6);

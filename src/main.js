@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { setAniso } from './textures.js';
-import { World, lineAt, LANE, PIER, lightConeMaterial } from './world.js';
+import { World, lineAt, LANE, PIER, N, HALF, SHORE_X, lightConeMaterial } from './world.js';
 import { DayCycle } from './sky.js';
 import { Vehicle, setTrafficLights, collideVehicles, setCarLOD, hooks } from './car.js';
 import { Traffic } from './traffic.js';
@@ -13,7 +13,12 @@ import { AudioEngine } from './audio.js';
 import { Gameplay } from './gameplay.js';
 import { Input } from './input.js';
 import { Rail } from './rail.js';
+import { Metro } from './metro.js';
 import { Combat } from './combat.js';
+import { weaponIcons } from './weapons.js';
+import { Boat, Freighter } from './boats.js';
+import { MapView, findRoute, routeLength } from './mapview.js';
+import * as T from './textures.js';
 import { clamp, damp, dampAngle, lerp } from './utils.js';
 
 /* ---------- Quality presets ---------- */
@@ -49,7 +54,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.2, 7000);
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat;
+let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, freighter, mapView;
 const vehicles = [];
 const audio = new AudioEngine();
 const input = new Input(renderer.domElement);
@@ -100,6 +105,7 @@ const game = {
   },
   onEnterVehicle(v) {
     attachHeadlights(v);
+    if (v.rail) cam.mode = v.kind === 'metro' ? 2 : 0;
     hud.notify(v.label.toUpperCase(), v.rail ? 'W / S to drive along the line' : '', '#38f3ff');
   },
   onExitVehicle() {
@@ -137,7 +143,7 @@ function pruneVehicles() {
     let far = null;
     let fd = 120;
     for (const v of vehicles) {
-      if (v === player.vehicle) continue;
+      if (v === player.vehicle || v.keep) continue;
       const d = Math.hypot(v.pos.x - player.focus.x, v.pos.z - player.focus.z);
       if (d > fd) {
         fd = d;
@@ -170,7 +176,10 @@ function attachHeadlights(v) {
   headlights.removeFromParent();
   if (!v) return;
   // The rig is laid out for a car; shift it to this vehicle's lamps
-  headlights.position.set(0, v.def.headY - 0.75, v.def.headZ - 2.36);
+  // A rail vehicle driven from its rear cab carries the lights on its back end
+  const flip = v.rail && v.cab < 0;
+  headlights.position.set(0, v.def.headY - 0.75, (flip ? -1 : 1) * (v.def.headZ - 2.36));
+  headlights.rotation.y = flip ? Math.PI : 0;
   v.car.root.add(headlights);
 }
 
@@ -185,7 +194,7 @@ const CAR_CAMS = [
 function updateCamera(dt) {
   if (state === 'title') {
     const a = elapsed * 0.04;
-    camera.position.set(Math.cos(a) * 420 + 80, 95 + Math.sin(elapsed * 0.1) * 15, Math.sin(a) * 420);
+    camera.position.set(Math.cos(a) * HALF * 1.4 + 80, 120 + Math.sin(elapsed * 0.1) * 15, Math.sin(a) * HALF * 1.4);
     camera.lookAt(40, 25, 0);
     camera.fov = 55;
     camera.updateProjectionMatrix();
@@ -228,7 +237,8 @@ function updateCamera(dt) {
     const sz = fx * sh;
     let cx = tx - fx * cp * dist + sx;
     let cz = tz - fz * cp * dist + sz;
-    const hit = world.raycast(tx, tz, cx, cz);
+    const py = p.pos.y;
+    const hit = world.raycastAt(tx, tz, cx, cz, py);
     if (hit < 1) {
       const f = Math.max(0.1, hit - 0.05);
       cx = tx + (cx - tx) * f;
@@ -236,12 +246,13 @@ function updateCamera(dt) {
     }
     // keep the lens out of poles, palms and walls
     for (let i = 0; i < 2; i++) {
-      const push = world.collideCircle(cx, cz, 0.45);
+      const push = world.collideAt(cx, cz, 0.45, py);
       if (!push) break;
       cx += push.px;
       cz += push.pz;
     }
-    const cy = Math.max(ty + Math.sin(cam.pitch) * dist, world.height(cx, cz) + 0.3);
+    let cy = Math.max(ty + Math.sin(cam.pitch) * dist, world.groundAt(cx, cz, py) + 0.3);
+    if (p.underground) cy = Math.min(cy, metro.ceilingAt(cx, cz) - 0.35);
     if (!cam.init) cam.pos.set(cx, cy, cz);
     const ck = p.aiming ? 30 : 20;
     cam.pos.set(damp(cam.pos.x, cx, ck, dt), damp(cam.pos.y, cy, ck, dt), damp(cam.pos.z, cz, ck, dt));
@@ -268,8 +279,9 @@ function updateCamera(dt) {
     const fx = Math.sin(v.yaw);
     const fz = Math.cos(v.yaw);
     if (cam.mode === 2) {
-      const eye = v.local(v.def.seatX, v.def.seatZ + 0.2);
-      camera.position.set(eye.x, v.pos.y + m.height + (v.def.seatY + 0.42), eye.z);
+      // Rail: ride up front just past the windscreen; road vehicles: the driver's eyes
+      const eye = v.rail ? v.local(0, v.def.hl + 0.4) : v.local(v.def.seatX, v.def.seatZ + 0.2);
+      camera.position.set(eye.x, v.pos.y + m.height + (v.def.seatY + 0.42) + (v.rail ? 0.3 : 0), eye.z);
       const ly = cam.yaw + cam.look;
       camera.lookAt(camera.position.x + Math.sin(ly) * 20, camera.position.y - 0.4 - cam.lookPitch * 10, camera.position.z + Math.cos(ly) * 20);
     } else {
@@ -278,13 +290,14 @@ function updateCamera(dt) {
       const height = m.height + cam.lookPitch * 6 + v.def.camH;
       let tx = v.pos.x - Math.sin(yaw) * dist;
       let tz = v.pos.z - Math.cos(yaw) * dist;
-      const hit = world.raycast(v.pos.x, v.pos.z, tx, tz);
+      const hit = world.raycastAt(v.pos.x, v.pos.z, tx, tz, v.pos.y);
       if (hit < 1) {
         const f = Math.max(0.2, hit - 0.08);
         tx = v.pos.x + (tx - v.pos.x) * f;
         tz = v.pos.z + (tz - v.pos.z) * f;
       }
-      const ty = Math.max(v.pos.y + height, world.height(tx, tz) + 0.8);
+      let ty = Math.max(v.pos.y + height, world.groundAt(tx, tz, v.pos.y) + 0.8);
+      if (v.pos.y < -2.5) ty = Math.min(ty, metro.ceilingAt(tx, tz) - 0.4);
       cam.pos.set(damp(cam.pos.x, tx, 14, dt), damp(cam.pos.y, ty, 8, dt), damp(cam.pos.z, tz, 14, dt));
       camera.position.copy(cam.pos);
       camera.lookAt(v.pos.x + fx * 2, v.pos.y + m.look, v.pos.z + fz * 2);
@@ -365,6 +378,8 @@ async function boot() {
   await frame();
   world = new World(scene);
   rail = new Rail(scene, world, null);
+  metro = new Metro(scene, world, null);
+  rail.consists.push(metro.train);
   setLoading(0.45, 'Painting the sky');
   await frame();
   day = new DayCycle(scene, renderer);
@@ -373,6 +388,7 @@ async function boot() {
   if (!Number.isNaN(startHour)) day.time = startHour % 24;
   fx = new Effects(scene);
   rail.fx = fx;
+  metro.train.fx = fx;
   for (const c of rail.consists) c.fx = fx;
   hud = new HUD(world);
   setLoading(0.6, 'Fuelling the cars');
@@ -382,16 +398,16 @@ async function boot() {
   traffic.honk = (car) => audio.honk(Math.hypot(car.x - player.focus.x, car.z - player.focus.z));
   // Parked rides around town
   const parked = [
-    ['convertible', 0xff4f9a, lineAt(8) - 5.6, 98, Math.PI],
-    ['coupe', 0x22d3e6, 447, -7, Math.PI / 2],
+    ['convertible', 0xff4f9a, lineAt(N) - 5.6, 98, Math.PI],
+    ['coupe', 0x22d3e6, PIER.plat0 + 7.5, -7, Math.PI / 2],
     ['taxi', 0xffcf2e, lineAt(4) + 5.6, lineAt(4) + 30, 0],
     ['van', 0xf2f2f2, lineAt(2) - 5.6, lineAt(5) + 25, Math.PI],
-    ['convertible', 0x7fffd4, lineAt(8) - 5.6, -150, Math.PI],
+    ['convertible', 0x7fffd4, lineAt(N) - 5.6, -150, Math.PI],
     ['coupe', 0x18181d, lineAt(6) + 5.6, lineAt(2) + 25, 0],
     ['sedan', 0x8b5cf6, lineAt(5) - 5.6, lineAt(6) + 30, Math.PI],
-    ['bike', 0xff3fa4, lineAt(8) - 5.4, 114, Math.PI],
-    ['bike', 0x18181d, lineAt(8) - 5.4, 117, Math.PI],
-    ['schoolbus', 0xf2b705, lineAt(8) - 5.6, 140, Math.PI],
+    ['bike', 0xff3fa4, lineAt(N) - 5.4, 114, Math.PI],
+    ['bike', 0x18181d, lineAt(N) - 5.4, 117, Math.PI],
+    ['schoolbus', 0xf2b705, lineAt(N) - 5.6, 140, Math.PI],
     ['pickup', 0x9c2b23, lineAt(7) + 5.6, lineAt(5) + 20, 0],
     ['truck', 0x1b2440, lineAt(6) - 5.6, lineAt(4) + 30, Math.PI],
     ['bus', 0x1f8a8a, lineAt(3) + 5.6, lineAt(6) + 32, 0],
@@ -400,13 +416,29 @@ async function boot() {
   for (const [type, color, x, z, yaw] of parked) {
     const v = new Vehicle(scene, world, fx, type, color);
     v.place(x, z, yaw);
-    if (x > 400) v.pos.y = PIER.deck;
+    if (x > PIER.ramp) v.pos.y = PIER.deck;
+    v.keep = true;
     vehicles.push(v);
   }
+  // Boats: moored along the pier, and a couple pulled up at the water's edge near the start
+  const boats = [
+    ['speedboat', 0xff3fa4, PIER.x0 + 40, PIER.hw + 2.2, Math.PI / 2],
+    ['jetski', 0x38f3ff, PIER.x0 + 52, PIER.hw + 1.4, Math.PI / 2],
+    ['yacht', 0x1f8a8a, PIER.x0 + 78, PIER.hw + 3.5, Math.PI / 2],
+    ['ferry', 0x24527a, PIER.x0 + 62, -(PIER.hw + 5.6), Math.PI / 2],
+    ['jetski', 0xffd166, SHORE_X + 3.4, 124, Math.PI / 2],
+    ['speedboat', 0x5dff9e, SHORE_X + 4.2, 136, Math.PI / 2],
+  ];
+  for (const [type, color, x, z, yaw] of boats) {
+    const b = new Boat(scene, world, fx, type, color);
+    b.place(x, z, yaw);
+    vehicles.push(b);
+  }
+  freighter = new Freighter(scene);
   setLoading(0.75, 'Waking up the locals');
   await frame();
   player = new Player(scene, world, game);
-  player.spawn(lineAt(8) - 8.5, 106, Math.PI);
+  player.spawn(lineAt(N) - 8.5, 106, Math.PI);
   peds = new Peds(scene, world, hud, audio, preset.peds);
   peds.spawnAll(player.pos);
   gameplay = new Gameplay(scene, world, hud, audio);
@@ -426,7 +458,28 @@ async function boot() {
   renderer.compile(scene, camera);
   setLoading(1, 'Ready');
   hud.ready();
-  input.onWheel = (open, vec) => hud.wheel(open && state === 'play' && player.mode === 'foot', vec);
+  hud.setWeaponIcons(weaponIcons());
+  // Transit lines on the map
+  const trackPts = (t) => t.x.filter((_, i) => i % 8 === 0).map((x, i) => [x, t.z[i * 8]]);
+  hud.drawTransit(
+    [
+      ...rail.tramTracks.map(({ track, color }) => ({ pts: trackPts(track), color: '#' + new THREE.Color(color).getHexString(), width: 3 })),
+      { pts: trackPts(rail.trainTrack), color: '#c8ccd2', width: 4, dash: [10, 6] },
+      { pts: trackPts(metro.track), color: '#8b5cf6', width: 4, dash: [6, 5] },
+    ],
+    [...rail.stations.map(([, x, z]) => ({ x, z, color: '#24c3d6' })), ...metro.stations.map((s) => ({ x: s.stair.x1, z: (s.stair.z0 + s.stair.z1) / 2, color: '#8b5cf6', label: 'M' }))],
+  );
+  mapView = new MapView(hud);
+  mapView.onWaypoint = setWaypoint;
+  input.onWheel = (open, vec, kind) => {
+    const can = state === 'play' && player.mode === 'foot' && !player.dead;
+    if (kind === 'weapon') {
+      const sel = hud.weaponWheel(open && can, vec, player.arsenal);
+      if (!open) hud.closeWeaponWheel();
+      return can ? sel : null;
+    }
+    return hud.wheel(open && can, vec);
+  };
   state = 'title';
   last = performance.now();
   requestAnimationFrame(loop);
@@ -484,6 +537,65 @@ document.addEventListener('pointerlockchange', () => {
   if (!locked && wasLocked && state === 'play') setPaused(true);
   wasLocked = locked;
 });
+/* ---------- Map, waypoint and GPS route ---------- */
+let waypoint = null;
+let route = null;
+let routeT = 0;
+const beacon = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.4, 1.4, 160, 16, 1, true).translate(0, 80, 0),
+  new THREE.MeshBasicMaterial({ map: T.beam(), color: new THREE.Color(3, 0.4, 1.8), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+);
+beacon.visible = false;
+scene.add(beacon);
+function setWaypoint(p) {
+  waypoint = p;
+  route = null;
+  routeT = 0;
+  beacon.visible = !!p;
+  if (p) {
+    beacon.position.set(p.x, world.height(p.x, p.z), p.z);
+    audio.beep(true);
+  }
+}
+function updateRoute(dt) {
+  if (!waypoint) {
+    hud.route = null;
+    hud.waypoint(null);
+    return;
+  }
+  const f = player.focus;
+  if (Math.hypot(f.x - waypoint.x, f.z - waypoint.z) < 12) {
+    hud.notify('ARRIVED', 'Waypoint reached', '#ff3fa4');
+    setWaypoint(null);
+    hud.route = null;
+    hud.waypoint(null);
+    return;
+  }
+  routeT -= dt;
+  if (!route || routeT <= 0) {
+    route = findRoute(f.x, f.z, waypoint.x, waypoint.z);
+    routeT = 0.5;
+  }
+  route[0] = [f.x, f.z];
+  hud.route = route;
+  hud.waypoint(routeLength(route));
+}
+function setMap(open) {
+  if (open && state !== 'play') return;
+  if (!open && state !== 'map') return;
+  state = open ? 'map' : 'play';
+  mapView.show(open, player.focus);
+  if (open) {
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (audio.ctx) audio.ctx.suspend();
+  } else {
+    input.scroll = 0;
+    input.keys.clear();
+    if (audio.ctx) audio.ctx.resume();
+    input.lock();
+  }
+}
+
 function setPaused(p) {
   if (p && state !== 'play') return;
   if (!p && state !== 'pause') return;
@@ -493,9 +605,53 @@ function setPaused(p) {
   if (!p) input.lock();
 }
 
+/* ---------- Aim assist ---------- */
+const _ad = new THREE.Vector3();
+let aimTarget = false;
+/** Light magnetism toward a person near the crosshair, and a red crosshair over one. */
+function aimHelp(dt) {
+  aimTarget = false;
+  const p = player;
+  if (p.mode !== 'foot' || p.dead || player.arsenal.def.kind !== 'gun') return;
+  camera.getWorldDirection(_ad);
+  const o = camera.position;
+  const w = player.arsenal.def;
+  let best = null;
+  let bestA = p.scoped ? 0.012 : 0.05;
+  for (const n of peds.list) {
+    if (n.state === 'dead' || !n.ch.mesh.visible) continue;
+    const tx = n.x - o.x;
+    const ty = n.y + 1.25 - o.y;
+    const tz = n.z - o.z;
+    const d = Math.hypot(tx, ty, tz);
+    if (d < 2 || d > w.range) continue;
+    const a = Math.acos(Math.min(1, (tx * _ad.x + ty * _ad.y + tz * _ad.z) / d));
+    if (a < bestA) {
+      bestA = a;
+      best = { n, tx, ty, tz, d };
+    }
+  }
+  if (!best) return;
+  const hit = combat.raycast(o, _ad, best.d + 2, { minT: 1 });
+  aimTarget = hit.type === 'ped';
+  if (!p.aiming) return;
+  // Ease the view toward the target's chest; hostile people pull harder
+  const hostile = best.n.state === 'shoot' || best.n.state === 'fight';
+  const k = (hostile ? 4 : 2) * (p.scoped ? 0.4 : 1) * dt;
+  const wantYaw = Math.atan2(best.tx, best.tz);
+  const wantPitch = -Math.atan2(best.ty, Math.hypot(best.tx, best.tz));
+  const curYaw = Math.atan2(_ad.x, _ad.z);
+  cam.yaw += Math.atan2(Math.sin(wantYaw - curYaw), Math.cos(wantYaw - curYaw)) * k;
+  cam.pitch += (wantPitch - Math.asin(-_ad.y)) * k;
+}
+
 /* ---------- Main loop ---------- */
 let last = 0;
-const blipsFn = () => gameplay.blips();
+const blipsFn = () => {
+  const b = gameplay.blips();
+  if (waypoint) b.push({ x: waypoint.x, z: waypoint.z, color: '#ff3fa4', r: 9, always: true, label: '★' });
+  return b;
+};
 const movingVehicles = [];
 const obstacles = [];
 const footObstacle = { pos: null, isPed: true };
@@ -507,7 +663,7 @@ function loop() {
   const now = performance.now();
   // Cap at ~60 fps: high-refresh displays would otherwise double CPU/GPU work
   if (now - last < 15.5) return;
-  const dt = Math.min((now - last) / 1000, 1 / 20);
+  let dt = Math.min((now - last) / 1000, 1 / 20);
   last = now;
   frameNo++;
 
@@ -515,17 +671,26 @@ function loop() {
   if ((state === 'play' || state === 'pause') && (input.hit('Escape') || input.hit('KeyP'))) {
     if (!input.locked || state === 'pause') setPaused(state === 'play');
   }
+  if ((state === 'play' && input.hit('KeyM')) || (state === 'map' && (input.hit('KeyM') || input.hit('Escape')))) setMap(state === 'play');
+  if (state === 'map') {
+    if (waypoint && !route) route = findRoute(player.focus.x, player.focus.z, waypoint.x, waypoint.z);
+    mapView.draw(player, gameplay.blips(), waypoint, route);
+    input.endFrame();
+    return;
+  }
   if (state === 'pause') {
     input.endFrame();
     return;
   }
-  elapsed += dt;
   const inp = input.poll();
+  // Time slows while the weapon wheel is open
+  if (state === 'play' && input.wheelOpen && input.wheelKind === 'weapon' && player.mode === 'foot') dt *= 0.25;
+  elapsed += dt;
   game.night = day.night;
 
   if (state === 'play') {
     if (input.hit('KeyC')) cam.mode = (cam.mode + 1) % (player.driving ? 3 : 2);
-    if (input.hit('KeyM')) audio.setMuted(!audio.muted);
+    if (input.hit('KeyN')) audio.setMuted(!audio.muted);
     if (input.hit('KeyQ')) hud.notify(audio.toggleRadio() ? 'RADIO ON' : 'RADIO OFF', 'Vibe City FM', '#b45bff');
     if (input.hit('KeyR') && player.driving && !player.vehicle.rail) resetToRoad(player.vehicle);
     if (input.hit('Backspace') && gameplay.race.state !== 'idle') gameplay.cancelRace('Cancelled');
@@ -534,6 +699,7 @@ function loop() {
     const wasDriving = player.driving;
     game.camYaw = cam.yaw;
     player.update(dt, elapsed, inp, input, cam.yaw);
+    aimHelp(dt);
     if (player.driving && !wasDriving && cam.mode > 2) cam.mode = 0;
     if (!player.driving && cam.mode > 1) cam.mode = 0;
     // Horn scares nearby people
@@ -604,7 +770,7 @@ function loop() {
   }
   peds.update(dt, elapsed, {
     focus,
-    foot: player.mode === 'foot' ? player.pos : null,
+    foot: player.mode === 'foot' && !player.underground ? player.pos : null,
     vehicles: movingVehicles,
     camPos: camera.position,
     frame: frameNo,
@@ -615,9 +781,13 @@ function loop() {
 
   fx.update(dt);
   combat.update(dt);
+  if (state === 'play') updateRoute(dt);
+  beacon.material.opacity = 0.5 + Math.sin(elapsed * 3) * 0.15;
   fx.smokeP.mat.uniforms.uColor.value.setScalar(lerp(0.85, 0.12, day.night));
   day.update(dt, focus, camera.position);
   world.update(dt, elapsed, day.night, day.sunDir);
+  metro.update(day.night);
+  freighter.update(dt, elapsed);
   setTrafficLights(day.night);
   for (const s of spots) s.intensity = day.night * 260;
   beamMat.uniforms.uIntensity.value = day.night * 0.35;
@@ -634,7 +804,9 @@ function loop() {
       mag: clip ? clip.mag : 0,
       reserve: clip ? clip.reserve : 0,
       reloading: ars.reloadT > 0,
-      cross: onFoot && w.kind === 'gun' && !player.scoped && (player.aiming || player.combatT > 0),
+      cross: onFoot && w.kind === 'gun' && !player.scoped,
+      dot: !(player.aiming || player.combatT > 0),
+      target: aimTarget,
       aiming: player.aiming,
       scoped: onFoot && player.scoped,
       spread: (player.aiming ? w.aim : w.spread) || 0,
@@ -673,13 +845,18 @@ function loop() {
 }
 
 function resetToRoad(v) {
+  if (v.boat) {
+    v.place(Math.max(v.pos.x, SHORE_X + 20), v.pos.z, Math.PI / 2);
+    hud.notify('RESET', '', '#ffffff');
+    return;
+  }
   const cell = lineAt(1) - lineAt(0);
-  const kx = clamp(Math.round((v.pos.x - lineAt(0)) / cell), 0, 8);
-  const mz = clamp(Math.round((v.pos.z - lineAt(0)) / cell), 0, 8);
+  const kx = clamp(Math.round((v.pos.x - lineAt(0)) / cell), 0, N);
+  const mz = clamp(Math.round((v.pos.z - lineAt(0)) / cell), 0, N);
   const dx = Math.abs(v.pos.x - lineAt(kx));
   const dz = Math.abs(v.pos.z - lineAt(mz));
-  if (dx < dz) v.place(lineAt(kx) + LANE, clamp(v.pos.z, lineAt(0), lineAt(8)), Math.PI);
-  else v.place(clamp(v.pos.x, lineAt(0), lineAt(8)), lineAt(mz) + LANE, Math.PI / 2);
+  if (dx < dz) v.place(lineAt(kx) + LANE, clamp(v.pos.z, lineAt(0), lineAt(N)), Math.PI);
+  else v.place(clamp(v.pos.x, lineAt(0), lineAt(N)), lineAt(mz) + LANE, Math.PI / 2);
   hud.notify('RESET', '', '#ffffff');
 }
 

@@ -146,8 +146,9 @@ export class Effects {
     this.darkP = new Particles(scene, { max: 500, map: T.smoke(), color: 0x161412, gravity: -1.2, drag: 0.9 });
     this.dustP = new Particles(scene, { max: 200, map: T.smoke(), color: 0x9a8f80, gravity: 2, drag: 3 });
     this.bloodP = new Particles(scene, { max: 220, map: glow, color: 0x6e0505, gravity: 9, drag: 1.5 });
+    this.foamP = new Particles(scene, { max: 900, map: T.smoke(), color: 0xeef4f6, drag: 1.1 });
     this.skidmarks = new Skidmarks(scene);
-    this.systems = [this.smokeP, this.sparkP, this.flameP, this.fireP, this.darkP, this.dustP, this.bloodP];
+    this.systems = [this.smokeP, this.sparkP, this.flameP, this.fireP, this.darkP, this.dustP, this.bloodP, this.foamP];
   }
   setScale(h) {
     for (const p of this.systems) p.mat.uniforms.uScale.value = h * 0.5;
@@ -157,6 +158,10 @@ export class Effects {
     for (let i = 0; i < 3; i++) this.dustP.spawn(x, y, z, nx * 2 + (Math.random() - 0.5) * 1.5, ny * 2 + Math.random(), nz * 2 + (Math.random() - 0.5) * 1.5, 0.5 + Math.random() * 0.4, 0.15, 1.1, 0.55);
     const n = metal ? 10 : 3;
     for (let i = 0; i < n; i++) this.sparkP.spawn(x, y, z, nx * 4 + (Math.random() - 0.5) * 6, ny * 4 + Math.random() * 4, nz * 4 + (Math.random() - 0.5) * 6, 0.15 + Math.random() * 0.25, 0.12, 0.03, 1);
+  }
+  /** White water: wake behind a boat (lies flat) or spray off the bow (thrown up). */
+  foam(x, y, z, vx, vz, size, up = 0) {
+    this.foamP.spawn(x + (Math.random() - 0.5) * 0.6, y, z + (Math.random() - 0.5) * 0.6, vx + (Math.random() - 0.5), up * (0.5 + Math.random()), vz + (Math.random() - 0.5), 1.2 + Math.random() * 1.4, size * 0.5, size * 2.2, up ? 0.5 : 0.65);
   }
   blood(x, y, z, dx, dz, amount = 1) {
     const n = Math.round(8 * amount);

@@ -56,6 +56,14 @@ export class Player {
     this.dryT = 0;
   }
 
+  /** Ground height at a point for the layer the player is on (street or metro). */
+  ground(x, z) {
+    return this.world.groundAt(x, z, this.pos.y);
+  }
+  get underground() {
+    return this.pos.y < -2.5;
+  }
+
   spawn(x, z, yaw) {
     this.pos.set(x, this.world.height(x, z), z);
     this.yaw = yaw;
@@ -111,7 +119,7 @@ export class Player {
     v.locked = false;
     this.game.onExitVehicle(v);
     const door = v.local(v.def.hw + 1.2, v.def.seatZ);
-    this.pos.set(door.x, this.world.height(door.x, door.z), door.z);
+    this.pos.set(door.x, this.ground(door.x, door.z), door.z);
     this.vehicle = null;
     this.ch.mesh.rotation.set(0, this.yaw, 0);
   }
@@ -134,29 +142,33 @@ export class Player {
     let bd = 1.6;
     const px = this.pos.x;
     const pz = this.pos.z;
+    const under = this.underground;
     for (const v of g.vehicles) {
-      if (v.wrecked || v.fuse > 0) continue;
-      const d = edgeDist(px, pz, v.pos.x, v.pos.z, v.yaw, v.def.hl, v.def.hw);
+      if (under || v.wrecked || v.fuse > 0) continue;
+      if (v.boat && !v.canBoard(this.pos)) continue;
+      // Boats sit off the pier edge, so they can be boarded from a little further away
+      const d = edgeDist(px, pz, v.pos.x, v.pos.z, v.yaw, v.def.hl, v.def.hw) - (v.boat ? 1 : 0);
       if (d < bd) {
         bd = d;
         best = { v };
       }
     }
     for (const t of g.traffic.cars) {
+      if (under) break;
       const d = edgeDist(px, pz, t.x, t.z, t.yaw, t.def.hl, t.def.hw);
       if (d < bd) {
         bd = d;
         best = { traffic: t };
       }
     }
-    // Rail: board at the driver's cab while it's (nearly) stopped
+    // Rail: board at either driver's cab while it's (nearly) stopped
     for (const cs of g.rail.consists) {
-      if (cs.speed > 1.5) continue;
-      const cab = cs.local(0, cs.def.seatZ);
-      const d = Math.hypot(cab.x - px, cab.z - pz) - cs.def.hw;
+      if (cs.speed > 1.5 || Math.abs(cs.pos.y - this.pos.y) > 4) continue;
+      const c = cs.cabNear(px, pz);
+      const d = c.d - cs.def.hw;
       if (d < bd + 0.6) {
         bd = d;
-        best = { v: cs };
+        best = { v: cs, cab: c.cab };
       }
     }
     return best;
@@ -171,6 +183,7 @@ export class Player {
       jacked = true;
     }
     if (g.vehicles.some((o) => o !== v && o.driven)) return;
+    if (target.cab) v.setCab(target.cab);
     // Pick the closer door, walk there, then climb in
     const d = v.def;
     const sideL = v.local(d.hw + 0.45, d.seatZ);
@@ -186,18 +199,32 @@ export class Player {
     this.ch.stopEmote();
     this.ch.hold = null;
     this.arsenal.hideAll();
-    this.anim = { t: 0, phase: 'walk', door, jacked, side: dl <= dr ? 1 : -1, from: this.pos.clone() };
+    // Boats: step straight aboard from the pier or the water's edge
+    this.anim = { t: 0, phase: v.boat ? 'in' : 'walk', door, jacked, side: dl <= dr ? 1 : -1, from: this.pos.clone() };
   }
 
   exit() {
     const v = this.vehicle;
+    if (v.boat) {
+      const spot = v.speed < 4 ? v.landingSpot() : null;
+      if (!spot) {
+        this.game.hud.notify('NOWHERE TO STEP OFF', 'Slow down next to the pier or the beach', '#ffd36b');
+        return;
+      }
+      v.setDriven(false);
+      v.locked = false;
+      this.game.onExitVehicle(v);
+      this.mode = 'exiting';
+      this.anim = { t: 0, door: spot, bail: false, startYaw: v.yaw };
+      return;
+    }
     const bail = v.speed > 9;
     v.setDriven(false);
     v.locked = false;
     this.game.onExitVehicle(v);
     const off = v.def.hw + 0.6;
     let door = v.local(off, v.def.seatZ);
-    if (this.world.collideCircle(door.x, door.z, 0.4)) door = v.local(-off, v.def.seatZ);
+    if (this.world.collideAt(door.x, door.z, 0.4, this.pos.y)) door = v.local(-off, v.def.seatZ);
     this.mode = 'exiting';
     this.anim = { t: 0, door, bail, startYaw: v.yaw };
     if (bail) this.game.hud.notify('BAILED OUT!', '', '#ff5f6d');
@@ -271,7 +298,7 @@ export class Player {
         this.pos.z += (dz / d) * sp * dt;
         this.yaw = dampAngle(this.yaw, Math.atan2(dx, dz), 12, dt);
         this.ch.speed = damp(this.ch.speed, 4.5, 10, dt);
-        this.pos.y = this.world.height(this.pos.x, this.pos.z);
+        this.pos.y = this.ground(this.pos.x, this.pos.z);
       }
       this.ch.mesh.position.copy(this.pos);
       this.ch.mesh.rotation.set(0, this.yaw, 0);
@@ -313,12 +340,12 @@ export class Player {
       this.bailVel.multiplyScalar(Math.exp(-2.5 * dt));
       this.pos.x += this.bailVel.x * dt;
       this.pos.z += this.bailVel.y * dt;
-      const hit = this.world.collideCircle(this.pos.x, this.pos.z, 0.4);
+      const hit = this.world.collideAt(this.pos.x, this.pos.z, 0.4, this.pos.y);
       if (hit) {
         this.pos.x += hit.px;
         this.pos.z += hit.pz;
       }
-      this.pos.y = this.world.height(this.pos.x, this.pos.z);
+      this.pos.y = this.ground(this.pos.x, this.pos.z);
       this.ch.mesh.position.copy(this.pos);
       this.ch.mesh.rotation.set(0, this.yaw, 0);
       this.ch.update(dt, T);
@@ -327,7 +354,7 @@ export class Player {
     }
     const k = clamp(a.t / 0.5, 0, 1);
     const seat = v.local(v.def.seatX, v.def.seatZ);
-    const gy = this.world.height(a.door.x, a.door.z);
+    const gy = this.ground(a.door.x, a.door.z);
     this.pos.set(lerp(seat.x, a.door.x, k), lerp(v.pos.y + v.def.seatY, gy, k), lerp(seat.z, a.door.z, k));
     if (k > 0.4) this.ch.mode = 'move';
     this.ch.mesh.position.copy(this.pos);
@@ -355,12 +382,12 @@ export class Player {
       this.knockVel.multiplyScalar(Math.exp(-3 * dt));
       this.pos.x += this.knockVel.x * dt;
       this.pos.z += this.knockVel.y * dt;
-      const hit = this.world.collideCircle(this.pos.x, this.pos.z, 0.4);
+      const hit = this.world.collideAt(this.pos.x, this.pos.z, 0.4, this.pos.y);
       if (hit) {
         this.pos.x += hit.px;
         this.pos.z += hit.pz;
       }
-      this.pos.y = this.world.height(this.pos.x, this.pos.z);
+      this.pos.y = this.ground(this.pos.x, this.pos.z);
       if (this.downT <= 0) ch.mode = 'move';
       ch.mesh.position.copy(this.pos);
       ch.update(dt, T);
@@ -397,12 +424,20 @@ export class Player {
     if (ml > 0.01 && !busy) {
       mx /= ml;
       mz /= ml;
-      target = this.aiming ? 2.6 : strafe ? 3.6 : sprint ? 7.2 : 4.0;
+      target = this.aiming ? 2.2 : strafe ? 3.4 : sprint ? 7.2 : this.walking ? 1.7 : 4.4;
       if (!strafe) this.yaw = dampAngle(this.yaw, Math.atan2(mx, mz), 12, dt);
       if (ch.emote) ch.stopEmote();
       if (g.partyOn) g.endParty();
     }
     if (strafe) this.yaw = dampAngle(this.yaw, camYaw, 20, dt);
+    if (input.hit('KeyX')) {
+      this.walking = !this.walking;
+      g.hud.notify(this.walking ? 'WALKING' : 'JOGGING', 'X to switch', '#ffffff');
+    }
+    // Yaw rate drives the lean into corners
+    const yawRate = Math.atan2(Math.sin(this.yaw - (this.prevYaw ?? this.yaw)), Math.cos(this.yaw - (this.prevYaw ?? this.yaw))) / Math.max(dt, 1e-3);
+    this.prevYaw = this.yaw;
+    ch.turn = damp(ch.turn, clamp(yawRate, -4, 4), 6, dt);
     this.speed = damp(this.speed, target, target > this.speed ? 8 : 12, dt);
     // While strafing the body faces the camera but moves where the keys say
     const mvx = strafe && ml > 0.01 ? mx : Math.sin(this.yaw);
@@ -411,12 +446,13 @@ export class Player {
     this.pos.z += mvz * this.speed * dt;
 
     // Collisions: world, vehicles, traffic
-    const hit = this.world.collideCircle(this.pos.x, this.pos.z, 0.35);
+    const hit = this.world.collideAt(this.pos.x, this.pos.z, 0.35, this.pos.y);
     if (hit) {
       this.pos.x += hit.px;
       this.pos.z += hit.pz;
     }
     for (const v of g.vehicles) {
+      if (this.underground) break;
       if (v.speed > 5 && this.pushFromVehicle(v.pos.x, v.pos.z, v.yaw, v.def, true)) {
         this.knockDown(v.vel.x * 0.8, v.vel.y * 0.8);
         this.hurt(v.speed * 2.2 * Math.sqrt(v.def.mass), v.pos.x, v.pos.z);
@@ -424,6 +460,7 @@ export class Player {
       this.pushFromVehicle(v.pos.x, v.pos.z, v.yaw, v.def);
     }
     for (const c of g.traffic.cars) {
+      if (this.underground) break;
       const hitCar = this.pushFromVehicle(c.x, c.z, c.yaw, c.def);
       if (hitCar && c.speed > 5) {
         this.knockDown(c.vel.x * 0.8, c.vel.y * 0.8);
@@ -432,7 +469,7 @@ export class Player {
     }
 
     // Jump & gravity
-    const ground = this.world.height(this.pos.x, this.pos.z);
+    const ground = this.ground(this.pos.x, this.pos.z);
     if (this.grounded && input.hit('Space') && !busy) {
       this.vy = 5.2;
       this.grounded = false;
@@ -454,7 +491,7 @@ export class Player {
 
     // Interactions
     const nearCar = this.findVehicle();
-    const nearPed = g.peds.nearest(this.pos.x, this.pos.z, 3.2, (n) => n.state !== 'down' && n.state !== 'dead' && n.state !== 'fight' && n.state !== 'shoot');
+    const nearPed = this.underground ? null : g.peds.nearest(this.pos.x, this.pos.z, 3.2, (n) => n.state !== 'down' && n.state !== 'dead' && n.state !== 'fight' && n.state !== 'shoot');
     if (nearCar && !this.aiming) {
       let text;
       if (nearCar.v && nearCar.v.rail) text = `Drive ${nearCar.v.label}`;
@@ -462,7 +499,7 @@ export class Player {
       else text = `Steal ${TYPES[nearCar.traffic.type].label}`;
       this.prompt = { key: 'F', text };
     } else if (nearPed && !gun) {
-      this.prompt = { key: 'E', text: 'Talk', key2: 'TAB', text2: 'Gesture' };
+      this.prompt = { key: 'E', text: 'Talk', key2: 'G', text2: 'Gesture' };
     }
     if (input.hit('KeyF') && nearCar && !this.aiming) {
       this.enter(nearCar);
@@ -499,9 +536,11 @@ export class Player {
       }
     }
 
-    // Gestures (hold Tab)
+    // Radial wheels: Tab picks a weapon, G a gesture
     if (input.wheelPick) {
-      if (!gun) this.gesture(input.wheelPick);
+      const { kind, sel } = input.wheelPick;
+      if (kind === 'weapon' && ars.select(sel)) g.audio.tone(520, 0.05, 'square', 0.04);
+      else if (kind === 'gesture' && !gun) this.gesture(sel);
       input.wheelPick = null;
     }
 
@@ -561,7 +600,7 @@ export class Player {
     const fz = Math.cos(this.yaw);
     const hx = this.pos.x + fx * M.reach * 0.75;
     const hz = this.pos.z + fz * M.reach * 0.75;
-    const n = g.peds.nearest(hx, hz, M.reach * 0.75, (p) => p.state !== 'dead');
+    const n = this.underground ? null : g.peds.nearest(hx, hz, M.reach * 0.75, (p) => p.state !== 'dead');
     if (n) {
       const dmg = w.hold === 'bat' ? w.dmg : M.dmg;
       const killed = g.peds.damage(n, dmg, fx * M.push, fz * M.push, this.pos, 'melee');

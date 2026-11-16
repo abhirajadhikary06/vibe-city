@@ -333,35 +333,79 @@ const knee = (P, side, b) => {
   P['kn' + side][0] = b;
 };
 
-function locomotion(P, T, phase, v) {
-  const w = clamp(v / 1.6, 0, 1);
-  const r = clamp((v - 2.6) / 3, 0, 1);
+/**
+ * Gait cycle. phase runs 0..2π per stride (two steps); the left thigh is fully
+ * forward at π/2. Walking keeps a foot on the ground with a soft knee at heel
+ * strike; running adds a flight phase, a deep swing-leg tuck, pumping arms and
+ * forward lean. turn (rad/s) leans the body into corners.
+ */
+function locomotion(P, T, phase, v, turn = 0) {
+  const w = clamp(v / 1.2, 0, 1); // moving at all
+  const r = clamp((v - 2.4) / 3.2, 0, 1); // walk -> run blend
+  const rs = r * r * (3 - 2 * r);
   const s = Math.sin(phase);
   const c = Math.cos(phase);
-  const ls = lerp(0.42, 0.85, r) * w;
-  leg(P, 'L', s * ls);
-  leg(P, 'R', -s * ls);
-  const kb = lerp(0.55, 1.4, r);
-  knee(P, 'L', w * (0.1 + kb * Math.max(0, c)));
-  knee(P, 'R', w * (0.1 + kb * Math.max(0, -c)));
-  P.ftL[0] = -w * 0.25 * Math.max(0, -s);
-  P.ftR[0] = -w * 0.25 * Math.max(0, s);
-  const as = lerp(0.35, 0.8, r) * w;
-  arm(P, 'L', -s * as, 0.08 + r * 0.05);
-  arm(P, 'R', s * as, 0.08 + r * 0.05);
-  elbow(P, 'L', 0.12 + lerp(0.2, 1.4, r) * w);
-  elbow(P, 'R', 0.12 + lerp(0.2, 1.4, r) * w);
-  P.spine[0] = 0.04 + 0.2 * r * w;
-  P.chest[1] = s * 0.14 * w;
-  P.hips[1] = -s * 0.1 * w;
-  P.head[0] = -0.05 * r;
-  P.hipsY = (-0.02 + 0.045 * Math.abs(c)) * w - 0.05 * r;
-  // idle breathing
+  const hip = lerp(0.36, 0.72, rs) * w;
+  for (const [side, sg] of [['L', 1], ['R', -1]]) {
+    const ss = s * sg; // > 0: this thigh ahead
+    const cs = c * sg; // > 0: this leg swinging forward
+    // Thigh: runners kick the leg further forward than back
+    const th = ss * hip + (ss > 0 ? ss * 0.12 * rs : 0) * w;
+    leg(P, side, th, 0.02);
+    // Knee: small give after heel strike, big fold through the swing
+    const load = Math.max(0, ss) * Math.max(0, -cs) * lerp(0.35, 0.6, rs);
+    const swing = Math.pow(Math.max(0, cs), lerp(1.6, 1.1, rs)) * lerp(1.0, 2.05, rs);
+    const kb = w * (0.06 + load + swing + rs * 0.25);
+    knee(P, side, kb);
+    // Ankle: toes up at heel strike, roll through, push off with the toes, clear in swing
+    const flat = th - kb;
+    const push = Math.max(0, -ss) * Math.max(0, -cs) * lerp(0.35, 0.55, rs);
+    const heel = Math.max(0, ss) * Math.max(0, cs * -1 + 0.4) * 0.12;
+    P['ft' + side][0] = w * (flat * 0.85 + push - heel - (cs > 0 ? 0.12 : 0));
+  }
+  // Arms swing against the legs; elbows fold as the pace picks up
+  const as = lerp(0.3, 0.75, rs) * w;
+  for (const [side, sg] of [['L', -1], ['R', 1]]) {
+    const ss = s * sg;
+    arm(P, side, ss * as + rs * 0.15, 0.07 + rs * 0.06, rs * 0.25);
+    elbow(P, side, lerp(0.18, 1.55, rs) * w + Math.max(0, ss) * lerp(0.25, 0.35, rs) * w + 0.08);
+  }
+  // Torso: forward lean with speed, pelvis twists with the legs, chest counters it
+  P.spine[0] = 0.03 + 0.18 * rs * w;
+  P.chest[0] = 0.04 * rs * w;
+  P.hips[1] = -s * lerp(0.12, 0.16, rs) * w;
+  P.chest[1] = s * lerp(0.16, 0.22, rs) * w;
+  P.hips[2] = c * 0.045 * w * (1 - rs);
+  P.chest[2] = -c * 0.03 * w * (1 - rs);
+  // Lean into turns
+  const lean = clamp(-turn * v * 0.028, -0.3, 0.3);
+  P.hips[2] += lean;
+  P.chest[2] += lean * 0.3;
+  // Head stays level and looks ahead
+  P.head[0] = -(P.spine[0] + P.chest[0]) * 0.75;
+  P.head[1] = -(P.hips[1] + P.chest[1]) * 0.8;
+  P.neck[2] = -lean * 0.4;
+  // Body bob: highest at mid-stance when walking, in flight when running
+  const bob = Math.cos(2 * phase);
+  P.hipsY = w * (lerp(0.022 * bob - 0.018, -0.03 * bob - 0.07, rs));
+  // Idle: breathing, a slow weight shift and the occasional glance around
   const idle = 1 - w;
-  P.chest[0] += Math.sin(T * 1.6) * 0.02 * idle;
-  P.head[1] += Math.sin(T * 0.4) * 0.12 * idle;
-  arm(P, 'L', P.shL[0] * -1, 0.07 + Math.sin(T * 1.6) * 0.01 * idle);
-  arm(P, 'R', P.shR[0] * -1, 0.07 + Math.sin(T * 1.6) * 0.01 * idle);
+  if (idle > 0) {
+    const sway = Math.sin(T * 0.55);
+    P.chest[0] += Math.sin(T * 1.6) * 0.02 * idle;
+    P.hips[2] += sway * 0.035 * idle;
+    P.chest[2] -= sway * 0.025 * idle;
+    leg(P, 'L', P.hipL[0] * -1, 0.02 + Math.max(0, sway) * 0.05 * idle);
+    knee(P, 'R', P.knR[0] + Math.max(0, sway) * 0.12 * idle);
+    knee(P, 'L', P.knL[0] + Math.max(0, -sway) * 0.12 * idle);
+    P.head[1] += (Math.sin(T * 0.37) * 0.25 + Math.sin(T * 0.13) * 0.2) * idle;
+    for (const side of ['L', 'R']) {
+      const b = P['sh' + side];
+      if (Math.abs(b[2]) < 0.09) b[2] = (side === 'L' ? 1 : -1) * (0.07 + Math.sin(T * 1.6) * 0.01 * idle);
+    }
+    elbow(P, 'L', Math.max(P.elL[0] * -1, 0.15 * idle));
+    elbow(P, 'R', Math.max(P.elR[0] * -1, 0.15 * idle));
+  }
 }
 
 /* ---------- Gestures ---------- */
@@ -578,6 +622,7 @@ export class Character {
     this.atkT = -1;
     this.hold = null; // { kind: pistol | rifle | bat, raised, pitch }
     this.steer = 0;
+    this.turn = 0; // yaw rate, for leaning into corners
     this.P = zeroPose({});
     this.hipsY = 0;
   }
@@ -659,8 +704,9 @@ export class Character {
       elbow(P, 'R', 0.5);
       k = 14;
     } else {
-      this.phase += (dt * this.speed * Math.PI * 2) / lerp(1.4, 2.5, clamp((this.speed - 2.6) / 3, 0, 1));
-      locomotion(P, T, this.phase, this.speed);
+      // Stride length grows from ~1.4 m walking to ~2.9 m sprinting
+      this.phase += (dt * this.speed * Math.PI * 2) / lerp(1.4, 2.9, clamp((this.speed - 2.4) / 4.5, 0, 1));
+      locomotion(P, T, this.phase, this.speed, this.turn);
       if (this.emote) {
         const e = EMOTES[this.emote];
         this.emoteT += dt;

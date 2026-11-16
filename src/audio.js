@@ -266,6 +266,11 @@ export class AudioEngine {
       this.tone(3136, 0.3, 'sine', v * 0.4, null, d);
     });
   }
+  metroChime(dist = 0) {
+    if (!this.ctx) return;
+    const v = Math.min(0.1, 2 / Math.max(dist, 6));
+    [[988, 0], [784, 0.32], [659, 0.64]].forEach(([f, d]) => this.tone(f, 0.5, 'sine', v, null, d));
+  }
   hurt() {
     this.tone(220, 0.18, 'sawtooth', 0.06, 110);
   }

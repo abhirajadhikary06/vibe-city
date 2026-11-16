@@ -9,12 +9,14 @@ export class Input {
     this.wheelOpen = false;
     this.wheelVec = { x: 0, y: 0 };
     this.wheelPick = null;
-    this.onWheel = null; // (open, vec) => label | null
+    this.onWheel = null; // (open, vec, kind) => label | null
+    this.wheelKind = null; // 'weapon' (hold Tab) | 'gesture' (hold G)
     this.scroll = 0;
     this.wheelSteps = 0;
 
     addEventListener('keydown', (e) => {
       if (e.code === 'Tab') e.preventDefault();
+      if (e.code === 'KeyG' && this.wheelOpen) e.preventDefault();
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code);
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace'].includes(e.code)) e.preventDefault();
@@ -82,19 +84,24 @@ export class Input {
     s.nitro = k.has('ShiftLeft') || k.has('ShiftRight');
     s.horn = k.has('KeyH');
 
-    // Gesture wheel: hold Tab, move mouse, release to pick
-    const tab = k.has('Tab');
-    if (tab && !this.wheelOpen) {
-      this.wheelOpen = true;
-      this.wheelVec = { x: 0, y: 0 };
-    }
-    if (this.onWheel && this.wheelOpen) {
-      const sel = this.onWheel(tab, this.wheelVec);
-      if (!tab) {
-        this.wheelOpen = false;
-        if (sel) this.wheelPick = sel;
+    // Radial wheels: hold Tab (weapons) or G (gestures), move the mouse, release to pick
+    if (!this.wheelOpen) {
+      const kind = k.has('Tab') ? 'weapon' : k.has('KeyG') ? 'gesture' : null;
+      if (kind) {
+        this.wheelOpen = true;
+        this.wheelKind = kind;
+        this.wheelVec = { x: 0, y: 0 };
       }
-    } else if (!tab) this.wheelOpen = false;
+    }
+    if (this.wheelOpen) {
+      const held = k.has(this.wheelKind === 'weapon' ? 'Tab' : 'KeyG');
+      const sel = this.onWheel ? this.onWheel(held, this.wheelVec, this.wheelKind) : null;
+      if (!held) {
+        this.wheelOpen = false;
+        if (sel) this.wheelPick = { kind: this.wheelKind, sel };
+        this.wheelKind = null;
+      }
+    }
 
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     const gp = pads && [...pads].find((p) => p && p.connected);

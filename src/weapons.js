@@ -191,3 +191,68 @@ export class Arsenal {
     for (const m of Object.values(this.meshes)) m.visible = false;
   }
 }
+
+/* ---------- HUD icons: each model rendered once as a light silhouette ---------- */
+function fistIcon(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e8e8ec';
+  g.strokeStyle = '#2a2a30';
+  g.lineWidth = 3;
+  const x = w / 2 - 44;
+  const y = h / 2 - 34;
+  const rr = (a, b, cw, ch, r) => {
+    g.beginPath();
+    g.roundRect(a, b, cw, ch, r);
+    g.fill();
+    g.stroke();
+  };
+  rr(x + 6, y + 30, 70, 44, 14); // palm
+  for (let i = 0; i < 4; i++) rr(x + 14 + i * 16, y + 8, 17, 30, 8); // knuckles
+  rr(x - 4, y + 34, 30, 20, 9); // thumb
+  rr(x + 22, y + 72, 44, 18, 4); // wrist
+  return c.toDataURL();
+}
+
+export function weaponIcons() {
+  const W = 256;
+  const H = 128;
+  const out = { fists: fistIcon(W, H) };
+  let r;
+  try {
+    r = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+  } catch {
+    return out;
+  }
+  r.setSize(W, H, false);
+  r.setClearColor(0x000000, 0);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.AmbientLight(0xffffff, 1.6), new THREE.DirectionalLight(0xffffff, 2.2).translateY(3).translateX(-2));
+  const mat = new THREE.MeshLambertMaterial({ color: 0xd8dade });
+  for (const id of SLOTS) {
+    const m = buildWeaponMesh(id);
+    if (!m) continue;
+    m.material = mat;
+    m.visible = true;
+    // Side view, barrel pointing right
+    m.rotation.y = id === 'bat' ? Math.PI / 2 : Math.PI / 2;
+    if (id === 'bat') m.rotation.z = 0.5;
+    scene.add(m);
+    const box = new THREE.Box3().setFromObject(m);
+    const size = box.getSize(new THREE.Vector3());
+    const ctr = box.getCenter(new THREE.Vector3());
+    const span = Math.max(size.x / (W / H), size.y) * 0.56;
+    const cam = new THREE.OrthographicCamera(-span * (W / H), span * (W / H), span, -span, 0.01, 10);
+    cam.position.set(ctr.x, ctr.y, ctr.z + 3);
+    cam.lookAt(ctr);
+    r.render(scene, cam);
+    out[id] = r.domElement.toDataURL();
+    scene.remove(m);
+    m.geometry.dispose();
+  }
+  r.dispose();
+  r.forceContextLoss();
+  return out;
+}

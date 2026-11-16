@@ -16,7 +16,7 @@
       <div id="topright">
         <div id="money">$0</div>
         <div id="clock">18:00</div>
-        <div id="weapon"><div class="wname">FISTS</div><div class="wammo"></div></div>
+        <div id="weapon"><img class="wicon" alt="" /><div class="wname">FISTS</div><div class="wammo"></div></div>
       </div>
       <div id="crosshair" class="hidden"><i></i><i></i><i></i><i></i></div>
       <div id="hitmark"></div>
@@ -34,13 +34,15 @@
       <div id="bubbles"></div>
       <div id="prompt" class="hidden"></div>
       <div id="wheel" class="hidden"><div class="wcenter">GESTURES</div></div>
+      <div id="wwheel" class="hidden"><div class="wwcenter"><div class="wwname"></div><div class="wwammo"></div></div></div>
       <div id="minimap-wrap"><canvas id="minimap" width="440" height="440"></canvas></div>
       <div id="health"><div class="fill"></div></div>
+      <div id="wpdist" class="hidden"></div>
       <canvas id="speedo" width="460" height="460"></canvas>
       <div id="hint">
         <span><b>WASD</b> move</span><span><b>MOUSE</b> look</span><span><b>F</b> enter / exit vehicle</span><span><b>E</b> talk</span>
         <span><b>1-7 / WHEEL</b> weapons</span><span><b>RIGHT CLICK</b> aim</span><span><b>CLICK</b> fire / punch</span><span><b>R</b> reload</span>
-        <span><b>TAB</b> gestures</span><span><b>SHIFT</b> sprint / nitro</span><span><b>SPACE</b> jump / handbrake</span>
+        <span><b>TAB</b> weapon wheel</span><span><b>G</b> gestures</span><span><b>SHIFT</b> sprint / nitro</span><span><b>SPACE</b> jump / handbrake</span>
       </div>
     </div>
 
@@ -63,7 +65,7 @@
           <div><b>WASD</b> Walk / Drive</div><div><b>MOUSE</b> Look around (click to lock)</div>
           <div><b>F</b> Enter / exit any vehicle</div><div><b>E</b> Talk to people</div>
           <div><b>1–7</b> / <b>WHEEL</b> Switch weapon</div><div><b>RIGHT CLICK</b> Aim · <b>CLICK</b> Fire / punch</div>
-          <div><b>R</b> Reload · Reset vehicle</div><div>Hold <b>TAB</b> Gestures</div>
+          <div><b>R</b> Reload · Reset vehicle</div><div>Hold <b>TAB</b> Weapon wheel · <b>G</b> Gestures</div>
           <div><b>SHIFT</b> Sprint · Nitro</div><div><b>SPACE</b> Jump · Handbrake</div>
           <div><b>C</b> Camera · <b>H</b> Horn</div><div><b>T</b> Time warp · <b>Q</b> Radio · <b>ESC</b> Pause</div>
         </div>
@@ -71,9 +73,64 @@
       </div>
     </div>
 
+    <div id="bigmap" class="hidden">
+      <canvas></canvas>
+      <div class="mhead">MAP</div>
+      <div class="mhelp"><b>DRAG</b> pan · <b>SCROLL</b> zoom · <b>CLICK</b> set waypoint · <b>RIGHT CLICK</b> clear · <b>M</b> close</div>
+      <div class="minfo"></div>
+      <div class="mzoom"><button class="zin">+</button><button class="zout">−</button></div>
+      <div class="mlegend">
+        <span><i style="background:#5dff9e"></i>Cash</span><span><i style="background:#ffd36b"></i>Ammo</span><span><i style="background:#ff3fa4"></i>Time Trial</span>
+        <span><i class="ln" style="background:#d8336b"></i>Tram</span><span><i class="ln" style="background:#c8ccd2"></i>Train</span><span><i class="ln" style="background:#8b5cf6"></i>Metro</span>
+      </div>
+    </div>
+
     <div id="pause" class="hidden">
       <div class="pause-title">PAUSED</div>
       <div class="pause-sub">Click or press ESC to resume</div>
+      <div class="keys">
+        <section>
+          <h3>On foot</h3>
+          <div><b>W A S D</b>Move (relative to camera)</div>
+          <div><b>SHIFT</b>Sprint</div>
+          <div><b>X</b>Toggle walk / jog</div>
+          <div><b>SPACE</b>Jump</div>
+          <div><b>F</b>Enter / exit any vehicle</div>
+          <div><b>E</b>Talk to someone</div>
+          <div><b>G</b> (hold) Gesture wheel</div>
+        </section>
+        <section>
+          <h3>Combat</h3>
+          <div><b>1 – 7</b>Fists, bat, pistol, SMG, shotgun, rifle, sniper</div>
+          <div><b>TAB</b> (hold) Weapon wheel (slows time)</div>
+          <div><b>WHEEL</b>Next / previous weapon</div>
+          <div><b>RIGHT CLICK</b>Aim · scope · guard</div>
+          <div><b>LEFT CLICK</b> / <b>J</b>Fire · punch / kick combo · swing</div>
+          <div><b>R</b>Reload</div>
+        </section>
+        <section>
+          <h3>Driving</h3>
+          <div><b>W / S</b>Accelerate · brake / reverse</div>
+          <div><b>A / D</b>Steer</div>
+          <div><b>SPACE</b>Handbrake</div>
+          <div><b>SHIFT</b>Nitro (cars &amp; bikes)</div>
+          <div><b>H</b>Horn</div>
+          <div><b>R</b>Reset onto the road</div>
+          <div><b>C</b>Cycle camera</div>
+        </section>
+        <section>
+          <h3>Trams, trains, metro &amp; boats</h3>
+          <div><b>F</b>At either cab of a stopped tram, train or metro</div>
+          <div><b>W / S</b>Drive along the line · brake / back up</div>
+          <div><b>F</b>Boats: board from the pier or beach</div>
+          <div>Step off a boat slowly beside the pier or beach</div>
+          <h3>General</h3>
+          <div><b>M</b>Map &amp; waypoints</div>
+          <div><b>T</b> (hold) Fast-forward time</div>
+          <div><b>Q</b>Radio · <b>N</b> Mute</div>
+          <div><b>ESC</b>Pause</div>
+        </section>
+      </div>
     </div>
 
     <script type="module" src="/src/main.js"></script>

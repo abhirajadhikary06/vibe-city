@@ -2,9 +2,10 @@ import { N, lineAt, ROAD, HALF, COAST_X, SHORE_X, BOUND, PIER } from './world.js
 import * as THREE from 'three';
 import { clamp } from './utils.js';
 import { EMOTE_LIST, EMOTE_LABELS } from './character.js';
+import { SLOTS, WEAPONS } from './weapons.js';
 
 const $ = (id) => document.getElementById(id);
-const MAP_SIZE = 1024; // 1px = 1m, centred on the origin
+const MAP_SIZE = 1400; // 1px = 1m, centred on the origin
 const MAP_HALF = MAP_SIZE / 2;
 
 export class HUD {
@@ -28,6 +29,9 @@ export class HUD {
     this.shownMoney = 0;
     this.targetMoney = 0;
     this.map = this.buildMap(world);
+    this.mapHalf = MAP_HALF;
+    this.route = null;
+    this.waypointEl = $('wpdist');
     this.driftEls = { score: this.el.drift.querySelector('.score'), mult: this.el.drift.querySelector('.mult') };
     this.bubbleRoot = $('bubbles');
     this.bubbles = [];
@@ -50,12 +54,109 @@ export class HUD {
     this.dmgFlash = 0;
   }
 
+  /** Rail lines, the metro and their stations drawn onto the map. */
+  drawTransit(lines, stations) {
+    const g = this.map.getContext('2d');
+    const X = (v) => v + MAP_HALF;
+    for (const { pts, color, width, dash } of lines) {
+      g.save();
+      g.strokeStyle = color;
+      g.lineWidth = width;
+      g.setLineDash(dash || []);
+      g.beginPath();
+      pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), X(z)) : g.moveTo(X(x), X(z))));
+      g.stroke();
+      g.restore();
+    }
+    for (const { x, z, color, label } of stations) {
+      g.beginPath();
+      g.arc(X(x), X(z), 6, 0, Math.PI * 2);
+      g.fillStyle = color;
+      g.fill();
+      g.lineWidth = 2;
+      g.strokeStyle = '#fff';
+      g.stroke();
+      if (label) {
+        g.fillStyle = '#fff';
+        g.font = 'bold 9px Rajdhani';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(label, X(x), X(z) + 0.5);
+      }
+    }
+  }
+  waypoint(dist) {
+    const t = dist == null ? '' : dist > 1000 ? `${(dist / 1000).toFixed(1)} km` : `${Math.round(dist)} m`;
+    if (t !== this._wp) {
+      this.waypointEl.textContent = this._wp = t;
+      this.waypointEl.classList.toggle('hidden', !t);
+    }
+  }
+
+  /* ---------- Weapon wheel ---------- */
+  setWeaponIcons(icons) {
+    this.icons = icons;
+    const w = $('wwheel');
+    this.wwEl = w;
+    this.wwName = w.querySelector('.wwname');
+    this.wwAmmo = w.querySelector('.wwammo');
+    this.wwItems = SLOTS.map((id, i) => {
+      const a = (i / SLOTS.length) * Math.PI * 2 - Math.PI / 2;
+      const el = document.createElement('div');
+      el.className = 'wwitem';
+      el.innerHTML = `<span class="wwk">${i + 1}</span><img src="${icons[id] || ''}" alt="" /><span class="wwa"></span>`;
+      el.style.left = `${50 + Math.cos(a) * 37}%`;
+      el.style.top = `${50 + Math.sin(a) * 37}%`;
+      w.appendChild(el);
+      return { id, a, el, ammo: el.querySelector('.wwa') };
+    });
+  }
+  /** Radial weapon picker. Returns the highlighted weapon id. */
+  weaponWheel(open, vec, arsenal) {
+    if (!this.wwEl) return null;
+    this.wwEl.classList.toggle('hidden', !open);
+    if (!open) return this._wwSel || null;
+    let sel = this._wwOpen ? this._wwSel : arsenal.cur;
+    this._wwOpen = true;
+    if (Math.hypot(vec.x, vec.y) > 30) {
+      const a = Math.atan2(vec.y, vec.x);
+      let best = 9;
+      for (const it of this.wwItems) {
+        const d = Math.abs(Math.atan2(Math.sin(a - it.a), Math.cos(a - it.a)));
+        if (d < best) {
+          best = d;
+          sel = it.id;
+        }
+      }
+    }
+    this._wwSel = sel;
+    for (const it of this.wwItems) {
+      it.el.classList.toggle('sel', it.id === sel);
+      it.el.classList.toggle('cur', it.id === arsenal.cur);
+      const c = arsenal.ammo[it.id];
+      it.ammo.textContent = c ? `${c.mag} / ${c.reserve}` : '∞';
+      it.el.classList.toggle('empty', !!c && c.mag + c.reserve === 0);
+    }
+    const w = WEAPONS[sel];
+    this.wwName.textContent = w.name.toUpperCase();
+    const c = arsenal.ammo[sel];
+    this.wwAmmo.textContent = c ? `${c.mag + c.reserve} rounds` : w.kind === 'melee' ? 'Melee' : '';
+    return sel;
+  }
+  closeWeaponWheel() {
+    this._wwOpen = false;
+    this._wwSel = null;
+    if (this.wwEl) this.wwEl.classList.add('hidden');
+  }
+
   /* ---------- Combat ---------- */
   /** Weapon name + ammo readout, crosshair and scope. state from Player each frame. */
-  combat({ name, mag, reserve, gun, reloading, cross, aiming, scoped, spread, hp, dead }) {
+  combat({ name, mag, reserve, gun, reloading, cross, dot, target, aiming, scoped, spread, hp, dead }) {
     const c = this.cw;
     if (name !== this._wname) {
       c.wname.textContent = this._wname = name;
+      const id = SLOTS.find((k) => WEAPONS[k].name.toUpperCase() === name);
+      if (this.icons && id) c.weapon.querySelector('.wicon').src = this.icons[id];
       c.weapon.classList.remove('flash');
       void c.weapon.offsetWidth;
       c.weapon.classList.add('flash');
@@ -66,6 +167,8 @@ export class HUD {
       c.wammo.classList.toggle('low', gun && !reloading && mag <= 2);
     }
     if (cross !== this._cross) c.cross.classList.toggle('hidden', !(this._cross = cross));
+    if (dot !== this._dot) c.cross.classList.toggle('dot', (this._dot = dot));
+    if (target !== this._target) c.cross.classList.toggle('target', (this._target = target));
     if (cross) {
       const gap = Math.round(aiming ? 3 + spread * 300 : 7 + spread * 500);
       if (gap !== this._gap) c.cross.style.setProperty('--gap', `${(this._gap = gap)}px`);
@@ -316,6 +419,18 @@ export class HUD {
     g.scale(zoom, zoom);
     g.translate(-(p.pos.x + MAP_HALF), -(p.pos.z + MAP_HALF));
     g.drawImage(this.map, 0, 0);
+    // GPS route to the waypoint
+    if (this.route && this.route.length > 1) {
+      g.lineJoin = 'round';
+      g.lineCap = 'round';
+      for (const [w, col] of [[11, 'rgba(0,0,0,0.5)'], [6, '#ff3fa4']]) {
+        g.strokeStyle = col;
+        g.lineWidth = w / zoom;
+        g.beginPath();
+        this.route.forEach(([x, z], i) => (i ? g.lineTo(x + MAP_HALF, z + MAP_HALF) : g.moveTo(x + MAP_HALF, z + MAP_HALF)));
+        g.stroke();
+      }
+    }
     g.restore();
 
     // Blips (clamped to the rim)
