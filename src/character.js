@@ -103,10 +103,11 @@ export function playerMaterial() {
 }
 
 /* ---------- Look randomiser ---------- */
-const SKINS = ['#f1c7a5', '#e0a882', '#c98e6a', '#a86f4c', '#7d4e33', '#5a3524', '#f5d2b8'];
-const SHIRTS = ['#ff6fa8', '#39d0d8', '#ffd166', '#ffffff', '#9be37a', '#b57bff', '#ff8a5b', '#5aa9ff', '#f5f1e6', '#e84a5f', '#2d2d33'];
-const PANTS = ['#f2f0ea', '#d8c7a3', '#5b7fa8', '#2b2f38', '#c9b8e8', '#a8e6cf', '#3d3b39', '#e9dcc0'];
-const HAIR = ['#1f1611', '#3b2618', '#6b4a2b', '#c9a36a', '#e8d6a8', '#2a2a2a', '#8a3b22'];
+// Kolkata crowds: South Asian skin tones, mostly black hair, whites, pastels and kurta colours
+const SKINS = ['#d8ab86', '#c99a74', '#b9875f', '#a8764f', '#9a6948', '#8a5a3c', '#7a4b31', '#c08c64'];
+const SHIRTS = ['#ffffff', '#f5f1e6', '#ffffff', '#cfe3f2', '#e8d9a8', '#f2c14e', '#d9534f', '#2e6da4', '#8e44ad', '#e67e22', '#3c8d5a', '#d4a5a5', '#2d2d33', '#f4e1c1'];
+const PANTS = ['#f2f0ea', '#d8c7a3', '#2b2f38', '#3d4f6b', '#3d3b39', '#e9dcc0', '#1f2a44', '#6b5a48'];
+const HAIR = ['#120d0a', '#1a1310', '#1f1611', '#2a1d14', '#120d0a', '#3b2618', '#8a8a86'];
 
 export function randomLook(rng = Math.random) {
   const pick = (a) => a[Math.floor(rng() * a.length)];
@@ -119,10 +120,10 @@ export function randomLook(rng = Math.random) {
     pants: pick(PANTS),
     shoes: pick(['#1c1c1c', '#f0f0f0', '#7a5230', '#d9c3a1']),
     hair: pick(HAIR),
-    longHair: female ? rng() < 0.8 : rng() < 0.08,
-    skirt: female && rng() < 0.4,
-    shorts: rng() < 0.3,
-    longSleeve: rng() < 0.15,
+    longHair: female ? rng() < 0.92 : rng() < 0.04,
+    skirt: female && rng() < 0.7,
+    shorts: rng() < 0.08,
+    longSleeve: rng() < 0.35,
     eyes: pick(['#3b2a1e', '#2f4f7a', '#3f6b3a', '#5a3a1e']),
     glasses: rng() < 0.35,
     scale: female ? 0.93 + rng() * 0.06 : 0.97 + rng() * 0.08,

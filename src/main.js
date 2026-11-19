@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { setAniso } from './textures.js';
-import { World, lineAt, LANE, PIER, N, HALF, SHORE_X, lightConeMaterial } from './world.js';
+import { World, BOUNDS, inTiles, lightConeMaterial } from './world.js';
 import { DayCycle } from './sky.js';
 import { Vehicle, setTrafficLights, collideVehicles, setCarLOD, hooks } from './car.js';
 import { Traffic } from './traffic.js';
 import { Peds } from './peds.js';
+import { LINES } from './lines.js';
 import { Player } from './player.js';
 import { Effects } from './effects.js';
 import { createPost } from './post.js';
@@ -16,8 +17,12 @@ import { Rail } from './rail.js';
 import { Metro } from './metro.js';
 import { Combat } from './combat.js';
 import { weaponIcons } from './weapons.js';
-import { Boat, Freighter } from './boats.js';
-import { MapView, findRoute, routeLength } from './mapview.js';
+import { Boat, RiverTraffic, buildGhats } from './boats.js';
+import { MapView, routeLength } from './mapview.js';
+import { Station } from './station.js';
+import { Voices } from './voice.js';
+import { Rides } from './ride.js';
+import { inPoly, nearestOnRing } from './geo.js';
 import * as T from './textures.js';
 import { clamp, damp, dampAngle, lerp } from './utils.js';
 
@@ -51,12 +56,37 @@ document.getElementById('app').appendChild(renderer.domElement);
 setAniso(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.2, 7000);
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 6000);
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, freighter, mapView;
+let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, rides;
 const vehicles = [];
 const audio = new AudioEngine();
+const voices = new Voices(audio);
+
+/* ---------- Sound settings (title screen and pause menu) ---------- */
+function refreshSoundButtons() {
+  document.querySelectorAll('.sound button').forEach((b) => {
+    const k = b.dataset.s;
+    const on = k === 'music' ? audio.radioOn : k === 'voices' ? voices.enabled : !audio.muted;
+    b.classList.toggle('on', on);
+    b.textContent = `${k === 'music' ? 'MUSIC' : k === 'voices' ? 'VOICES' : 'ALL SOUND'} ${on ? 'ON' : 'OFF'}`;
+  });
+}
+document.querySelectorAll('.sound button').forEach((b) =>
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const k = b.dataset.s;
+    if (k === 'music') audio.setRadio(!audio.radioOn);
+    else if (k === 'voices') voices.setEnabled(!voices.enabled);
+    else {
+      audio.setMuted(!audio.muted);
+      voices.muted = audio.muted;
+    }
+    refreshSoundButtons();
+  }),
+);
+refreshSoundButtons();
 const input = new Input(renderer.domElement);
 let state = 'loading';
 let elapsed = 0;
@@ -94,16 +124,41 @@ const game = {
   get gameplay() {
     return gameplay;
   },
+  get station() {
+    return station;
+  },
+  get rides() {
+    return rides;
+  },
+  get metro() {
+    return metro;
+  },
+  /** Ask the player for a destination on the map; cb(point | null). */
+  pickDestination(text, cb) {
+    pickCb = cb;
+    mapView.setPick(text);
+    setMap(true);
+  },
+  setWaypointQuiet(p) {
+    setWaypoint(p, true);
+  },
+  clearWaypoint() {
+    setWaypoint(null, true);
+  },
   adoptTrafficCar(car, vel, angVel, released = false) {
     if (!released) traffic.release(car, player.focus);
     const v = new Vehicle(scene, world, fx, car.type, car.color, car.mesh);
-    v.place(car.x, car.z, car.yaw, vel);
+    v.place(car.x, car.z, car.yaw, vel, car.y);
     v.angVel = angVel || 0;
     vehicles.push(v);
     pruneVehicles();
     return v;
   },
-  onEnterVehicle(v) {
+  onEnterVehicle(v, passenger = false) {
+    if (passenger) {
+      cam.mode = 0;
+      return;
+    }
     attachHeadlights(v);
     if (v.rail) cam.mode = v.kind === 'metro' ? 2 : 0;
     hud.notify(v.label.toUpperCase(), v.rail ? 'W / S to drive along the line' : '', '#38f3ff');
@@ -123,14 +178,13 @@ const game = {
     cam.mode = 0;
   },
   respawnPlayer() {
-    // Wake up on the sidewalk of the nearest block, a little poorer
+    // Wake up on the nearest pavement, a little poorer
     const p = player.pos;
-    let best = world.blocks[0];
-    for (const b of world.blocks) if (b.type !== 'beach' && Math.hypot(b.cx - p.x, b.cz - p.z) < Math.hypot(best.cx - p.x, best.cz - p.z)) best = b;
-    player.revive(best.x0 + 2.4, best.z0 + 2.4, Math.PI / 4);
+    const w = world.nearestSidewalk(p.x, p.z);
+    player.revive(w.x, w.z, w.yaw);
     const fee = Math.min(gameplay.money, 100 + Math.floor(gameplay.money * 0.05));
     if (fee > 0) gameplay.addMoney(-fee);
-    hud.notify('BACK ON YOUR FEET', fee > 0 ? `Medical bill -$${fee}` : 'Take it easy', '#5dff9e');
+    hud.notify('BACK ON YOUR FEET', fee > 0 ? `Hospital bill -₹${fee}` : 'Take it easy', '#5dff9e');
   },
   endParty() {
     game.partyOn = false;
@@ -184,6 +238,7 @@ function attachHeadlights(v) {
 }
 
 /* ---------- Camera rig ---------- */
+const titleFocus = new THREE.Vector3();
 const cam = { mode: 0, yaw: Math.PI, pitch: 0.18, look: 0, lookPitch: 0, lookTimer: 0, shake: 0, fov: 62, pos: new THREE.Vector3(), init: false };
 const CAR_CAMS = [
   { dist: 7.4, height: 2.5, look: 1.2 },
@@ -193,9 +248,11 @@ const CAR_CAMS = [
 
 function updateCamera(dt) {
   if (state === 'title') {
-    const a = elapsed * 0.04;
-    camera.position.set(Math.cos(a) * HALF * 1.4 + 80, 120 + Math.sin(elapsed * 0.1) * 15, Math.sin(a) * HALF * 1.4);
-    camera.lookAt(40, 25, 0);
+    // Circle Howrah Bridge, with the city behind it
+    const a = elapsed * 0.03;
+    const c = titleFocus;
+    camera.position.set(c.x + Math.cos(a) * 520, 140 + Math.sin(elapsed * 0.1) * 20, c.z + Math.sin(a) * 520);
+    camera.lookAt(c.x, 30, c.z);
     camera.fov = 55;
     camera.updateProjectionMatrix();
     return;
@@ -351,19 +408,33 @@ document.querySelectorAll('#quality button').forEach((b) => b.addEventListener('
 
 let perfT = 0;
 let perfFrames = 0;
+let perfLow = 0;
+let perfHigh = 0;
+let perfHold = 0;
+/**
+ * Adaptive resolution. Changing it reallocates every render target, which shows as a
+ * flash, so it only moves after a sustained slowdown (or a long smooth spell) and
+ * never more than once every ten seconds.
+ */
 function adaptQuality(dt) {
   perfT += dt;
   perfFrames++;
+  perfHold -= dt;
   if (perfT < 2) return;
   const fps = perfFrames / perfT;
   perfT = 0;
   perfFrames = 0;
+  perfLow = fps < 30 ? perfLow + 1 : 0;
+  perfHigh = fps > 58 ? perfHigh + 1 : 0;
+  if (perfHold > 0) return;
   const cap = Math.min(window.devicePixelRatio, preset.pr);
   let next = pixelRatio;
-  if (fps < 40) next = Math.max(preset.minPr, pixelRatio - 0.15);
-  else if (fps > 57) next = Math.min(cap, pixelRatio + 0.1);
+  if (perfLow >= 3) next = Math.max(preset.minPr, pixelRatio - 0.25);
+  else if (perfHigh >= 5) next = Math.min(cap, pixelRatio + 0.25);
   if (Math.abs(next - pixelRatio) > 0.01) {
     pixelRatio = next;
+    perfLow = perfHigh = 0;
+    perfHold = 10;
     resize();
   }
 }
@@ -379,7 +450,12 @@ async function boot() {
   world = new World(scene);
   rail = new Rail(scene, world, null);
   metro = new Metro(scene, world, null);
-  rail.consists.push(metro.train);
+  rail.consists.push(...metro.trains);
+  const bridge = world.decks.find((d) => d.river);
+  if (bridge) {
+    const q = bridge.poly.at(bridge.poly.len / 2, {});
+    titleFocus.set(q.x, 0, q.z);
+  }
   setLoading(0.45, 'Painting the sky');
   await frame();
   day = new DayCycle(scene, renderer);
@@ -388,57 +464,80 @@ async function boot() {
   if (!Number.isNaN(startHour)) day.time = startHour % 24;
   fx = new Effects(scene);
   rail.fx = fx;
-  metro.train.fx = fx;
   for (const c of rail.consists) c.fx = fx;
   hud = new HUD(world);
-  setLoading(0.6, 'Fuelling the cars');
+  hud.voice = voices;
+  station = new Station(scene, world, hud, rail);
+  station.game = game;
+  rides = new Rides(game, scene, world);
+  const sp = station.spawn || [(BOUNDS.x0 + BOUNDS.x1) / 2, (BOUNDS.z0 + BOUNDS.z1) / 2];
+  world.spawn = { x: sp[0], z: sp[1] };
+  setLoading(0.6, 'Fuelling the taxis');
   await frame();
   traffic = new Traffic(scene, world, fx, preset.traffic);
   traffic.onRelease = (car, vel, ang) => game.adoptTrafficCar(car, vel, ang, true);
   traffic.honk = (car) => audio.honk(Math.hypot(car.x - player.focus.x, car.z - player.focus.z));
-  // Parked rides around town
-  const parked = [
-    ['convertible', 0xff4f9a, lineAt(N) - 5.6, 98, Math.PI],
-    ['coupe', 0x22d3e6, PIER.plat0 + 7.5, -7, Math.PI / 2],
-    ['taxi', 0xffcf2e, lineAt(4) + 5.6, lineAt(4) + 30, 0],
-    ['van', 0xf2f2f2, lineAt(2) - 5.6, lineAt(5) + 25, Math.PI],
-    ['convertible', 0x7fffd4, lineAt(N) - 5.6, -150, Math.PI],
-    ['coupe', 0x18181d, lineAt(6) + 5.6, lineAt(2) + 25, 0],
-    ['sedan', 0x8b5cf6, lineAt(5) - 5.6, lineAt(6) + 30, Math.PI],
-    ['bike', 0xff3fa4, lineAt(N) - 5.4, 114, Math.PI],
-    ['bike', 0x18181d, lineAt(N) - 5.4, 117, Math.PI],
-    ['schoolbus', 0xf2b705, lineAt(N) - 5.6, 140, Math.PI],
-    ['pickup', 0x9c2b23, lineAt(7) + 5.6, lineAt(5) + 20, 0],
-    ['truck', 0x1b2440, lineAt(6) - 5.6, lineAt(4) + 30, Math.PI],
-    ['bus', 0x1f8a8a, lineAt(3) + 5.6, lineAt(6) + 32, 0],
-    ['bike', 0x38c8ff, lineAt(2) + 5.4, lineAt(3) + 20, 0],
-  ];
+  // Parked rides: buses at Howrah bus stand, the taxi rank, and a few more nearby
+  const parked = [...station.parked];
+  const extras = [['rickshaw', 0x2b4a8a], ['ambassador', 0xf4f4f0], ['bike', 0x18181d], ['rickshaw', 0xffffff], ['ambassador', 0x1d1f24], ['bike', 0xc8382c], ['pickup', 0x9c2b23], ['van', 0xf2f2f2]];
+  const near = world.graph.edgesNear(world.spawn.x, world.spawn.z, 400).filter((e) => e.c <= 4 && e.len > 30 && !e.br);
+  for (const [type, color] of extras) {
+    for (let tries = 0; tries < 20; tries++) {
+      const e = near[Math.floor(Math.random() * near.length)];
+      if (!e) break;
+      const q = e.poly.at(e.len * (0.3 + Math.random() * 0.4), {});
+      const off = e.w / 2 - 1.3;
+      const x = q.x + q.tz * off;
+      const z = q.z - q.tx * off;
+      if (world.collideCircle(x, z, 1.4) || parked.some((o) => Math.hypot(o[2] - x, o[3] - z) < 7)) continue;
+      parked.push([type, color, x, z, Math.atan2(q.tx, q.tz)]);
+      break;
+    }
+  }
   for (const [type, color, x, z, yaw] of parked) {
     const v = new Vehicle(scene, world, fx, type, color);
     v.place(x, z, yaw);
-    if (x > PIER.ramp) v.pos.y = PIER.deck;
     v.keep = true;
     vehicles.push(v);
   }
-  // Boats: moored along the pier, and a couple pulled up at the water's edge near the start
-  const boats = [
-    ['speedboat', 0xff3fa4, PIER.x0 + 40, PIER.hw + 2.2, Math.PI / 2],
-    ['jetski', 0x38f3ff, PIER.x0 + 52, PIER.hw + 1.4, Math.PI / 2],
-    ['yacht', 0x1f8a8a, PIER.x0 + 78, PIER.hw + 3.5, Math.PI / 2],
-    ['ferry', 0x24527a, PIER.x0 + 62, -(PIER.hw + 5.6), Math.PI / 2],
-    ['jetski', 0xffd166, SHORE_X + 3.4, 124, Math.PI / 2],
-    ['speedboat', 0x5dff9e, SHORE_X + 4.2, 136, Math.PI / 2],
-  ];
-  for (const [type, color, x, z, yaw] of boats) {
-    const b = new Boat(scene, world, fx, type, color);
+  // On the Hooghly: launches working the ferry routes, country boats at the ghats
+  const docks = buildGhats(world, scene);
+  const launchCols = [0x1f4f8a, 0x2f8a4a, 0xc8382c, 0xd99a22];
+  docks.forEach((d, i) => {
+    const b = new Boat(scene, world, fx, 'launch', launchCols[i % launchCols.length]);
+    let [x, z] = d.pts[0];
+    const [nx, nz] = d.pts[1];
+    // start clear of the jetty and the bank, a little way along the route
+    const yaw = Math.atan2(nx - x, nz - z);
+    for (let k = 0; k < 20 && b.def.offs.some((o) => b.collideShore(x + Math.sin(yaw) * o, z + Math.cos(yaw) * o, b.def.rad)); k++) {
+      x += Math.sin(yaw) * 3;
+      z += Math.cos(yaw) * 3;
+    }
     b.place(x, z, yaw);
+    b.route = { pts: d.pts, i: 1, dir: 1, wait: 2 + i * 4 };
     vehicles.push(b);
-  }
-  freighter = new Freighter(scene);
+    // a couple of noukas tied up beside each jetty, a speedboat at the first
+    for (const [k, end] of d.ends.entries()) {
+      const kinds = k === 0 && i === 0 ? ['nouka', 'speedboat', 'jetski'] : ['nouka'];
+      kinds.forEach((type, j) => {
+        const side = j % 2 ? -1 : 1;
+        const along = 8 + j * 6;
+        const x = end.x + end.ux * along - end.uz * (7 + j * 2) * side;
+        const z = end.z + end.uz * along + end.ux * (7 + j * 2) * side;
+        if (!world.river || !inPoly(world.river, x, z) || nearestOnRing(world.river, x, z, {}).d < 4) return;
+        const boat = new Boat(scene, world, fx, type, [0xc9a43a, 0xff3fa4, 0x38f3ff][j % 3]);
+        boat.place(x, z, end.yaw);
+        vehicles.push(boat);
+      });
+    }
+  });
+  riverTraffic = new RiverTraffic(scene, world);
   setLoading(0.75, 'Waking up the locals');
   await frame();
   player = new Player(scene, world, game);
-  player.spawn(lineAt(N) - 8.5, 106, Math.PI);
+  // On Howrah Station's forecourt, facing the river and the bridge
+  player.spawn(world.spawn.x, world.spawn.z, station.frameA !== undefined ? Math.atan2(Math.cos(station.frameA), Math.sin(station.frameA)) : 0);
+  if (import.meta.env.DEV) window.__kol = { THREE, voices, get rides() { return rides; }, get mapView() { return mapView; }, renderer, scene, camera, world, rail, metro, station, vehicles, game, cam, day, get player() { return player; }, get traffic() { return traffic; } };
   peds = new Peds(scene, world, hud, audio, preset.peds);
   peds.spawnAll(player.pos);
   gameplay = new Gameplay(scene, world, hud, audio);
@@ -459,18 +558,21 @@ async function boot() {
   setLoading(1, 'Ready');
   hud.ready();
   hud.setWeaponIcons(weaponIcons());
-  // Transit lines on the map
-  const trackPts = (t) => t.x.filter((_, i) => i % 8 === 0).map((x, i) => [x, t.z[i * 8]]);
-  hud.drawTransit(
-    [
-      ...rail.tramTracks.map(({ track, color }) => ({ pts: trackPts(track), color: '#' + new THREE.Color(color).getHexString(), width: 3 })),
-      { pts: trackPts(rail.trainTrack), color: '#c8ccd2', width: 4, dash: [10, 6] },
-      { pts: trackPts(metro.track), color: '#8b5cf6', width: 4, dash: [6, 5] },
-    ],
-    [...rail.stations.map(([, x, z]) => ({ x, z, color: '#24c3d6' })), ...metro.stations.map((s) => ({ x: s.stair.x1, z: (s.stair.z0 + s.stair.z1) / 2, color: '#8b5cf6', label: 'M' }))],
-  );
+  // Railways, trams and metro lines on the map
+  {
+    const r = rail.mapLayers();
+    const pts = (t) => t.x.filter((_, i) => i % 10 === 0).map((x, i) => [x, t.z[i * 10]]);
+    for (const l of metro.lines) r.lines.push({ pts: pts(l.track), color: l.color, width: 4, dash: [7, 5] });
+    for (const st of metro.stations) r.stations.push({ x: st.x, z: st.z, color: st.color, label: 'M' });
+    for (const t of rail.tramStops) r.stations.push({ x: t.x, z: t.z, color: '#3f86d8', label: 'T', name: t.name, small: true });
+    hud.drawTransit(r.lines, r.stations);
+  }
   mapView = new MapView(hud);
   mapView.onWaypoint = setWaypoint;
+  mapView.addPlaces([
+    ...metro.stations.map((st) => ({ n: `${st.name} Metro (${st.line})`, x: st.x, z: st.z, k: 'metro', tier: 1 })),
+    ...rail.tramStops.map((t) => ({ n: `${t.name} Tram Stop`, x: t.x, z: t.z, k: 'tram', tier: 3 })),
+  ]);
   input.onWheel = (open, vec, kind) => {
     const can = state === 'play' && player.mode === 'foot' && !player.dead;
     if (kind === 'weapon') {
@@ -523,8 +625,8 @@ function startGame() {
   hud.start();
   input.lock();
   cam.yaw = player.yaw;
-  setTimeout(() => hud.notify('WELCOME TO VIBE CITY', 'Walk up to any vehicle and press F', '#ff3fa4'), 900);
-  setTimeout(() => hud.notify('ARMED & READY', '1–7 or mouse wheel to switch weapons', '#ffd36b'), 4600);
+  setTimeout(() => hud.notify('WELCOME TO VIBE CITY KOLKATA', 'Howrah Station · walk up to any vehicle and press F', '#ff3fa4'), 900);
+  setTimeout(() => hud.notify('CITY OF JOY', 'Buy a ticket (E) before the platforms · M for the map', '#ffd36b'), 4600);
 }
 document.getElementById('play').addEventListener('click', startGame);
 renderer.domElement.addEventListener('click', () => {
@@ -547,8 +649,19 @@ const beacon = new THREE.Mesh(
 );
 beacon.visible = false;
 scene.add(beacon);
-function setWaypoint(p) {
+let pickCb = null;
+function setWaypoint(p, quiet = false) {
+  // Choosing where a hired taxi, auto or rickshaw should go
+  if (pickCb && !quiet) {
+    const cb = pickCb;
+    pickCb = null;
+    mapView.setPick(null);
+    setMap(false);
+    cb(p);
+    return;
+  }
   waypoint = p;
+  if (p && !quiet && !inTiles(p.x, p.z, 30)) hud.notify('OUTSIDE THE PLAYABLE MAP', 'The arrow points the way · export that area to play there', '#ffd36b');
   route = null;
   routeT = 0;
   beacon.visible = !!p;
@@ -573,7 +686,7 @@ function updateRoute(dt) {
   }
   routeT -= dt;
   if (!route || routeT <= 0) {
-    route = findRoute(f.x, f.z, waypoint.x, waypoint.z);
+    route = world.graph.route(f.x, f.z, waypoint.x, waypoint.z);
     routeT = 0.5;
   }
   route[0] = [f.x, f.z];
@@ -584,6 +697,13 @@ function setMap(open) {
   if (open && state !== 'play') return;
   if (!open && state !== 'map') return;
   state = open ? 'map' : 'play';
+  if (!open && pickCb) {
+    // closed without choosing: the ride is off
+    const cb = pickCb;
+    pickCb = null;
+    mapView.setPick(null);
+    setTimeout(() => cb(null), 0);
+  }
   mapView.show(open, player.focus);
   if (open) {
     if (document.pointerLockElement) document.exitPointerLock();
@@ -657,6 +777,10 @@ const obstacles = [];
 const footObstacle = { pos: null, isPed: true };
 const pedObstacles = [];
 let nitroWas = false;
+let underRiver = false;
+let riverNear = 0;
+let greetT = 3;
+const vehicleSoundKind = (v) => (v.rail ? v.kind : v.boat ? 'boat' : v.type);
 let hornWas = false;
 function loop() {
   requestAnimationFrame(loop);
@@ -666,6 +790,20 @@ function loop() {
   let dt = Math.min((now - last) / 1000, 1 / 20);
   last = now;
   frameNo++;
+  // Dev only: a free camera for looking at the city from anywhere
+  if (import.meta.env.DEV && window.__kol && window.__kol.freeCam) {
+    const c = window.__kol.freeCam;
+    camera.position.set(...c.p);
+    camera.lookAt(...c.t);
+    camera.fov = c.fov || 60;
+    camera.updateProjectionMatrix();
+    elapsed += dt;
+    day.update(dt, { x: c.t[0], y: 0, z: c.t[2] }, camera.position);
+    world.update(dt, elapsed, day.night, day.sunDir);
+    renderer.shadowMap.needsUpdate = true;
+    post.composer.render(dt);
+    return;
+  }
 
   if (state === 'title' && input.hit('Enter')) startGame();
   if ((state === 'play' || state === 'pause') && (input.hit('Escape') || input.hit('KeyP'))) {
@@ -673,7 +811,7 @@ function loop() {
   }
   if ((state === 'play' && input.hit('KeyM')) || (state === 'map' && (input.hit('KeyM') || input.hit('Escape')))) setMap(state === 'play');
   if (state === 'map') {
-    if (waypoint && !route) route = findRoute(player.focus.x, player.focus.z, waypoint.x, waypoint.z);
+    if (waypoint && !route) route = world.graph.route(player.focus.x, player.focus.z, waypoint.x, waypoint.z);
     mapView.draw(player, gameplay.blips(), waypoint, route);
     input.endFrame();
     return;
@@ -690,9 +828,17 @@ function loop() {
 
   if (state === 'play') {
     if (input.hit('KeyC')) cam.mode = (cam.mode + 1) % (player.driving ? 3 : 2);
-    if (input.hit('KeyN')) audio.setMuted(!audio.muted);
-    if (input.hit('KeyQ')) hud.notify(audio.toggleRadio() ? 'RADIO ON' : 'RADIO OFF', 'Vibe City FM', '#b45bff');
-    if (input.hit('KeyR') && player.driving && !player.vehicle.rail) resetToRoad(player.vehicle);
+    if (input.hit('KeyN')) {
+      audio.setMuted(!audio.muted);
+      voices.muted = audio.muted;
+      hud.notify(audio.muted ? 'SOUND OFF' : 'SOUND ON', 'N to toggle', '#b45bff');
+      refreshSoundButtons();
+    }
+    if (input.hit('KeyQ')) {
+      hud.notify(audio.toggleRadio() ? 'MUSIC ON' : 'MUSIC OFF', 'Background music · the city sounds stay on', '#b45bff');
+      refreshSoundButtons();
+    }
+    if (input.hit('KeyR') && player.mode === 'driving' && !player.vehicle.rail) resetToRoad(player.vehicle);
     if (input.hit('Backspace') && gameplay.race.state !== 'idle') gameplay.cancelRace('Cancelled');
     if (input.hit('KeyT')) hud.notify('TIME WARP', 'Hold T to fast-forward', '#38f3ff');
     day.warp = input.keys.has('KeyT') ? 40 : 1;
@@ -703,19 +849,30 @@ function loop() {
     if (player.driving && !wasDriving && cam.mode > 2) cam.mode = 0;
     if (!player.driving && cam.mode > 1) cam.mode = 0;
     // Horn scares nearby people
-    const horn = player.driving && inp.horn;
-    audio.horn(horn);
+    const horn = player.mode === 'driving' && inp.horn;
+    audio.horn(horn, player.driving ? vehicleSoundKind(player.vehicle) : null);
     if (horn && !hornWas) {
       const v = player.vehicle;
       for (const n of peds.list) {
         const d = Math.hypot(n.x - v.pos.x, n.z - v.pos.z);
         if (d < 12 && n.state !== 'down' && Math.random() < 0.6) {
           n.ch.play('cower');
-          if (Math.random() < 0.5) peds.say(n, ['Watch it!', 'Hey!', 'Easy!', 'Jeez!'][Math.floor(Math.random() * 4)], 1.8);
+          if (Math.random() < 0.5) peds.say(n, LINES.honk[Math.floor(Math.random() * LINES.honk.length)], 1.8);
         }
       }
     }
     hornWas = horn;
+    // Now and then someone you pass says hello
+    greetT -= dt;
+    if (greetT <= 0 && player.mode === 'foot' && !player.underground) {
+      greetT = 1;
+      const n = peds.nearest(player.pos.x, player.pos.z, 4, (q) => q.state === 'walk');
+      if (n && Math.random() < 0.3) {
+        peds.face(n, player.pos.x, player.pos.z);
+        peds.say(n, LINES.greet[Math.floor(Math.random() * LINES.greet.length)], 2);
+        greetT = 6;
+      }
+    }
     if (player.driving) {
       if (player.vehicle.nitroOn && !nitroWas) audio.whoosh();
       nitroWas = player.vehicle.nitroOn;
@@ -787,7 +944,15 @@ function loop() {
   day.update(dt, focus, camera.position);
   world.update(dt, elapsed, day.night, day.sunDir);
   metro.update(day.night);
-  freighter.update(dt, elapsed);
+  // India's first underwater metro: tell the player when they pass beneath the Hooghly
+  {
+    const f = player.focus;
+    const under = f.y < -5 && metro.underRiver(f.x, f.z);
+    if (under && !underRiver && state === 'play') hud.notify('UNDER THE HOOGHLY', "India's first underwater metro · 30 m below the river", '#2fbf5a');
+    underRiver = under;
+  }
+  riverTraffic.update(dt, elapsed);
+  station.update(dt, elapsed, { player, camPos: camera.position, audio });
   setTrafficLights(day.night);
   for (const s of spots) s.intensity = day.night * 260;
   beamMat.uniforms.uIntensity.value = day.night * 0.35;
@@ -823,8 +988,22 @@ function loop() {
     skid: pv ? pv.skid : 0,
     nitro: pv ? pv.nitroOn : false,
     engineOn: !!pv,
-    pitch: pv ? pv.def.engine : 1,
+    pitch: pv && pv.def.engine ? pv.def.engine : 1,
+    kind: pv ? vehicleSoundKind(pv) : null,
   });
+  // The city around you: traffic, people, the river
+  {
+    const f = player.focus;
+    let cars = 0;
+    for (const c of traffic.cars) if (Math.abs(c.x - f.x) < 120 && Math.abs(c.z - f.z) < 120) cars++;
+    let people = 0;
+    for (const n of peds.list) if (n.state !== 'dead' && Math.abs(n.x - f.x) < 35 && Math.abs(n.z - f.z) < 35) people++;
+    if (frameNo % 15 === 0) {
+      const d = world.river ? nearestOnRing(world.river, f.x, f.z, {}).d : 999;
+      riverNear = Math.max(0, 1 - d / 120);
+    }
+    audio.ambient(dt, { traffic: cars, people, river: riverNear, night: day.night, underground: f.y < -3 });
+  }
 
   // Post FX
   const g = post.grade.uniforms;
@@ -846,17 +1025,25 @@ function loop() {
 
 function resetToRoad(v) {
   if (v.boat) {
-    v.place(Math.max(v.pos.x, SHORE_X + 20), v.pos.z, Math.PI / 2);
+    // back out into open water
+    const r = world.river;
+    if (r) {
+      const q = nearestOnRing(r, v.pos.x, v.pos.z, {});
+      const inside = inPoly(r, v.pos.x, v.pos.z);
+      const dx = (v.pos.x - q.x) / (q.d || 1);
+      const dz = (v.pos.z - q.z) / (q.d || 1);
+      const k = inside ? 20 : -20;
+      v.place(q.x + dx * k, q.z + dz * k, v.yaw);
+    }
     hud.notify('RESET', '', '#ffffff');
     return;
   }
-  const cell = lineAt(1) - lineAt(0);
-  const kx = clamp(Math.round((v.pos.x - lineAt(0)) / cell), 0, N);
-  const mz = clamp(Math.round((v.pos.z - lineAt(0)) / cell), 0, N);
-  const dx = Math.abs(v.pos.x - lineAt(kx));
-  const dz = Math.abs(v.pos.z - lineAt(mz));
-  if (dx < dz) v.place(lineAt(kx) + LANE, clamp(v.pos.z, lineAt(0), lineAt(N)), Math.PI);
-  else v.place(clamp(v.pos.x, lineAt(0), lineAt(N)), lineAt(mz) + LANE, Math.PI / 2);
+  // nearest road, in the left-hand lane
+  const n = world.graph.nearest(v.pos.x, v.pos.z, 500, (e) => !e.br);
+  if (n) {
+    const off = Math.min(n.e.w / 4, 3);
+    v.place(n.x + n.tz * off, n.z - n.tx * off, Math.atan2(n.tx, n.tz));
+  }
   hud.notify('RESET', '', '#ffffff');
 }
 

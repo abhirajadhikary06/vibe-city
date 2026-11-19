@@ -1,14 +1,16 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import * as T from './textures.js';
-import { HALF, lineAt, N, CELL } from './world.js';
+import { Buf, ribbon, flatPoly, inTiles } from './world.js';
+import { MAP, nodeXZ, polygon, inPoly, offsetLine, Poly, nearestOnRing } from './geo.js';
 import { merge, clamp, damp, lerp } from './utils.js';
 import { crashDamage } from './car.js';
 
 /*
- * Rail transport: a tram running down the central avenue under overhead wires,
- * and a commuter train on a U-shaped line around the edge of the city.
- * Both shuttle between stops on their own, and the player can take the controls.
+ * Rail transport on Kolkata's real tracks: trams under their overhead wires,
+ * EMU locals and a Rajdhani out of Howrah and Sealdah, and a Circular Railway
+ * local along the river. All shuttle between stops on their own, and the
+ * player can take the controls.
  */
 
 const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
@@ -127,10 +129,12 @@ export function signTexture(text, sub) {
 }
 
 /* ---------- Rolling stock ---------- */
+// body: paint for the whole shell (null = stainless steel); color: the livery stripe
 export const KINDS = {
-  tram: { label: 'Tram', L: 9.6, gap: 0.6, cars: 3, hw: 1.2, floor: 0.35, roof: 3.35, base: 0.3, top: 14, accel: 1.3, dec: 1.8, y: 0, seatY: -0.1, camDist: 12, camH: 4, engine: 0.7, color: 0xd8336b, look: 22 },
-  metro: { label: 'Metro', L: 15, gap: 0.7, cars: 3, hw: 1.4, floor: 0.93, roof: 3.7, base: 0.3, top: 22, accel: 1.3, dec: 1.7, y: -9.88, seatY: 0.55, camDist: 5, camH: 0.6, engine: 0.85, color: 0x8b5cf6, look: 30, under: true },
-  train: { label: 'Commuter Train', L: 17, gap: 0.9, cars: 3, hw: 1.45, floor: 1.15, roof: 4.05, base: 0.75, top: 24, accel: 0.9, dec: 1.1, y: 0.3, seatY: 0.62, camDist: 24, camH: 7.5, engine: 0.45, color: 0x24c3d6, look: 60 },
+  tram: { label: 'Kolkata Tram', L: 9.6, gap: 0.6, cars: 2, hw: 1.2, floor: 0.35, roof: 3.35, base: 0.3, top: 11, accel: 1.1, dec: 1.8, y: 0, seatY: -0.1, camDist: 12, camH: 4, engine: 0.7, color: 0x1f56b8, body: 0xf1efe8, look: 22 },
+  metro: { label: 'Kolkata Metro', L: 19, gap: 0.7, cars: 4, hw: 1.4, floor: 0.93, roof: 3.7, base: 0.3, top: 22, accel: 1.3, dec: 1.7, y: -11.88, seatY: 0.55, camDist: 5, camH: 0.6, engine: 0.85, color: 0x1f4fbf, look: 30, under: true },
+  train: { label: 'EMU Local', L: 20, gap: 0.9, cars: 6, hw: 1.6, floor: 1.15, roof: 4.1, base: 0.75, top: 22, accel: 0.9, dec: 1.1, y: 0.3, seatY: 0.62, camDist: 26, camH: 8, engine: 0.45, color: 0xb8322a, look: 70 },
+  express: { label: 'Rajdhani Express', L: 22, gap: 1.0, cars: 8, hw: 1.6, floor: 1.2, roof: 4.2, base: 0.75, top: 26, accel: 0.6, dec: 0.9, y: 0.3, seatY: 0.62, camDist: 30, camH: 9, engine: 0.4, color: 0xd8c690, body: 0xa8322b, look: 80 },
 };
 
 let RM = null;
@@ -153,6 +157,38 @@ export function railMats() {
   return RM;
 }
 
+let TB = null;
+function tramBoard() {
+  if (TB) return TB;
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 56;
+  const g = c.getContext('2d');
+  g.fillStyle = '#16233d';
+  g.fillRect(0, 0, 256, 56);
+  g.fillStyle = '#ffffff';
+  g.fillRect(6, 8, 40, 40);
+  g.fillStyle = '#16233d';
+  g.font = 'bold 34px Arial';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('5', 26, 30);
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 19px Arial';
+  g.fillText('SHYAMBAZAR', 150, 18);
+  g.fillText('ESPLANADE', 150, 40);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  TB = new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.6 });
+  return TB;
+}
+
+const bodyMats = new Map();
+function bodyMat(c) {
+  if (!bodyMats.has(c)) bodyMats.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, metalness: 0.2 }));
+  return bodyMats.get(c);
+}
+
 /** One rail car. cabF / cabB put a sloped driver's cab on the front / back end. */
 function buildRailCar(kind, cabF, cabB, paint, middle) {
   const K = KINDS[kind];
@@ -160,7 +196,8 @@ function buildRailCar(kind, cabF, cabB, paint, middle) {
   const { L, hw, base, roof, floor } = K;
   const W = hw * 2;
   const h2 = L / 2;
-  const nose = kind === 'tram' ? 0.6 : kind === 'metro' ? 0.7 : 1.4;
+  // Kolkata trams and EMUs have flat, upright fronts
+  const nose = kind === 'tram' ? 0.15 : kind === 'metro' ? 0.7 : kind === 'express' ? 2.2 : 0.3;
   const s = new THREE.Shape();
   const lo = base;
   s.moveTo(-h2 + (cabB ? nose * 0.5 : 0), lo);
@@ -251,9 +288,28 @@ function buildRailCar(kind, cabF, cabB, paint, middle) {
     const py = roof + 0.35;
     panto.push(rod([0.45, py, -0.6], [0.0, py + 1.25, 0.25], 0.03), rod([-0.45, py, -0.6], [0.0, py + 1.25, 0.25], 0.03), rod([0, py + 1.25, 0.25], [0.0, 5.95, -0.2], 0.03), box(1.5, 0.05, 0.08, 0, 5.98, -0.2));
   }
-  // Lower livery stripe
+  // Livery: a stripe; the tram's whole lower body is blue, the metro gets a deep band
   const stripe = [];
-  for (const sx of [1, -1]) stripe.push(box(0.02, 0.32, L - (cabF ? 0.4 : 0) - (cabB ? 0.4 : 0), sx * (hw + 0.008), floor + 0.45, ((cabB ? 0.4 : 0) - (cabF ? 0.4 : 0)) / 2));
+  const front = [];
+  const sh = kind === 'tram' ? floor + 0.95 : kind === 'metro' ? 0.55 : 0.32;
+  const sy = kind === 'tram' ? (base + floor + 0.95) / 2 + 0.02 : floor + 0.45;
+  const sl = L - (cabF ? 0.2 : 0) - (cabB ? 0.2 : 0);
+  for (const sx of [1, -1]) stripe.push(box(0.02, kind === 'tram' ? floor + 0.95 - base : sh, sl, sx * (hw + 0.008), sy, ((cabB ? 0.2 : 0) - (cabF ? 0.2 : 0)) / 2));
+  for (const sign of [cabF ? 1 : 0, cabB ? -1 : 0].filter(Boolean)) {
+    const z = sign * (h2 + 0.06);
+    if (kind === 'tram') {
+      // blue apron with the white chevron
+      stripe.push(box(W - 0.1, floor + 0.95 - base, 0.04, 0, sy, z));
+      for (const s of [1, -1]) front.push(box(0.12, 0.85, 0.02, 0, 0, 0).rotateZ(s * 1.05).translate(s * 0.42, floor + 0.55, z + sign * 0.03));
+    } else if (kind === 'train') {
+      // the yellow cab front of a Kolkata EMU, with its two windows
+      const fz = sign * (h2 + 0.01);
+      front.push(box(W - 0.06, roof - base - 0.15, 0.04, 0, (roof + base) / 2, fz));
+      for (const s of [1, -1]) glass.push(box(W * 0.36, 0.95, 0.02, s * W * 0.22, roof - 1.05, fz + sign * 0.035));
+    } else if (kind === 'metro') {
+      front.push(box(W - 0.1, roof - floor - 0.5, 0.05, 0, (roof + floor) / 2 - 0.2, z - sign * 0.3));
+    }
+  }
 
   const root = new THREE.Group();
   const add = (geo, mat) => {
@@ -263,12 +319,23 @@ function buildRailCar(kind, cabF, cabB, paint, middle) {
     root.add(m);
     return m;
   };
-  add(bodyGeo, kind === 'tram' ? M.white : M.silver);
+  add(bodyGeo, K.body !== undefined ? bodyMat(K.body) : M.silver);
   add(merge(glass), M.glass);
   add(merge([...dark, ...roofGeo]), M.dark);
   add(merge(wheels), M.steel);
   add(merge(stripe), paint);
+  if (front.length) add(merge(front), kind === 'train' ? bodyMat(0xf2c21b) : bodyMat(0xf4f4f0));
   if (panto.length) add(merge(panto), M.wire);
+  // red roof on the trams, with the route board up front
+  if (kind === 'tram') {
+    add(box(W - 0.1, 0.18, L - 0.4, 0, roof + 0.05, 0), bodyMat(0xb5302a));
+    for (const sign of [cabF ? 1 : 0, cabB ? -1 : 0].filter(Boolean)) {
+      const b = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.32), tramBoard());
+      b.position.set(0, roof - 0.35, sign * (h2 + 0.1));
+      if (sign < 0) b.rotation.y = Math.PI;
+      root.add(b);
+    }
+  }
   const meshes = {};
   if (head.length) {
     meshes.head = add(merge(head), M.head);
@@ -463,7 +530,7 @@ export class Consist {
 
   signal(ctx) {
     const d = ctx.near(this.pos);
-    if (this.kind === 'train') ctx.audio.trainHorn(d);
+    if (this.kind === 'train' || this.kind === 'express') ctx.audio.trainHorn(d);
     else if (this.kind === 'metro') ctx.audio.metroChime(d);
     else ctx.audio.tramBell(d);
   }
@@ -526,7 +593,8 @@ export class Consist {
     if (dist < 0.4 && Math.abs(this.v) < 0.6) {
       this.v = 0;
       this.state = 'dwell';
-      this.dwell = this.kind === 'tram' ? 7 : 10;
+      const atEnd = this.s <= this.sMin + 1 || this.s >= this.sMax - 1;
+      this.dwell = atEnd && this.termDwell ? this.termDwell : this.kind === 'tram' ? 9 : this.kind === 'express' ? 30 : this.kind === 'train' ? 18 : 14;
     }
   }
 
@@ -552,6 +620,132 @@ function closestOnSeg(c, x, z) {
 /* =========================================================
    Rail network
    ========================================================= */
+
+/** Node-level graph of rail ways: node index -> Set of neighbouring node indices. */
+function railGraph(rails) {
+  const adj = new Map();
+  const link = (a, b) => {
+    let set = adj.get(a);
+    if (!set) adj.set(a, (set = new Set()));
+    set.add(b);
+  };
+  for (const r of rails) {
+    for (let i = 1; i < r.n.length; i++) {
+      link(r.n[i - 1], r.n[i]);
+      link(r.n[i], r.n[i - 1]);
+    }
+  }
+  return adj;
+}
+/** Follow the straightest line out of `start` (having come from `from`), up to maxLen metres. */
+function walkRail(adj, start, from, maxLen, maxTurn = 0.5) {
+  const out = [start];
+  const seen = new Set(out);
+  let cur = start;
+  let len = 0;
+  while (len < maxLen) {
+    const nb = adj.get(cur);
+    if (!nb) break;
+    const [cx, cz] = nodeXZ(cur);
+    let dx0 = 0;
+    let dz0 = 0;
+    if (from != null) {
+      const [fx, fz] = nodeXZ(from);
+      const l = Math.hypot(cx - fx, cz - fz) || 1;
+      dx0 = (cx - fx) / l;
+      dz0 = (cz - fz) / l;
+    }
+    let best = null;
+    let bestDot = -2;
+    for (const n of nb) {
+      if (n === from || seen.has(n)) continue;
+      const [nx, nz] = nodeXZ(n);
+      const l = Math.hypot(nx - cx, nz - cz) || 1;
+      const dot = from == null ? 1 : ((nx - cx) * dx0 + (nz - cz) * dz0) / l;
+      if (dot > bestDot) {
+        bestDot = dot;
+        best = n;
+      }
+    }
+    if (best == null || (from != null && bestDot < Math.cos(maxTurn))) break;
+    const [bx, bz] = nodeXZ(best);
+    len += Math.hypot(bx - cx, bz - cz);
+    out.push(best);
+    seen.add(best);
+    from = cur;
+    cur = best;
+  }
+  return { nodes: out, len };
+}
+const overlap = (a, b) => {
+  const set = new Set(b.nodes);
+  let k = 0;
+  for (const n of a.nodes) if (set.has(n)) k++;
+  return k / a.nodes.length;
+};
+
+/** Station names on Indian Railways boards: Bengali, Hindi, English. */
+const BOARD_NAMES = {
+  'HOWRAH': ['হাওড়া', 'हावड़ा'],
+  'SEALDAH': ['শিয়ালদহ', 'सियालदह'],
+  'B.B.D. BAG': ['বি.বা.দী. বাগ', 'बी.बा.दी. बाग'],
+  'BBD BAGH': ['বি.বা.দী. বাগ', 'बी.बा.दी. बाग'],
+  'EDEN GARDENS': ['ইডেন গার্ডেন্স', 'ईडन गार्डन्स'],
+  'PRINSEP GHAT': ['প্রিন্সেপ ঘাট', 'प्रिंसेप घाट'],
+  'BARRA BAZAR': ['বড়বাজার', 'बड़ाबाज़ार'],
+  'SOVABAZAR AHIRITOLA': ['শোভাবাজার আহিরীটোলা', 'शोभाबाजार अहिरीटोला'],
+  'PARK CIRCUS': ['পার্ক সার্কাস', 'पार्क सर्कस'],
+  'SIR GURUDAS BANERJEE HALT': ['স্যার গুরুদাস ব্যানার্জী হল্ট', 'सर गुरुदास बनर्जी हॉल्ट'],
+};
+function boardName(n) {
+  return n.replace(/ junction| railway station| station/gi, '').toUpperCase().trim();
+}
+/** Yellow Indian Railways station board. */
+export function boardTexture(name) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 192;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f4c51c';
+  g.fillRect(0, 0, 512, 192);
+  g.strokeStyle = '#111';
+  g.lineWidth = 8;
+  g.strokeRect(4, 4, 504, 184);
+  g.fillStyle = '#111';
+  g.textAlign = 'center';
+  const [bn, hi] = BOARD_NAMES[name] || [];
+  const lines = [bn, hi, name].filter(Boolean);
+  const sizes = lines.length === 3 ? [46, 40, 44] : [60];
+  lines.forEach((t, i) => {
+    g.font = `bold ${sizes[i] || 44}px "Kohinoor Bangla", "Bangla MN", "Noto Sans Bengali", "Kohinoor Devanagari", "Noto Sans Devanagari", Arial, sans-serif`;
+    const y = lines.length === 3 ? 56 + i * 58 : 118;
+    g.fillText(t, 256, y, 480);
+  });
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** Ballast texture with sleepers, running along v. */
+function sleeperTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#7c7266';
+  g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 500; i++) {
+    g.fillStyle = `rgba(${Math.random() < 0.5 ? '40,36,30' : '170,160,145'},0.5)`;
+    g.fillRect(Math.random() * 64, Math.random() * 64, 2, 2);
+  }
+  g.fillStyle = '#5d5047';
+  g.fillRect(4, 22, 56, 20);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
 export class Rail {
   constructor(scene, world, fx) {
     this.scene = scene;
@@ -559,123 +753,345 @@ export class Rail {
     this.fx = fx;
     const M = railMats();
     const statics = [];
-
-    /* ---- Tram lines: single tracks down the middle of three avenues ---- */
-    const tEnd = HALF - 10;
-    const wire = [];
-    const rails = [];
-    const grooves = [];
     this.trams = [];
     this.tramTracks = [];
-    const tramLine = (alongZ, c, color) => {
-      const track = new Track(alongZ ? [[c, -tEnd], [c, tEnd]] : [[-tEnd, c], [tEnd, c]], 1);
-      rails.push(...alongTrack(track, 8, (len) => [box(0.09, 0.025, len, 0.72, 0.012, 0), box(0.09, 0.025, len, -0.72, 0.012, 0)]));
-      grooves.push(...alongTrack(track, 8, (len) => [box(0.035, 0.03, len, 0.77, 0.013, 0), box(0.035, 0.03, len, -0.77, 0.013, 0)]));
-      // Overhead wire: poles on both kerbs mid-block, span wires, contact wire
-      for (let k = 0; k < N; k++) {
-        for (const f of [18.5, 55.5]) {
-          const t = lineAt(k) + f;
-          if (Math.abs(t) > tEnd) continue;
-          for (const sx of [1, -1]) {
-            const px = alongZ ? c + sx * 7.7 : t;
-            const pz = alongZ ? t : c + sx * 7.7;
-            wire.push(new THREE.CylinderGeometry(0.09, 0.13, 7.2, 8).translate(px, 0.18 + 3.6, pz));
-            this.world.addCircle(px, pz, 0.16);
-          }
-          const x = alongZ ? c : t;
-          const z = alongZ ? t : c;
-          wire.push(box(alongZ ? 15.4 : 0.03, 0.03, alongZ ? 0.03 : 15.4, x, 6.75, z), rod([x, 6.75, z], [x, 6.02, z], 0.012, 4));
-        }
-      }
-      wire.push(...alongTrack(track, 20, (len) => [box(0.025, 0.025, len, 0, 6.0, 0)]));
-      // A stop every other block
-      const stops = [];
-      for (let k = 0; k < N; k += 2) stops.push(lineAt(k) + CELL / 2 + tEnd);
-      const tram = new Consist(scene, track, 'tram', stops, fx, color);
-      this.trams.push(tram);
-      this.tramTracks.push({ track, color });
-      return track;
-    };
-    this.tramTrack = tramLine(true, lineAt(N / 2), 0xd8336b);
-    tramLine(false, lineAt(3), 0x1f9e8f);
-    tramLine(false, lineAt(N - 3), 0xff8a2a);
-    this.tram = this.trams[0];
-    statics.push(new THREE.Mesh(merge(rails), M.steel), new THREE.Mesh(merge(grooves), M.dark), new THREE.Mesh(merge(wire), M.wire));
+    this.trainTracks = [];
+    this.consists = [];
+    this.stations = [];
+    this.platforms = [];
 
-    /* ---- Commuter line: U-shape round the west, north and south edges ---- */
-    const R = HALF + 18;
-    const east = HALF - 4;
-    this.trainTrack = new Track([[east, -R], [-R, -R], [-R, R], [east, R]], 16);
-    const tr = this.trainTrack;
-    const ballast = alongTrack(tr, 3, (len) => [box(3.4, 0.18, len + 0.05, 0, 0.03, 0)]);
-    const sleepers = alongTrack(tr, 0.65, () => [box(2.5, 0.1, 0.24, 0, 0.15, 0)]);
-    const trainRails = alongTrack(tr, 3, (len) => [box(0.075, 0.13, len + 0.02, 0.7175, 0.25, 0), box(0.075, 0.13, len + 0.02, -0.7175, 0.25, 0)]);
-    statics.push(new THREE.Mesh(merge(ballast), M.ballast), new THREE.Mesh(merge(sleepers), M.sleeper), new THREE.Mesh(merge(trainRails), M.steel));
-    // Buffer stops
-    for (const s of [0, tr.len]) {
-      const p = tr.at(s, {});
-      const yaw = Math.atan2(p.tx, p.tz);
-      const g = merge([box(2.6, 1.1, 0.6, 0, 0.75, 0), box(0.5, 0.5, 0.3, 0.7, 1.1, s > 0 ? -0.4 : 0.4), box(0.5, 0.5, 0.3, -0.7, 1.1, s > 0 ? -0.4 : 0.4)]);
-      g.rotateY(yaw).translate(p.x, 0, p.z);
-      statics.push(new THREE.Mesh(g, M.yellow));
+    /* ---- Track beds for every railway line in the data ---- */
+    const heavy = MAP.rails.filter((r) => (r.k === 'rail' || r.k === 'narrow_gauge') && !r.tn);
+    const trams = MAP.rails.filter((r) => r.k === 'tram' && !r.tn);
+    const bed = new Buf();
+    const steel = new Buf();
+    const grooves = new Buf();
+    for (const r of heavy) {
+      const pts = r.n.flatMap(nodeXZ);
+      ribbon(bed, pts, 3.0, 0.045, { uv: 'along', scale: 0.65 });
+      for (const o of [0.7175, -0.7175]) ribbon(steel, offsetLine(pts, o), 0.1, 0.2);
     }
-    // Stations with platforms, shelters and name boards
-    const stations = [
-      ['BAYSIDE NORTH', east - 30, -R, 0, 1],
-      ['NORTH PARK', -110, -R, 0, 1],
-      ['WEST END', -R, 0, 1, 0],
-      ['SOUTH PARK', -110, R, 0, -1],
-      ['BAYSIDE SOUTH', east - 30, R, 0, -1],
-    ];
-    const plat = [];
-    const edge = [];
-    const shelter = [];
-    const trainStops = [];
-    for (const [name, x, z, ix, iz] of stations) {
-      trainStops.push(tr.nearest(x, z));
-      const alongX = iz !== 0;
-      const pl = 52;
-      const pw = 4.6;
-      const off = KINDS.train.hw + 0.25 + pw / 2;
-      const cx = x + ix * off;
-      const cz = z + iz * off;
-      const hx = alongX ? pl / 2 : pw / 2;
-      const hz = alongX ? pw / 2 : pl / 2;
-      plat.push(box(hx * 2, 1.1, hz * 2, cx, 0.55, cz));
-      const ex = x + ix * (off - pw / 2 + 0.3);
-      const ez = z + iz * (off - pw / 2 + 0.3);
-      edge.push(box(alongX ? pl : 0.25, 0.01, alongX ? 0.25 : pl, ex, 1.105, ez));
-      this.world.addPad(cx - hx, cx + hx, cz - hz, cz + hz, 1.1);
-      // Shelter canopy on four posts, with a bench
-      const sx = x + ix * (off + 0.8);
-      const sz = z + iz * (off + 0.8);
-      for (const a of [-6, 6]) {
-        for (const b of [-1.2, 1.2]) {
-          const px = sx + (alongX ? a : b);
-          const pz = sz + (alongX ? b : a);
-          shelter.push(new THREE.CylinderGeometry(0.07, 0.07, 2.7, 8).translate(px, 1.1 + 1.35, pz));
-          this.world.addCircle(px, pz, 0.12);
+    for (const r of trams) {
+      const pts = r.n.flatMap(nodeXZ);
+      for (const o of [0.72, -0.72]) ribbon(grooves, offsetLine(pts, o), 0.09, 0.045);
+    }
+    const bedMat = new THREE.MeshStandardMaterial({ map: sleeperTexture(), roughness: 1, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    for (const [b, m] of [[bed, bedMat], [steel, M.steel], [grooves, M.steel]]) {
+      const g = b.geometry();
+      if (g) statics.push(new THREE.Mesh(g, m));
+    }
+
+    /* ---- Platforms: raised pads with yellow edges, boards and roofs ---- */
+    const platTop = new Buf();
+    const platSide = new Buf();
+    const edge = new Buf();
+    const posts = [];
+    const canopy = [];
+    const shed = world.station ? polygon(world.station.footprint) : null;
+    const hcs = world.station ? world.station.headCentre : null;
+    const PH = 0.85;
+    const railStations = MAP.stations.filter((st) => st.k === 'rail');
+    const boards = new Map();
+    for (const pl of MAP.platforms) {
+      let ring = pl.p;
+      if (!ring) {
+        const L = offsetLine(pl.l, 3);
+        const R = offsetLine(pl.l, -3);
+        ring = [...L];
+        for (let i = R.length - 2; i >= 0; i -= 2) ring.push(R[i], R[i + 1]);
+      }
+      const poly = polygon(ring);
+      if (!inTiles((poly.x0 + poly.x1) / 2, (poly.z0 + poly.z1) / 2, 50)) continue;
+      world.addPad(ring, PH);
+      flatPoly(platTop, ring, PH, 3);
+      for (let i = 0, j = poly.n - 1; i < poly.n; j = i++) {
+        const ax = poly.xs[j];
+        const az = poly.zs[j];
+        const bx = poly.xs[i];
+        const bz = poly.zs[i];
+        const len = Math.hypot(bx - ax, bz - az);
+        if (len < 0.05) continue;
+        const b0 = platSide.n;
+        const nx = (bz - az) / len;
+        const nz = -(bx - ax) / len;
+        platSide.v(ax, PH, az, nx, 0, nz, 0, PH);
+        platSide.v(bx, PH, bz, nx, 0, nz, len, PH);
+        platSide.v(bx, 0, bz, nx, 0, nz, len, 0);
+        platSide.v(ax, 0, az, nx, 0, nz, 0, 0);
+        platSide.idx.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3, b0, b0 + 2, b0 + 1, b0, b0 + 3, b0 + 2);
+        if (len > 6) ribbon(edge, [ax, az, bx, bz], 0.35, PH + 0.012);
+      }
+      // Centre line of the platform (they curve at the termini): sample inside, bin along the long axis
+      const pts = [];
+      for (let x = poly.x0 + 0.75; x < poly.x1; x += 1.5) for (let z = poly.z0 + 0.75; z < poly.z1; z += 1.5) if (inPoly(poly, x, z)) pts.push([x, z]);
+      if (pts.length < 6) continue;
+      let mx = 0;
+      let mz = 0;
+      for (const [x, z] of pts) {
+        mx += x;
+        mz += z;
+      }
+      mx /= pts.length;
+      mz /= pts.length;
+      let sxx = 0;
+      let szz = 0;
+      let sxz = 0;
+      for (const [x, z] of pts) {
+        sxx += (x - mx) ** 2;
+        szz += (z - mz) ** 2;
+        sxz += (x - mx) * (z - mz);
+      }
+      const ang = 0.5 * Math.atan2(2 * sxz, sxx - szz);
+      const ux = Math.cos(ang);
+      const uz = Math.sin(ang);
+      const bins = new Map();
+      for (const [x, z] of pts) {
+        const k = Math.round(((x - mx) * ux + (z - mz) * uz) / 6);
+        const b = bins.get(k) || bins.set(k, [0, 0, 0]).get(k);
+        b[0] += x;
+        b[1] += z;
+        b[2]++;
+      }
+      const spine = [...bins.entries()].sort((a, b) => a[0] - b[0]).map(([, b]) => [b[0] / b[2], b[1] / b[2]]);
+      const sp = new Poly(spine.flat());
+      const len = sp.len;
+      const mid = sp.at(len / 2, {});
+      const cx = mid.x;
+      const cz = mid.z;
+      const covered = !!hcs && Math.hypot(cx - hcs.x, cz - hcs.z) < 650;
+      const st = railStations.reduce((a, b) => (Math.hypot(b.x - cx, b.z - cz) < Math.hypot(a.x - cx, a.z - cz) ? b : a), railStations[0]);
+      const name = st ? boardName(st.n) : 'KOLKATA';
+      this.platforms.push({ poly, cx, cz, ux, uz, len, name, covered, spine: sp });
+      // Columns (tall sheds at Howrah, a simple canopy elsewhere) and name boards, all along the centre line
+      const ch = covered ? 6.8 : 4.4;
+      const q = {};
+      for (let s = 6; s <= len - 6; s += covered ? 12 : 10) {
+        sp.at(s, q);
+        if (!inPoly(poly, q.x, q.z)) continue;
+        const yaw = Math.atan2(q.tx, q.tz);
+        posts.push(new THREE.CylinderGeometry(0.18, 0.22, ch - PH, 8).translate(q.x, PH + (ch - PH) / 2, q.z));
+        world.addCircle(q.x, q.z, 0.25);
+        canopy.push(new THREE.BoxGeometry(covered ? 9 : 4.2, 0.14, covered ? 12.4 : 10.4).rotateY(yaw).translate(q.x, ch + 0.05, q.z));
+      }
+      for (const f of [0.25, 0.75]) {
+        sp.at(len * f, q);
+        if (!inPoly(poly, q.x, q.z)) continue;
+        const yaw = Math.atan2(q.tx, q.tz);
+        if (!boards.has(name)) boards.set(name, new THREE.MeshStandardMaterial({ map: boardTexture(name), roughness: 0.6, emissive: 0xffffff, emissiveMap: boardTexture(name), emissiveIntensity: 0.15 }));
+        const b = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.27), boards.get(name));
+        b.position.set(q.x, PH + 2.6, q.z);
+        b.rotation.y = yaw + Math.PI / 2;
+        statics.push(b);
+        const back = b.clone();
+        back.rotation.y += Math.PI;
+        statics.push(back);
+        for (const o of [-1.5, 1.5]) posts.push(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6).translate(q.x + q.tx * o, PH + 1.3, q.z + q.tz * o));
+      }
+    }
+    const platMat = new THREE.MeshStandardMaterial({ color: 0xe2dacb, map: T.sidewalk(), roughness: 0.9 });
+    for (const [b, m] of [[platTop, platMat], [platSide, platMat], [edge, M.yellow]]) {
+      const g = b.geometry();
+      if (g) statics.push(new THREE.Mesh(g, m));
+    }
+    if (posts.length) statics.push(new THREE.Mesh(merge(posts), M.dark));
+    if (canopy.length) statics.push(new THREE.Mesh(merge(canopy), new THREE.MeshStandardMaterial({ color: 0x8a3a2c, roughness: 0.7 })));
+    this.stations = railStations.filter((st) => inTiles(st.x, st.z)).map((st) => [boardName(st.n), st.x, st.z]);
+
+    /* ---- Trains out of the termini, on the real platform roads ---- */
+    const adj = railGraph(heavy);
+    const ends = [...adj.keys()].filter((n) => adj.get(n).size === 1);
+    const terminus = (test, count, kinds, maxLen = 2600) => {
+      const paths = ends
+        .filter((n) => test(...nodeXZ(n)))
+        .map((n) => walkRail(adj, n, null, maxLen))
+        .filter((p) => p.len > 600)
+        .sort((a, b) => b.len - a.len);
+      const chosen = [];
+      for (const p of paths) {
+        if (chosen.length >= count) break;
+        if (chosen.some((c) => Math.hypot(...nodeXZ(c.nodes[0]).map((v, i) => v - nodeXZ(p.nodes[0])[i])) < 12)) continue;
+        chosen.push(p);
+      }
+      return chosen.map((p, i) => {
+        const pts = p.nodes.map(nodeXZ);
+        const track = new Track(pts, 2);
+        const kind = kinds[i % kinds.length];
+        // stop at every station along the way
+        const pl = new Poly(pts.flat());
+        const stops = [];
+        for (const st of railStations) {
+          const q = pl.project(st.x, st.z);
+          if (q.d < 70 && q.s > 300 && q.s < pl.len - 150) stops.push(track.nearest(st.x, st.z));
+        }
+        const cs = new Consist(scene, track, kind, stops, fx);
+        // waiting at the platform, leaving one after another
+        cs.s = cs.sMin;
+        cs.termDwell = 45 + (i % 3) * 20;
+        cs.dwell = 8 + i * 22;
+        cs.place();
+        this.trainTracks.push({ track, color: KINDS[kind].color });
+        this.consists.push(cs);
+        return { cs, pl };
+      });
+    };
+    if (shed) {
+      const q = {};
+      terminus((x, z) => inPoly(shed, x, z) || nearestOnRing(shed, x, z, q).d < 90, 7, ['train', 'express', 'train', 'train', 'express', 'train', 'train']);
+    }
+    const sealdah = MAP.stations.find((st) => /^sealdah$/i.test(st.n) && st.k === 'rail');
+    if (sealdah) {
+      const near = (x, z) => Math.hypot(x - sealdah.x, z - sealdah.z) < 420;
+      const made = terminus(near, 3, ['train', 'express', 'train'], 4500);
+      // Sealdah South: make sure a local runs out past Park Circus
+      const pc = MAP.stations.find((st) => /park circus/i.test(st.n));
+      if (pc && !made.some(({ pl }) => pl.project(pc.x, pc.z).d < 70)) {
+        const south = ends
+          .filter((n) => near(...nodeXZ(n)))
+          .flatMap((n) => [0.35, 0.6, 0.9].map((t) => walkRail(adj, n, null, 5000, t)))
+          .map((p) => ({ p, d: new Poly(p.nodes.flatMap(nodeXZ)).project(pc.x, pc.z).d }))
+          .sort((a, b) => a.d - b.d)[0];
+        if (south && south.d < 70) {
+          const pts = south.p.nodes.map(nodeXZ);
+          const track = new Track(pts, 2);
+          const pl = new Poly(pts.flat());
+          const stops = railStations.filter((st) => pl.project(st.x, st.z).d < 70 && pl.project(st.x, st.z).s > 300).map((st) => track.nearest(st.x, st.z));
+          const cs = new Consist(scene, track, 'train', stops, fx, 0x2f6b9a);
+          cs.s = cs.sMin;
+          cs.termDwell = 50;
+          cs.dwell = 20;
+          cs.place();
+          this.trainTracks.push({ track, color: 0x2f6b9a });
+          this.consists.push(cs);
+          this.southLocal = cs;
         }
       }
-      shelter.push(box(alongX ? 14 : 3.2, 0.12, alongX ? 3.2 : 14, sx, 3.85, sz));
-      shelter.push(box(alongX ? 6 : 0.45, 0.08, alongX ? 0.45 : 6, sx + ix * 0.6, 1.6, sz + iz * 0.6));
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(4, 1), new THREE.MeshStandardMaterial({ map: signTexture(name, 'VIBE LINE'), emissive: 0xffffff, emissiveMap: signTexture(name, 'VIBE LINE'), emissiveIntensity: 0.25 }));
-      sign.position.set(sx, 3.3, sz);
-      sign.rotation.y = Math.atan2(-ix, -iz);
-      statics.push(sign);
-      const back = sign.clone();
-      back.rotation.y += Math.PI;
-      back.position.set(sx + ix * 0.02, 3.3, sz + iz * 0.02);
-      statics.push(back);
     }
-    statics.push(new THREE.Mesh(merge(plat), M.concrete), new THREE.Mesh(merge(edge), M.yellow), new THREE.Mesh(merge(shelter), M.dark));
-    this.stations = stations;
-    this.train = new Consist(scene, tr, 'train', trainStops, fx);
-    this.consists = [...this.trams, this.train];
+
+    /* ---- Circular Railway along the river, stopping at its stations ---- */
+    const eden = MAP.stations.find((st) => /eden gardens/i.test(st.n));
+    if (eden) {
+      let best = null;
+      for (const n of adj.keys()) {
+        const [x, z] = nodeXZ(n);
+        const d = Math.hypot(x - eden.x, z - eden.z);
+        if (!best || d < best.d) best = { n, d };
+      }
+      if (best && best.d < 120) {
+        const nb = [...adj.get(best.n)];
+        if (nb.length >= 2) {
+          const a = walkRail(adj, best.n, nb[0], 4200, 0.35);
+          const b = walkRail(adj, best.n, nb[1], 4200, 0.35);
+          const nodes = [...a.nodes.reverse(), ...b.nodes.slice(1)];
+          if (a.len + b.len > 1500) {
+            const track = new Track(nodes.map(nodeXZ), 3);
+            const pl = new Poly(nodes.flatMap(nodeXZ));
+            const stops = [];
+            for (const st of railStations) {
+              const p = pl.project(st.x, st.z);
+              if (p.d < 60 && p.s > 150 && p.s < pl.len - 150) stops.push(p.s);
+            }
+            const cs = new Consist(scene, track, 'train', stops, fx, 0x1f6b3a);
+            this.trainTracks.push({ track, color: 0x1f6b3a });
+            this.consists.push(cs);
+          }
+        }
+      }
+    }
+
+    /* ---- Trams on the longest tram lines, under overhead wires ---- */
+    const tadj = railGraph(trams);
+    const tends = [...tadj.keys()].filter((n) => tadj.get(n).size === 1);
+    const tpaths = tends.map((n) => walkRail(tadj, n, null, 6000, 0.7)).filter((p) => p.len > 700).sort((a, b) => b.len - a.len);
+    const lines = [];
+    for (const p of tpaths) {
+      if (lines.length >= 3) break;
+      if (lines.some((l) => overlap(p, l) > 0.4)) continue;
+      lines.push(p);
+    }
+    const wire = [];
+    this.tramStops = [];
+    const stopPosts = [];
+    const namedPois = MAP.pois.filter((p) => ['area', 'landmark', 'station', 'metro', 'market', 'college', 'park'].includes(p.k));
+    const stopName = (x, z) => {
+      let best = null;
+      for (const p of namedPois) {
+        const d = Math.hypot(p.x - x, p.z - z);
+        if (d < 260 && (!best || d < best.d)) best = { d, n: p.n.replace(/\s*\(.*?\)/, '') };
+      }
+      if (best) return best.n;
+      const e = world.graph.nearest(x, z, 60);
+      return e && e.e.name ? e.e.name : 'Tram Stop';
+    };
+    for (const p of lines) {
+      const track = new Track(p.nodes.map(nodeXZ), 4);
+      const stops = [];
+      const q0 = {};
+      for (let s = 300; s < track.len - 200; s += 340) {
+        stops.push(s);
+        track.at(s, q0);
+        const name = stopName(q0.x, q0.z);
+        if (this.tramStops.some((t) => t.name === name && Math.hypot(t.x - q0.x, t.z - q0.z) < 500)) continue;
+        this.tramStops.push({ name, x: q0.x, z: q0.z });
+        const l = Math.hypot(q0.tx, q0.tz) || 1;
+        const px = q0.x + (q0.tz / l) * 3.6;
+        const pz = q0.z - (q0.tx / l) * 3.6;
+        stopPosts.push({ x: px, z: pz, yaw: Math.atan2(q0.tx, q0.tz) });
+      }
+      const tram = new Consist(scene, track, 'tram', stops, fx);
+      this.trams.push(tram);
+      this.consists.push(tram);
+      this.tramTracks.push({ track, color: KINDS.tram.color });
+      wire.push(...alongTrack(track, 20, (len) => [box(0.025, 0.025, len, 0, 6.0, 0)]));
+      const q = {};
+      for (let s = 10; s < track.len; s += 50) {
+        track.at(s, q);
+        const l = Math.hypot(q.tx, q.tz) || 1;
+        const tx = q.tx / l;
+        const tz = q.tz / l;
+        const poleOk = [1, -1].filter((side) => !world.collideCircle(q.x + tz * 6.5 * side, q.z - tx * 6.5 * side, 0.4));
+        for (const side of poleOk) {
+          const px = q.x + tz * 6.5 * side;
+          const pz = q.z - tx * 6.5 * side;
+          wire.push(new THREE.CylinderGeometry(0.09, 0.13, 7.2, 8).translate(px, 3.6, pz));
+          wire.push(rod([px, 6.75, pz], [q.x, 6.75, q.z], 0.02, 4), rod([q.x, 6.75, q.z], [q.x, 6.02, q.z], 0.012, 4));
+        }
+      }
+    }
+    if (wire.length) statics.push(new THREE.Mesh(merge(wire), M.wire));
+    // Tram stop posts with a blue sign
+    if (stopPosts.length) {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 128;
+      const g = c.getContext('2d');
+      g.fillStyle = '#1f56b8';
+      g.fillRect(0, 0, 256, 128);
+      g.fillStyle = '#ffffff';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.font = 'bold 40px "Kohinoor Bangla", "Bangla MN", "Noto Sans Bengali", Arial';
+      g.fillText('ট্রাম স্টপ', 128, 40);
+      g.font = 'bold 34px Arial';
+      g.fillText('TRAM STOP', 128, 94);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const signMat = new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.2 });
+      const poles = [];
+      for (const sp of stopPosts) {
+        if (world.collideCircle(sp.x, sp.z, 0.3)) continue;
+        poles.push(new THREE.CylinderGeometry(0.05, 0.05, 2.8, 6).translate(sp.x, 1.4, sp.z));
+        const b = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.45), signMat);
+        b.position.set(sp.x, 2.5, sp.z);
+        b.rotation.y = sp.yaw + Math.PI / 2;
+        statics.push(b);
+      }
+      if (poles.length) statics.push(new THREE.Mesh(merge(poles), M.dark));
+    }
+    this.tram = this.trams[0];
 
     for (const m of statics) {
       m.receiveShadow = true;
-      m.castShadow = m.material !== M.steel;
+      m.castShadow = m.material !== M.steel && m.material !== bedMat;
       scene.add(m);
       m.updateMatrixWorld(true);
       m.matrixAutoUpdate = false;
@@ -683,6 +1099,19 @@ export class Rail {
     this.caps = [];
     this.objs = [];
     this.obstacleList = [];
+  }
+
+  /** Lines and stations for the map. */
+  mapLayers() {
+    const pts = (t) => t.x.filter((_, i) => i % 10 === 0).map((x, i) => [x, t.z[i * 10]]);
+    const lines = [];
+    for (const r of MAP.rails) {
+      if (r.k !== 'rail' || r.tn) continue;
+      lines.push({ pts: r.n.map(nodeXZ), color: '#8f949b', width: 1.5 });
+    }
+    for (const { track } of this.tramTracks) lines.push({ pts: pts(track), color: '#3f86d8', width: 3 });
+    const stations = this.stations.map(([n, x, z]) => ({ x, z, color: '#f4c51c', name: n }));
+    return { lines, stations };
   }
 
   /** Traffic treats rail cars as obstacles. */

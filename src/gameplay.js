@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as T from './textures.js';
-import { lineAt } from './world.js';
+import { MAP } from './geo.js';
 
 const store = {
   get(k, d) {
@@ -20,8 +20,9 @@ const store = {
   },
 };
 
-const RACE_START = [8, 3];
-const RACE_ROUTE = [[6, 1], [3, 0], [1, 2], [0, 5], [2, 8], [5, 6], [7, 8], [8, 3]];
+// Time trial round central Kolkata: each checkpoint snaps to the nearest main road
+const RACE_START = 'Esplanade';
+const RACE_ROUTE = ['Park Street', 'Victoria Memorial', "Saint Paul's Anglican Cathedral", 'Eden Gardens', 'BBD Bagh', 'Nakhoda Mosque', 'Esplanade'];
 const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
 
 function labelSprite(text, color) {
@@ -50,8 +51,9 @@ export class Gameplay {
     this.world = world;
     this.hud = hud;
     this.audio = audio;
-    this.money = store.get('nt_money', 0);
-    this.best = store.get('nt_best', null);
+    // Pocket money for fares and food when you're broke
+    this.money = Math.max(store.get('nt_money', 0), 500);
+    this.best = store.get('kol_best', null);
     hud.setMoney(this.money, true);
     const beamTex = T.beam();
 
@@ -103,7 +105,13 @@ export class Gameplay {
     const sl = labelSprite('TIME TRIAL', '#ff3fa4');
     sl.position.y = 10;
     this.startMarker.add(sl);
-    this.startPos = new THREE.Vector3(lineAt(RACE_START[0]), 0, lineAt(RACE_START[1]));
+    const onRoad = (name) => {
+      const p = MAP.pois.find((q) => q.n === name) || MAP.stations.find((q) => q.n.startsWith(name));
+      const n = p && world.graph.nearest(p.x, p.z, 400, (e) => e.c <= 3 && !e.br);
+      return n ? new THREE.Vector3(n.x, 0, n.z) : new THREE.Vector3();
+    };
+    this.startPos = onRoad(RACE_START);
+    this.route = RACE_ROUTE.map(onRoad);
     this.startMarker.position.copy(this.startPos);
     scene.add(this.startMarker);
 
@@ -297,13 +305,12 @@ export class Gameplay {
       this.arrow.visible = true;
       this.arrow.position.set(f.x, f.y + 3.4 + Math.sin(t * 4) * 0.1, f.z);
       this.arrow.rotation.y = Math.atan2(cp.x - f.x, cp.z - f.z) + Math.PI;
-      if (r.t > 300) this.cancelRace('Out of time');
+      if (r.t > 720) this.cancelRace('Out of time');
     }
   }
 
   setCheckpoint() {
-    const [i, k] = RACE_ROUTE[this.race.cp];
-    this.cpMarker.position.set(lineAt(i), 0, lineAt(k));
+    this.cpMarker.position.copy(this.route[this.race.cp]);
     this.cpMarker.visible = true;
   }
 
@@ -313,9 +320,9 @@ export class Gameplay {
     const record = !this.best || t < this.best;
     if (record) {
       this.best = t;
-      store.set('nt_best', t);
+      store.set('kol_best', t);
     }
-    const reward = Math.max(500, Math.round(6000 - t * 25));
+    const reward = Math.max(500, Math.round(9000 - t * 15));
     this.addMoney(reward);
     this.audio.fanfare();
     this.hud.notify(record ? 'NEW RECORD!' : 'FINISHED', `${fmt(t)} · +$${reward}`, '#ffd36b');

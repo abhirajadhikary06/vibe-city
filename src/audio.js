@@ -1,9 +1,45 @@
-// All sound is synthesised with WebAudio — engine, tyres, wind, impacts and a synthwave radio.
+// All sound is synthesised with WebAudio: engines (petrol, diesel, two-stroke, electric
+// traction), horns and bells, tyres, wind, impacts, the street ambience of Kolkata, and an
+// optional background music track (off by default).
+const loadFlag = (k, d) => {
+  try {
+    const v = localStorage.getItem(k);
+    return v === null ? d : v === '1';
+  } catch {
+    return d;
+  }
+};
+const saveFlag = (k, v) => {
+  try {
+    localStorage.setItem(k, v ? '1' : '0');
+  } catch {
+    /* storage unavailable */
+  }
+};
+
+/** How each kind of vehicle sounds. */
+const SOUND = {
+  car: { base: 40, span: 150, filt: 300, filtSpan: 2200, lfo: 0.3, vol: 1, clatter: 0, electric: 0, horn: [392, 494], hornType: 'square' },
+  amby: { base: 30, span: 118, filt: 220, filtSpan: 1500, lfo: 0.5, vol: 1.05, clatter: 0.015, electric: 0, horn: [420, 523], hornType: 'square' },
+  diesel: { base: 22, span: 68, filt: 180, filtSpan: 1000, lfo: 0.55, vol: 1.25, clatter: 0.06, electric: 0, horn: [277, 349, 415], hornType: 'sawtooth' },
+  auto: { base: 34, span: 120, filt: 650, filtSpan: 2600, lfo: 0.75, vol: 0.9, clatter: 0.035, electric: 0, horn: [740, 880], hornType: 'square' },
+  bike: { base: 58, span: 230, filt: 600, filtSpan: 3200, lfo: 0.45, vol: 0.85, clatter: 0, electric: 0, horn: [660, 784], hornType: 'square' },
+  boat: { base: 20, span: 60, filt: 160, filtSpan: 700, lfo: 0.6, vol: 1.2, clatter: 0.04, electric: 0, horn: [196, 247], hornType: 'sawtooth' },
+  electric: { base: 0, span: 0, filt: 0, filtSpan: 0, lfo: 0, vol: 0, clatter: 0, electric: 1, horn: null },
+  muscle: { base: 0, span: 0, filt: 0, filtSpan: 0, lfo: 0, vol: 0, clatter: 0, electric: 0, horn: null },
+};
+const KIND_SOUND = { auto: 'auto', taxi: 'amby', ambassador: 'amby', bus: 'diesel', schoolbus: 'diesel', truck: 'diesel', pickup: 'diesel', van: 'car', bike: 'bike', rickshaw: 'muscle', tram: 'electric', metro: 'electric', train: 'electric', express: 'electric', boat: 'boat' };
+
 export class AudioEngine {
   constructor() {
     this.ctx = null;
     this.muted = false;
-    this.radioOn = true;
+    this.radioOn = loadFlag('kol_music', false);
+    this.kind = 'car';
+    this.clackT = 0;
+    this.stepT = 0;
+    this.hornWas = false;
+    this.amb = { hornT: 3, crowT: 8, modT: 0 };
   }
 
   init() {
@@ -63,16 +99,47 @@ export class AudioEngine {
     this.hornGain = ctx.createGain();
     this.hornGain.gain.value = 0;
     this.hornGain.connect(this.master);
-    for (const f of [392, 494]) {
+    this.hornOscs = [392, 494, 415].map((f, i) => {
       const o = ctx.createOscillator();
       o.type = 'square';
       o.frequency.value = f;
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
       lp.frequency.value = 1800;
-      o.connect(lp).connect(this.hornGain);
+      const g = ctx.createGain();
+      g.gain.value = i < 2 ? 1 : 0.7;
+      o.connect(lp).connect(g).connect(this.hornGain);
       o.start();
-    }
+      return o;
+    });
+
+    // Diesel clatter: band-passed noise chopped at the firing rate
+    this.clatter = this.loopNoise('bandpass', 1500, 1.4);
+    this.clatterLfo = ctx.createOscillator();
+    this.clatterLfo.type = 'square';
+    this.clatterDepth = ctx.createGain();
+    this.clatterDepth.gain.value = 0;
+    this.clatterLfo.connect(this.clatterDepth).connect(this.clatter.g.gain);
+    this.clatterLfo.start();
+    // Electric traction: a motor whine and wheel rumble
+    this.whineGain = ctx.createGain();
+    this.whineGain.gain.value = 0;
+    this.whineGain.connect(this.master);
+    this.whine = [1, 2.02].map((m) => {
+      const o = ctx.createOscillator();
+      o.type = m === 1 ? 'sine' : 'triangle';
+      const g = ctx.createGain();
+      g.gain.value = m === 1 ? 0.6 : 0.25;
+      o.connect(g).connect(this.whineGain);
+      o.start();
+      return { o, m };
+    });
+    this.rumble = this.loopNoise('lowpass', 220, 0.8);
+
+    // Street ambience: traffic bed, crowd murmur, the river
+    this.trafficBed = this.loopNoise('lowpass', 180, 0.5);
+    this.crowd = this.loopNoise('bandpass', 650, 0.7);
+    this.river = this.loopNoise('lowpass', 420, 0.5);
 
     this.initRadio();
   }
@@ -92,22 +159,169 @@ export class AudioEngine {
     return { g, f };
   }
 
-  update({ rpm, throttle, speed, skid, nitro, engineOn = true, pitch = 1 }) {
+  update({ rpm, throttle, speed, skid, nitro, engineOn = true, pitch = 1, kind = null }) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    const f = (42 + rpm * 150) * pitch;
-    for (const { o, mul } of this.oscs) o.frequency.setTargetAtTime(f * mul, t, 0.04);
-    this.lfo.frequency.setTargetAtTime(f * 0.5, t, 0.04);
-    this.engFilter.frequency.setTargetAtTime(300 + rpm * 2200 * (0.35 + throttle * 0.65) + (nitro ? 900 : 0), t, 0.05);
-    this.engGain.gain.setTargetAtTime(engineOn ? 0.06 + throttle * 0.08 + rpm * 0.04 : 0, t, 0.15);
-    this.screech.g.gain.setTargetAtTime(skid * 0.12, t, 0.05);
+    const S = SOUND[KIND_SOUND[kind] || 'car'];
+    this.kind = kind;
+    const f = (S.base + rpm * S.span) * pitch;
+    const run = engineOn && S.vol > 0;
+    for (const { o, mul } of this.oscs) o.frequency.setTargetAtTime(Math.max(10, f * mul), t, 0.04);
+    this.lfo.frequency.setTargetAtTime(Math.max(5, f * 0.5), t, 0.04);
+    this.engAM.gain.setTargetAtTime(0.7 * (1 - S.lfo * 0.5), t, 0.1);
+    this.engFilter.frequency.setTargetAtTime(S.filt + rpm * S.filtSpan * (0.35 + throttle * 0.65) + (nitro ? 900 : 0), t, 0.05);
+    this.engGain.gain.setTargetAtTime(run ? (0.06 + throttle * 0.08 + rpm * 0.04) * S.vol : 0, t, 0.15);
+    // diesel knock at the firing frequency
+    const knock = run ? S.clatter * (0.6 + throttle * 0.8) : 0;
+    this.clatterLfo.frequency.setTargetAtTime(Math.max(4, f * 0.5), t, 0.05);
+    this.clatter.g.gain.setTargetAtTime(knock, t, 0.1);
+    this.clatterDepth.gain.setTargetAtTime(knock, t, 0.1);
+    // electric traction: whine rising with speed, rumble of the wheels
+    const el = engineOn && S.electric ? 1 : 0;
+    for (const { o, m } of this.whine) o.frequency.setTargetAtTime((90 + speed * 38) * m * (kind === 'metro' ? 1.4 : 1), t, 0.1);
+    this.whineGain.gain.setTargetAtTime(el * Math.min(0.05, 0.006 + speed * 0.0025), t, 0.2);
+    this.rumble.g.gain.setTargetAtTime(el * Math.min(0.18, speed * 0.008), t, 0.2);
+    // rail joints every 13 m: a double clack as each bogie passes
+    if (el && kind !== 'metro' && speed > 1.5) {
+      this.clackT -= 1 / 60;
+      if (this.clackT <= 0) {
+        this.clackT = 13 / speed;
+        const v = Math.min(0.25, 0.05 + speed * 0.008);
+        for (const d of [0, 0.11, 0.55 * Math.min(1, 8 / speed), 0.66 * Math.min(1, 8 / speed)]) this.burst(t + d, { type: 'lowpass', freq: 900, vol: v, dur: 0.06 });
+      }
+    }
+    // the rickshaw puller's bare feet on the road
+    if (kind === 'rickshaw' && speed > 0.3) {
+      this.stepT -= 1 / 60;
+      if (this.stepT <= 0) {
+        this.stepT = 0.85 / Math.max(0.6, speed * 0.55);
+        this.burst(t, { type: 'lowpass', freq: 320, vol: 0.12, dur: 0.07 });
+      }
+    }
+    this.screech.g.gain.setTargetAtTime(kind === 'rickshaw' || el ? 0 : skid * 0.12, t, 0.05);
     this.screech.f.frequency.setTargetAtTime(1700 + skid * 600, t, 0.1);
     this.wind.g.gain.setTargetAtTime(Math.min(1, speed / 70) * 0.12, t, 0.2);
   }
 
-  horn(on) {
+  /**
+   * Kolkata's streets: a traffic bed, horns in the distance, people talking, crows
+   * by day and water lapping near the river. Inputs are 0..1-ish densities.
+   */
+  ambient(dt, { traffic = 0, people = 0, river = 0, night = 0, underground = false }) {
     if (!this.ctx) return;
-    this.hornGain.gain.setTargetAtTime(on ? 0.09 : 0, this.ctx.currentTime, 0.02);
+    const t = this.ctx.currentTime;
+    const A = this.amb;
+    const out = underground ? 0.15 : 1;
+    this.trafficBed.g.gain.setTargetAtTime(Math.min(0.09, 0.012 + traffic * 0.012) * out, t, 0.5);
+    this.crowd.g.gain.setTargetAtTime(Math.min(0.05, people * 0.006) * out, t, 0.4);
+    this.river.g.gain.setTargetAtTime(river * 0.06 * out, t, 0.6);
+    A.modT -= dt;
+    if (A.modT <= 0) {
+      // let the murmur and the water wander
+      A.modT = 0.35;
+      this.crowd.f.frequency.setTargetAtTime(450 + Math.random() * 700, t, 0.2);
+      this.river.f.frequency.setTargetAtTime(280 + Math.random() * 300, t, 0.4);
+    }
+    // horns: Kolkata never stops honking
+    A.hornT -= dt;
+    if (A.hornT <= 0 && !underground) {
+      A.hornT = (0.6 + Math.random() * 2.6) / Math.max(0.4, Math.min(2, traffic * 0.25 + 0.4));
+      const kinds = [[420, 523], [392, 494], [277, 349, 415], [660, 784], [349, 440]];
+      const chord = kinds[Math.floor(Math.random() * kinds.length)];
+      const v = (0.008 + Math.random() * 0.02) * (1 - night * 0.5);
+      const pan = Math.random() * 2 - 1;
+      const n = Math.random() < 0.4 ? 2 : 1;
+      for (let k = 0; k < n; k++) for (const fr of chord) this.toneP(fr, 0.18 + Math.random() * 0.3, 'square', v, null, k * 0.32, pan, 1600);
+    }
+    // crows by day
+    A.crowT -= dt;
+    if (A.crowT <= 0) {
+      A.crowT = 6 + Math.random() * 16;
+      if (night < 0.4 && !underground) {
+        const pan = Math.random() * 2 - 1;
+        const caws = 2 + Math.floor(Math.random() * 3);
+        for (let k = 0; k < caws; k++) this.caw(k * 0.42, pan, 0.02 + Math.random() * 0.02);
+      }
+    }
+  }
+
+  /** One crow's "kaa". */
+  caw(delay, pan, vol) {
+    const ctx = this.ctx;
+    const t = ctx.currentTime + delay;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(760, t);
+    o.frequency.exponentialRampToValueAtTime(520, t + 0.28);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1300;
+    bp.Q.value = 3;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    const p = ctx.createStereoPanner();
+    p.pan.value = pan;
+    o.connect(bp).connect(g).connect(p).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.35);
+  }
+
+  /** A tone through a low-pass and a stereo panner (distant horns). */
+  toneP(freq, dur, type, vol, endFreq, delay, pan, cutoff) {
+    const ctx = this.ctx;
+    const t = ctx.currentTime + delay;
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = cutoff;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.015);
+    g.gain.setValueAtTime(vol, t + dur * 0.8);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    const p = ctx.createStereoPanner();
+    p.pan.value = pan;
+    o.connect(lp).connect(g).connect(p).connect(this.master);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+
+  /** The rickshaw-wallah's bell, knocked against the shaft. */
+  rickshawBell() {
+    [0, 0.16, 0.32].forEach((d) => {
+      this.tone(2650, 0.35, 'sine', 0.09, null, d);
+      this.tone(5300, 0.15, 'sine', 0.03, null, d);
+    });
+  }
+
+  /** The player's horn: a car horn, a bus's air horn, a bell on the rickshaw and tram, the train's horn. */
+  horn(on, kind = null) {
+    if (!this.ctx) return;
+    const S = SOUND[KIND_SOUND[kind] || 'car'];
+    const rising = on && !this.hornWas;
+    this.hornWas = on;
+    if (!S.horn) {
+      this.hornGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.02);
+      if (rising) {
+        if (kind === 'rickshaw') this.rickshawBell();
+        else if (kind === 'tram') this.tramBell(4);
+        else if (kind === 'metro') this.metroChime(4);
+        else this.trainHorn(4);
+      }
+      return;
+    }
+    if (rising) {
+      this.hornOscs.forEach((o, i) => {
+        o.type = S.hornType;
+        o.frequency.value = S.horn[i % S.horn.length];
+      });
+    }
+    this.hornGain.gain.setTargetAtTime(on ? (S.hornType === 'sawtooth' ? 0.07 : 0.09) : 0, this.ctx.currentTime, 0.02);
   }
 
   impact(strength) {
@@ -279,10 +493,15 @@ export class AudioEngine {
     this.muted = m;
     if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.8, this.ctx.currentTime, 0.05);
   }
+  /** Background music on or off (remembered between visits). */
+  setRadio(on) {
+    this.radioOn = on;
+    saveFlag('kol_music', on);
+    if (this.ctx) this.musicGain.gain.setTargetAtTime(on ? 0.22 : 0, this.ctx.currentTime, 0.3);
+    return on;
+  }
   toggleRadio() {
-    this.radioOn = !this.radioOn;
-    if (this.ctx) this.musicGain.gain.setTargetAtTime(this.radioOn ? 0.22 : 0, this.ctx.currentTime, 0.3);
-    return this.radioOn;
+    return this.setRadio(!this.radioOn);
   }
 
   /* ---------- Procedural synthwave radio ---------- */
@@ -315,6 +534,10 @@ export class AudioEngine {
 
   schedule() {
     const ctx = this.ctx;
+    if (!this.radioOn) {
+      this.nextTime = Math.max(this.nextTime, ctx.currentTime + 0.05);
+      return;
+    }
     while (this.nextTime < ctx.currentTime + 0.12) {
       this.playStep(this.step, this.nextTime);
       this.nextTime += this.stepDur;

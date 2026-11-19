@@ -1,87 +1,11 @@
 import * as THREE from 'three';
 import { Character, randomLook } from './character.js';
-import { COAST_X, SHORE_X, HALF } from './world.js';
+import { LINES } from './lines.js';
 import { clamp, damp, dampAngle } from './utils.js';
 import { buildWeaponMesh, WEAPONS } from './weapons.js';
 
-export const LINES = {
-  greet: ['Hey there, sunshine!', 'Nice shirt, man.', 'Lookin’ sharp!', 'What’s up?', 'Beautiful night, huh?', 'Hey! Love the shades.', 'Totally radical!'],
-  talk: [
-    'Heard the Ferris wheel lights up like a disco at night.',
-    'This town never sleeps, and neither do I.',
-    'I’m saving up for a convertible. Pink, obviously.',
-    'Don’t drive on the pier too fast. Trust me.',
-    'You look like you’re from out of town.',
-    'Someone’s been drifting on Ocean Drive again.',
-    'They say the best sunsets are from the beach.',
-    'My cousin runs time trials. Says the record is unbeatable.',
-    'Have you tried the radio? Pure synth heaven.',
-    'Is it just me or is everything neon here?',
-  ],
-  tip: ['Here, buy yourself something nice.', 'Take this, you made my day!', 'You seem cool. Have a few bucks.'],
-  playerTalk: ['Hey, how’s it going?', 'Nice evening, right?', 'What’s good around here?', 'Love this city.', 'You come here often?'],
-  flee: ['Aaah!', 'Somebody help!', 'Are you crazy?!', 'Get away from me!', 'Call the cops!'],
-  hijack: ['Hey! That’s my car!', 'Not my ride!', 'I just washed that!', 'Unbelievable!'],
-  honk: ['Watch it!', 'Learn to drive!', 'Whoa, buddy!', 'Hey, careful!'],
-  punch: ['Ow!', 'What was that for?!', 'Ugh!'],
-  fight: ['You want some?!', 'Big mistake, pal!', 'Come on then!', 'Oh, it’s ON!', 'You picked the wrong guy!'],
-  draw: ['Back off!', 'I’m armed, buddy!', 'You’re gonna regret that!', 'Eat lead!'],
-  calm: ['Yeah, keep walking!', 'That’s what I thought.', 'Hmph.'],
-  dance: ['Ooh, I love this one!', 'Let’s go!', 'Party time!', 'Yeah!'],
-  wave: ['Hey!', 'Hi there!', 'Yo!', 'Heyyy!'],
-  cheer: ['Woo!', 'Yeah, baby!', 'Alright!'],
-  flex: ['Okay, Mr. Muscles.', 'Impressive!', 'Wow, gym much?'],
-};
+export { LINES };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
-
-/* ---------- Walking paths ---------- */
-function rectPath(b) {
-  const d = 2.4;
-  const x0 = b.x0 + d;
-  const x1 = b.x1 - d;
-  const z0 = b.z0 + d;
-  const z1 = b.z1 - d;
-  const L = x1 - x0;
-  const D = z1 - z0;
-  return {
-    len: 2 * (L + D),
-    at(s, out) {
-      s = ((s % this.len) + this.len) % this.len;
-      if (s < L) out.set(x0 + s, z0);
-      else if (s < L + D) out.set(x1, z0 + s - L);
-      else if (s < 2 * L + D) out.set(x1 - (s - L - D), z1);
-      else out.set(x0, z1 - (s - 2 * L - D));
-      return out;
-    },
-    nearest(x, z) {
-      const cx = clamp(x, x0, x1);
-      const cz = clamp(z, z0, z1);
-      const opts = [
-        [Math.abs(z - z0), cx - x0],
-        [Math.abs(x - x1), L + (cz - z0)],
-        [Math.abs(z - z1), L + D + (x1 - cx)],
-        [Math.abs(x - x0), 2 * L + D + (z1 - cz)],
-      ];
-      opts.sort((a, b) => a[0] - b[0]);
-      return opts[0][1];
-    },
-  };
-}
-function beachPath() {
-  const x = COAST_X + 6 + Math.random() * (SHORE_X - COAST_X - 12);
-  const z0 = -HALF;
-  const len = HALF * 2;
-  return {
-    len: len * 2,
-    at(s, out) {
-      s = ((s % this.len) + this.len) % this.len;
-      return out.set(x, s < len ? z0 + s : z0 + 2 * len - s);
-    },
-    nearest(px, pz) {
-      return clamp(pz - z0, 0, len);
-    },
-  };
-}
 
 /* =========================================================
    Pedestrians
@@ -94,7 +18,6 @@ export class Peds {
     this.audio = audio;
     this.list = [];
     this.tmp = new THREE.Vector2();
-    this.paths = world.blocks.map((b) => ({ path: rectPath(b), cx: b.cx, cz: b.cz }));
     for (let i = 0; i < count; i++) {
       const ch = new Character(scene, randomLook());
       const n = { ch, x: 0, z: 0, y: 0, yaw: 0, state: 'walk', timer: 0, vx: 0, vz: 0, speed: 1.3, dir: 1, s: 0, path: null, frame: i, hp: 100, gun: null };
@@ -108,17 +31,10 @@ export class Peds {
   }
 
   respawn(n, focus, minD = 50, maxD = 150) {
-    let p = null;
-    for (let tries = 0; tries < 30 && !p; tries++) {
-      if (Math.random() < 0.18 && focus.x > COAST_X - 150) {
-        p = beachPath();
-        break;
-      }
-      const c = this.paths[Math.floor(Math.random() * this.paths.length)];
-      const d = Math.hypot(c.cx - focus.x, c.cz - focus.z);
-      if (d >= minD && d <= maxD) p = c.path;
-    }
-    if (!p) p = this.paths[Math.floor(Math.random() * this.paths.length)].path;
+    // A pavement or footpath at the right distance from the player
+    let near = this.world.pathsNear(focus.x, focus.z, minD, maxD);
+    if (!near.length) near = this.world.pathsNear(focus.x, focus.z, 0, 600);
+    const p = near.length ? near[Math.floor(Math.random() * near.length)] : this.world.walkPaths[Math.floor(Math.random() * this.world.walkPaths.length)];
     n.path = p;
     n.s = Math.random() * p.len;
     n.dir = Math.random() < 0.5 ? 1 : -1;
@@ -323,8 +239,8 @@ export class Peds {
     far.ch.hold = null;
     far.ch.mesh.visible = true;
     if (far.gun) far.gun.visible = false;
-    const p = this.paths.reduce((a, b) => (Math.hypot(b.cx - x, b.cz - z) < Math.hypot(a.cx - x, a.cz - z) ? b : a));
-    far.path = p.path;
+    const near = this.world.pathsNear(x, z, 0, 200);
+    far.path = near.length ? near.reduce((a, b) => (Math.hypot(b.cx - x, b.cz - z) < Math.hypot(a.cx - x, a.cz - z) ? b : a)) : far.path;
     this.knock(far, Math.cos(yaw) * 3, -Math.sin(yaw) * 3, pick(LINES.hijack));
     far.timer = 1.4;
     return far;

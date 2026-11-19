@@ -28,7 +28,7 @@ function edgeDist(px, pz, cx, cz, yaw, hl, hw) {
 
 /**
  * The player: an on-foot character who can fight, shoot and get into any vehicle.
- * mode: foot | entering | driving | exiting
+ * mode: foot | entering | driving | exiting | riding (a passenger; see ride.js)
  */
 export class Player {
   constructor(scene, world, game) {
@@ -73,8 +73,46 @@ export class Player {
   get focus() {
     return this.vehicle && this.mode !== 'foot' ? this.vehicle.pos : this.pos;
   }
+  /** In a vehicle, at the wheel or as a passenger (camera, HUD, sound follow it). */
   get driving() {
-    return this.mode === 'driving';
+    return this.mode === 'driving' || this.mode === 'riding';
+  }
+  get passenger() {
+    return this.mode === 'riding';
+  }
+
+  /** Sit in a vehicle as a passenger. */
+  board(v) {
+    this.vehicle = v;
+    this.mode = 'riding';
+    this.aiming = false;
+    this.ch.stopEmote();
+    this.ch.hold = null;
+    this.arsenal.hideAll();
+    this.ch.mode = 'sit';
+    this.game.onEnterVehicle(v, true);
+  }
+  /** Step off onto the ground at (x, z). */
+  unboard(x, z) {
+    const v = this.vehicle;
+    this.vehicle = null;
+    this.mode = 'foot';
+    this.ch.mode = 'move';
+    this.vy = 0;
+    this.pos.set(x, this.world.groundAt(x, z, this.pos.y - 0.5), z);
+    if (v) this.yaw = v.yaw;
+    this.ch.mesh.rotation.set(0, this.yaw, 0);
+    this.game.onExitVehicle(v);
+  }
+  /** Keep the seated passenger at a world position. */
+  seatAt(x, y, z, yaw, T, dt) {
+    this.pos.set(x, y, z);
+    this.yaw = yaw;
+    this.ch.mode = 'sit';
+    this.ch.speed = 0;
+    this.ch.mesh.position.copy(this.pos);
+    this.ch.mesh.rotation.set(0, yaw, 0);
+    this.ch.update(dt, T);
   }
   get scoped() {
     return this.aiming && !!this.arsenal.def.scope;
@@ -208,7 +246,7 @@ export class Player {
     if (v.boat) {
       const spot = v.speed < 4 ? v.landingSpot() : null;
       if (!spot) {
-        this.game.hud.notify('NOWHERE TO STEP OFF', 'Slow down next to the pier or the beach', '#ffd36b');
+        this.game.hud.notify('NOWHERE TO STEP OFF', 'Slow down beside a ghat jetty or the bank', '#ffd36b');
         return;
       }
       v.setDriven(false);
@@ -243,6 +281,10 @@ export class Player {
       this.ch.mesh.position.copy(this.pos);
       this.ch.update(dt, T);
       if (this.deadT <= 0) g.respawnPlayer();
+      return;
+    }
+    if (this.mode === 'riding') {
+      g.rides.update(dt, T, input);
       return;
     }
     if (this.mode === 'driving') {
@@ -492,18 +534,32 @@ export class Player {
     // Interactions
     const nearCar = this.findVehicle();
     const nearPed = this.underground ? null : g.peds.nearest(this.pos.x, this.pos.z, 3.2, (n) => n.state !== 'down' && n.state !== 'dead' && n.state !== 'fight' && n.state !== 'shoot');
+    // Stalls and ticket windows (Howrah Station) come before chatting
+    const spot = !this.underground && g.station ? g.station.near(this.pos) : null;
+    // V: ride as a passenger (hire a taxi, auto or rickshaw; board a bus, train, tram, metro or ferry)
+    const ride = !this.aiming && g.rides ? g.rides.offer(this) : null;
     if (nearCar && !this.aiming) {
       let text;
       if (nearCar.v && nearCar.v.rail) text = `Drive ${nearCar.v.label}`;
-      else if (nearCar.v) text = `Enter ${nearCar.v.label}`;
+      else if (nearCar.v) text = `Drive ${nearCar.v.label}`;
       else text = `Steal ${TYPES[nearCar.traffic.type].label}`;
-      this.prompt = { key: 'F', text };
+      this.prompt = ride ? { key: 'F', text, key2: 'V', text2: ride.text } : { key: 'F', text };
+    } else if (ride) {
+      this.prompt = { key: 'V', text: ride.text };
+    } else if (spot) {
+      this.prompt = { key: 'E', text: spot.text };
     } else if (nearPed && !gun) {
       this.prompt = { key: 'E', text: 'Talk', key2: 'G', text2: 'Gesture' };
+    }
+    if (input.hit('KeyV') && ride) {
+      ride.act();
+      return;
     }
     if (input.hit('KeyF') && nearCar && !this.aiming) {
       this.enter(nearCar);
       return;
+    } else if (input.hit('KeyE') && spot) {
+      spot.act();
     } else if (input.hit('KeyE') && nearPed && !gun) {
       this.talkTo(nearPed);
     }

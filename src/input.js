@@ -15,6 +15,8 @@ export class Input {
     this.wheelSteps = 0;
 
     addEventListener('keydown', (e) => {
+      // typing in a text box (the map search) isn't game input
+      if (e.target && e.target.tagName === 'INPUT') return;
       if (e.code === 'Tab') e.preventDefault();
       if (e.code === 'KeyG' && this.wheelOpen) e.preventDefault();
       if (!this.keys.has(e.code)) this.pressed.add(e.code);

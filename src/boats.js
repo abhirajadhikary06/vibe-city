@@ -1,16 +1,18 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Vehicle, crashDamage } from './car.js';
-import { SHORE_X, PIER } from './world.js';
-import { merge, paint, clamp, damp } from './utils.js';
+import { WATER_Y, BOUNDS } from './world.js';
+import { MAP, inPoly, nearestOnRing, polygon, Poly } from './geo.js';
+import { merge, paint, clamp, damp, wrapAngle } from './utils.js';
 
 /*
- * Boats: jet ski, speedboat, yacht and harbour ferry. They reuse Vehicle's
- * damage model (smoke, fire, explosion) but float, plane and slide on the
- * ocean east of the beach, and can't cross onto land or through the pier.
+ * Boats on the Hooghly: ferry launches on the real routes between the ghats,
+ * wooden country boats, a speedboat and a jet ski. They reuse Vehicle's damage
+ * model (smoke, fire, explosion) but float, plane and slide on the river, and
+ * can't cross the banks, the jetties or Howrah Bridge's piers.
  */
 
-export const WATER_Y = -0.6;
+export { WATER_Y };
 const IDLE = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false };
 
 const base = (o) => {
@@ -25,6 +27,8 @@ export const BOATS = {
   jetski: base({ label: 'Jet Ski', L: 3.2, B: 1.15, keel: 0.32, free: 0.45, bow: 0.25, h: 1.0, top: 30, accel: 15, turn: 2.3, grip: 2.2, drag: 0.012, mass: 0.5, seatZ: -0.3, seatY: -0.15, lean: true, camDist: -1.4, camH: -0.4, lift: 0.07, hp: 60, engine: 1.5 }),
   speedboat: base({ label: 'Speedboat', L: 7, B: 2.5, keel: 0.55, free: 0.85, bow: 0.35, h: 1.8, top: 32, accel: 9.5, turn: 1.35, grip: 2.6, drag: 0.009, mass: 1.6, seatX: 0.45, seatZ: -0.3, seatY: 0.4, camDist: 2.5, camH: 0.8, lift: 0.09, hp: 120, engine: 1.0 }),
   yacht: base({ label: 'Yacht', L: 16, B: 4.8, keel: 1.2, free: 1.6, bow: 0.8, h: 6, top: 16, accel: 3.2, turn: 0.55, grip: 3.5, drag: 0.02, mass: 8, seatX: 0.6, seatZ: 2.4, seatY: 1.8, camDist: 11, camH: 3.5, lift: 0.035, hp: 420, engine: 0.55 }),
+  launch: base({ label: 'Ganga Ferry Launch', L: 24, B: 6, keel: 1.3, free: 1.3, bow: 0.6, h: 7, top: 9, accel: 1.6, turn: 0.42, grip: 4, drag: 0.035, mass: 18, seatZ: 8.6, seatY: 3.8, camDist: 22, camH: 7, lift: 0.01, hp: 700, engine: 0.4 }),
+  nouka: base({ label: 'Country Boat (Nouka)', L: 9, B: 2.2, keel: 0.5, free: 0.6, bow: 0.9, h: 2.2, top: 6.5, accel: 2.2, turn: 0.75, grip: 3, drag: 0.05, mass: 1.2, seatZ: -3.4, seatY: 0.45, camDist: 4, camH: 1, lift: 0.02, hp: 150, engine: 0.3 }),
   ferry: base({ label: 'Harbor Ferry', L: 34, B: 9, keel: 2.0, free: 2.4, bow: 1.2, h: 10, top: 11, accel: 1.5, turn: 0.32, grip: 4, drag: 0.04, mass: 30, seatZ: 9.6, seatY: 7.6, camDist: 30, camH: 10, lift: 0.01, hp: 900, engine: 0.35 }),
 };
 
@@ -102,6 +106,41 @@ function railing(parts, hw, y, z0, z1) {
 }
 
 const MODELS = {
+  /** Kolkata's river launch: an open lower deck under a roof, a smaller upper deck and wheelhouse. */
+  launch(color) {
+    const d = BOATS.launch;
+    const f = d.free;
+    const parts = [hull(d.L, d.B, d.keel, f, d.bow, { hull: WHITE, bottom: '#6e1a1e', stripe: color, deck: '#7d6a55' })];
+    for (const s of [1, -1]) {
+      for (let z = -10; z <= 8; z += 2.25) parts.push(box(0.12, 2.3, 0.12, s * 2.75, f + 1.15, z, '#e8e8e4'));
+      parts.push(box(0.06, 0.9, 18.5, s * 2.78, f + 0.45, -1, color));
+    }
+    parts.push(box(5.9, 0.2, 19.5, 0, f + 2.4, -1, '#f2f2ee')); // lower roof = upper deck
+    for (let z = -9; z <= 6; z += 2.2) parts.push(box(4.6, 0.45, 0.6, 0, f + 0.45, z, '#5a4636')); // benches
+    for (const s of [1, -1]) for (let z = -8; z <= 2; z += 2.5) parts.push(box(0.1, 1.9, 0.1, s * 2.5, f + 3.4, z, '#e8e8e4'));
+    parts.push(box(5.2, 0.16, 12, 0, f + 4.4, -3, color)); // upper roof
+    parts.push(rbox(3.2, 1.9, 2.8, 0, f + 3.4, 4.6, WHITE, 0.15)); // wheelhouse
+    parts.push(rbox(3.25, 0.7, 2.85, 0, f + 3.7, 4.6, GLASS, 0.1));
+    railing(parts, 2.75, f + 2.5, -10.5, 8.5);
+    parts.push(cyl(0.3, 0.3, 2.2, 0, f + 5.4, -9, '#202020', 8)); // exhaust
+    return { parts, nav: [[1.7, f + 4.6, 5.8]], name: true };
+  },
+  /** Wooden country boat with upswept ends and a bamboo-matting canopy. */
+  nouka(color) {
+    const d = BOATS.nouka;
+    const f = d.free;
+    const parts = [hull(d.L, d.B, d.keel, f, d.bow, { hull: '#6b4a2e', bottom: '#2c2219', stripe: color, deck: '#8a6a48' })];
+    // raised stern
+    parts.push(box(0.5, 0.9, 0.8, 0, f + 0.35, -d.L / 2 + 0.3, '#6b4a2e'));
+    // chhoi: half-cylinder canopy of woven bamboo
+    const canopy = new THREE.CylinderGeometry(1.0, 1.0, 3.2, 14, 1, true, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2);
+    canopy.rotateY(Math.PI / 2).translate(0, f + 0.15, -0.2);
+    canopy.deleteAttribute('uv');
+    parts.push(paint(canopy, '#b38b4a'));
+    parts.push(box(0.06, 2.4, 0.06, 0, f + 1.2, 2.6, '#4a3626')); // mast
+    parts.push(box(0.08, 0.08, 3.4, 0.5, f + 0.8, -d.L / 2 - 1.0, '#4a3626')); // steering oar
+    return { parts, nav: [[0.5, f + 0.3, 3.5]] };
+  },
   jetski(color) {
     const d = BOATS.jetski;
     const parts = [hull(d.L, d.B, d.keel, d.free, d.bow, { hull: color, bottom: '#1b1d22', stripe: WHITE, deck: '#2a2c30' })];
@@ -257,39 +296,98 @@ export class Boat extends Vehicle {
     this.sinking = true;
   }
 
-  /** Circle vs the beach line, the pier and the edge of the map. */
+  /** Circle vs the river banks, jetties, bridge piers and the ends of the mapped river. */
   collideShore(x, z, r) {
+    const W = this.world;
+    const river = W.river;
     let px = 0;
     let pz = 0;
-    const land = SHORE_X + 2.5;
-    if (x - r < land) px += land - (x - r);
-    const far = SHORE_X + 1400;
-    if (x + r > far) px -= x + r - far;
-    if (Math.abs(z) + r > 1400) pz -= Math.sign(z) * (Math.abs(z) + r - 1400);
-    const P = PIER;
-    for (const [x0, x1, z0, z1] of [[P.x0, P.plat0, -P.hw, P.hw], [P.plat0, P.plat1, -P.phw, P.phw]]) {
-      const cx = x + px;
-      const cz = z + pz;
-      const qx = clamp(cx, x0, x1);
-      const qz = clamp(cz, z0, z1);
-      const dx = cx - qx;
-      const dz = cz - qz;
-      const d = Math.hypot(dx, dz);
-      if (d >= r) continue;
-      if (d > 1e-6) {
-        px += (dx / d) * (r - d);
-        pz += (dz / d) * (r - d);
-      } else pz += (cz > 0 ? z1 - cz : z0 - cz) + Math.sign(cz || 1) * r;
+    if (river) {
+      const q = nearestOnRing(river, x, z, this._q || (this._q = {}));
+      const inside = inPoly(river, x, z);
+      if (!inside || q.d < r) {
+        const d = q.d || 1e-6;
+        // outside: back across the bank and r further in; inside but too close: out to r
+        const k = inside ? r - d : -(d + r);
+        px += ((x - q.x) / d) * k;
+        pz += ((z - q.z) / d) * k;
+      }
     }
-    if (!px && !pz) return null;
+    const cx = x + px;
+    const cz = z + pz;
+    for (const o of W.boatObstacles || []) {
+      const dx = cx - o.x;
+      const dz = cz - o.z;
+      const d = Math.hypot(dx, dz);
+      const rr = r + o.r;
+      if (d < rr && d > 1e-6) {
+        px += (dx / d) * (rr - d);
+        pz += (dz / d) * (rr - d);
+      }
+    }
+    for (const p of W.jetties || []) {
+      const ex = x + px;
+      const ez = z + pz;
+      if (ex < p.x0 - r || ex > p.x1 + r || ez < p.z0 - r || ez > p.z1 + r) continue;
+      const q = nearestOnRing(p, ex, ez, {});
+      const inside = inPoly(p, ex, ez);
+      if (!inside && q.d >= r) continue;
+      const d = q.d || 1e-6;
+      const k = inside ? -(d + r) : r - d;
+      px += ((ex - q.x) / d) * k;
+      pz += ((ez - q.z) / d) * k;
+    }
+    // the river runs on past the mapped area: keep boats near it
+    const fx = x + px;
+    const fz = z + pz;
+    const m = 900;
+    const qx = clamp(fx, BOUNDS.x0 - m, BOUNDS.x1 + m);
+    const qz = clamp(fz, BOUNDS.z0 - m, BOUNDS.z1 + m);
+    px += qx - fx;
+    pz += qz - fz;
+    if (Math.abs(px) < 1e-6 && Math.abs(pz) < 1e-6) return null;
     const l = Math.hypot(px, pz);
     return { px, pz, nx: px / l, nz: pz / l };
+  }
+
+  /** Ferry autopilot: steer for the next point of the route, dock and wait at each end. */
+  autopilot(dt) {
+    const R = this.route;
+    const inp = this._ai || (this._ai = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false });
+    if (R.wait > 0) {
+      R.wait -= dt;
+      inp.throttle = 0;
+      inp.brake = this.vf > 0.3 ? 0.6 : 0;
+      inp.steer = 0;
+      return inp;
+    }
+    const pts = R.pts;
+    const [tx, tz] = pts[R.i];
+    const dx = tx - this.pos.x;
+    const dz = tz - this.pos.z;
+    const dist = Math.hypot(dx, dz);
+    const last = R.i === (R.dir > 0 ? pts.length - 1 : 0);
+    if (dist < (last ? 4 : 14)) {
+      if (last) {
+        R.wait = 14 + Math.random() * 8;
+        R.dir *= -1;
+      }
+      R.i = clamp(R.i + R.dir, 0, pts.length - 1);
+      return inp;
+    }
+    const err = wrapAngle(Math.atan2(dx, dz) - this.yaw);
+    inp.steer = clamp(-err * 2.2, -1, 1);
+    const slow = last ? clamp(dist / 50, 0.12, 0.7) : 0.75;
+    inp.throttle = Math.abs(err) > 1.2 ? 0.2 : slow;
+    inp.brake = last && dist < 20 && this.vf > 3 ? 0.5 : 0;
+    return inp;
   }
 
   update(dt, inp, night) {
     const d = this.def;
     if (this.fuse > 0 || this.burnT > 0 || this.hp < d.hp * 0.45) this.updateDamage(dt);
-    if (!this.driven || this.wrecked) inp = IDLE;
+    if (this.route && !this.driven && !this.wrecked) inp = this.autopilot(dt);
+    else if (!this.driven || this.wrecked) inp = IDLE;
     this.t += dt;
     const fx = Math.sin(this.yaw);
     const fz = Math.cos(this.yaw);
@@ -305,7 +403,7 @@ export class Boat extends Vehicle {
     vf = clamp(vf, -d.top * 0.3, d.top);
     vl *= Math.exp(-d.grip * dt);
     this.braking = br > 0 && vf > 0.5;
-    this.steer = damp(this.steer, (this.locked ? 0 : inp.steer) * 1, 4, dt);
+    this.steer = damp(this.steer, (this.locked ? 0 : inp.steer) * 1, this.driven ? 2.2 : 4, dt);
     const rudder = clamp(Math.abs(vf) / 5, 0.25, 1) * (vf < -0.3 ? -1 : 1);
     this.angVel = damp(this.angVel, -this.steer * d.turn * rudder, 2.5 / Math.max(1, Math.sqrt(d.mass) * 0.6), dt);
     this.yaw += this.angVel * dt;
@@ -331,7 +429,8 @@ export class Boat extends Vehicle {
         if (-vn > 5) this.fx.foam(this.pos.x + nfx * off, WATER_Y + 0.2, this.pos.z + nfz * off, 0, 0, 2, 3);
       }
     }
-    crashDamage(this, this.impact);
+    // A ferry on its rounds doesn't wreck itself nudging the jetty
+    if (!this.route || this.driven) crashDamage(this, this.impact);
 
     this.vf = vf;
     this.vl = vl;
@@ -382,29 +481,141 @@ export class Boat extends Vehicle {
   }
 }
 
-/* ---------- Scenery: a container ship sailing up and down the horizon ---------- */
-export class Freighter {
-  constructor(scene) {
-    const parts = [hull(150, 24, 9, 6, 3, { hull: '#1f3550', bottom: '#7a1c22', stripe: '#f4f4f0', deck: '#5a5f66' })];
-    const cols = ['#c0392b', '#2e86c1', '#f39c12', '#27ae60', '#8e44ad', '#d35400', '#7f8c8d', '#16a085'];
-    for (let z = -55; z <= 50; z += 6.4) {
-      for (let x = -9; x <= 9; x += 2.6) {
-        const h = 2 + Math.floor(Math.abs(Math.sin(x * 3.1 + z * 7.7)) * 4);
-        for (let k = 0; k < h; k++) parts.push(box(2.45, 2.5, 6.1, x, 6 + 1.3 + k * 2.6, z, cols[Math.floor(Math.abs(Math.sin(x * 12.9 + z * 4.1 + k)) * cols.length) % cols.length]));
+/* ---------- Ghats: floating pontoon jetties where the ferry routes meet the banks ---------- */
+export function buildGhats(world, scene) {
+  const river = world.river;
+  const docks = [];
+  if (!river) return docks;
+  world.jetties = [];
+  const parts = [];
+  for (const f of MAP.ferries) {
+    const pts = [];
+    for (let i = 0; i < f.p.length; i += 2) pts.push([f.p[i], f.p[i + 1]]);
+    if (pts.length < 2) continue;
+    const route = { pts: [], name: f.name };
+    const ends = [];
+    for (const rev of [false, true]) {
+      const list = rev ? [...pts].reverse() : pts;
+      // walk in from this end until we're on the water
+      const P = new Poly(list.flat());
+      const q = {};
+      let s = 0;
+      while (s < P.len && !inPoly(river, P.at(s, q).x, q.z)) s += 1;
+      if (s >= P.len) break;
+      P.at(s, q);
+      const ux = q.tx;
+      const uz = q.tz;
+      const bx = q.x;
+      const bz = q.z;
+      const L = 20;
+      const hw = 3.6;
+      const ring = [];
+      for (const [a, b] of [[-5, -hw], [L, -hw], [L, hw], [-5, hw]]) ring.push(bx + ux * a - uz * b, bz + uz * a + ux * b);
+      const p = polygon(ring);
+      world.addPad(ring, 0.3);
+      world.addOpening(p);
+      world.jetties.push(polygon([...[[0, -hw - 0.3], [L + 0.4, -hw - 0.3], [L + 0.4, hw + 0.3], [0, hw + 0.3]].flatMap(([a, b]) => [bx + ux * a - uz * b, bz + uz * a + ux * b])]));
+      // railings along the long sides, open at the river end
+      for (const sd of [-1, 1]) {
+        const ax = bx - uz * hw * sd;
+        const az = bz + ux * hw * sd;
+        world.addWall(ax, az, ax + ux * (L - 3), az + uz * (L - 3), 0.15);
       }
+      const yaw = Math.atan2(ux, uz);
+      const mid = [bx + ux * (L - 5) / 2, bz + uz * (L - 5) / 2];
+      parts.push(box(hw * 2, 1.1, L + 5, 0, -0.25, 0, '#3c4044').rotateY(yaw).translate(mid[0], 0, mid[1]));
+      for (const sd of [-1, 1]) {
+        parts.push(box(0.06, 0.06, L - 3, sd * hw, 1.25, -(L + 5) / 2 + (L - 3) / 2 + 5, '#d8d8d0').rotateY(yaw).translate(mid[0], 0, mid[1]));
+        for (let k = 0; k < L - 3; k += 2) parts.push(box(0.06, 1.0, 0.06, sd * hw, 0.8, -(L + 5) / 2 + 5 + k, '#d8d8d0').rotateY(yaw).translate(mid[0], 0, mid[1]));
+      }
+      // tin-roofed ticket shed at the landward end
+      parts.push(box(hw * 2 + 1, 0.15, 6, 0, 3.2, -(L + 5) / 2 + 3, '#8a3a2c').rotateY(yaw).translate(mid[0], 0, mid[1]));
+      for (const [sx, sz] of [[-1, 0], [1, 0], [-1, 5.6], [1, 5.6]]) parts.push(box(0.12, 2.9, 0.12, sx * (hw + 0.3), 1.75, -(L + 5) / 2 + 0.2 + sz, '#2a2b2e').rotateY(yaw).translate(mid[0], 0, mid[1]));
+      ends.push({ x: bx, z: bz, ux, uz, dock: [bx + ux * (L + 14), bz + uz * (L + 14)], yaw });
+      void p;
     }
-    parts.push(rbox(20, 12, 10, 0, 12, -66, '#f4f4f0', 0.4), rbox(20.2, 1.4, 10.2, 0, 15.5, -66, GLASS, 0.2), cyl(2.5, 2.5, 8, 0, 21, -70, '#1f3550'));
-    this.mesh = new THREE.Mesh(merge(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }));
-    this.mesh.castShadow = false;
-    scene.add(this.mesh);
-    this.z = -1600;
-    this.dir = 1;
+    if (ends.length < 2) continue;
+    // Route: dock A, the mapped line across, dock B
+    route.pts.push(ends[0].dock);
+    for (const pt of pts.slice(1, -1)) if (inPoly(river, pt[0], pt[1])) route.pts.push(pt);
+    route.pts.push(ends[1].dock);
+    route.ends = ends;
+    docks.push(route);
+  }
+  if (parts.length) {
+    const m = new THREE.Mesh(merge(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
+    m.castShadow = true;
+    m.receiveShadow = true;
+    scene.add(m);
+  }
+  return docks;
+}
+
+/** A line down the middle of the mapped river, for scenery traffic. */
+function riverCentreline(river) {
+  const pts = [];
+  for (let z = BOUNDS.z0 - 800; z <= BOUNDS.z1 + 800; z += 30) {
+    const xs = [];
+    for (let i = 0, j = river.n - 1; i < river.n; j = i++) {
+      const az = river.zs[j];
+      const bz = river.zs[i];
+      if (az > z === bz > z) continue;
+      xs.push(river.xs[j] + ((z - az) / (bz - az)) * (river.xs[i] - river.xs[j]));
+    }
+    if (xs.length < 2) continue;
+    xs.sort((a, b) => a - b);
+    pts.push((xs[0] + xs[xs.length - 1]) / 2, z);
+  }
+  return pts.length > 4 ? new Poly(pts) : null;
+}
+
+/* ---------- Scenery: a river cruise steamer and a cargo barge working up and down the Hooghly ---------- */
+export class RiverTraffic {
+  constructor(scene, world) {
+    this.line = world.river ? riverCentreline(world.river) : null;
+    this.ships = [];
+    if (!this.line) return;
+    const steamer = [hull(46, 10, 2.2, 2.2, 1.2, { hull: '#f4f4f0', bottom: '#6e1a1e', stripe: '#1f4f8a', deck: '#8b7356' })];
+    steamer.push(rbox(9.4, 3, 30, 0, 3.7, -2, '#f4f4f0', 0.3), rbox(9.45, 1.1, 29.4, 0, 3.9, -2, GLASS, 0.15));
+    steamer.push(rbox(8.6, 2.6, 22, 0, 6.5, -3, '#f4f4f0', 0.3), rbox(8.65, 1.0, 21.4, 0, 6.7, -3, GLASS, 0.15));
+    steamer.push(box(9, 0.2, 24, 0, 8.0, -3, '#1f4f8a'), rbox(5, 2, 4, 0, 9.1, 7, '#f4f4f0', 0.2), cyl(1.1, 1.3, 4, 0, 10, -10, '#1f4f8a', 14));
+    const barge = [hull(60, 11, 2.6, 1.6, 0.8, { hull: '#3a3d33', bottom: '#6e1a1e', stripe: '#c9a43a', deck: '#4b4a44' })];
+    for (let z = -22; z <= 14; z += 9) barge.push(box(9, 2.4, 7.6, 0, 2.6, z, ['#a8432f', '#2e6b8a', '#c9a43a', '#5a7a3a'][Math.abs(z) % 4]));
+    barge.push(rbox(8, 5, 6, 0, 4.2, -26, '#e8e2d4', 0.2), rbox(8.05, 1, 6.05, 0, 5.6, -26, GLASS, 0.1));
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide });
+    for (const [parts, s, v] of [[steamer, 0.3, 4.5], [barge, 0.7, 3]]) {
+      const mesh = new THREE.Mesh(merge(parts), mat);
+      mesh.castShadow = true;
+      scene.add(mesh);
+      this.ships.push({ mesh, s: this.line.len * s, v, dir: s < 0.5 ? 1 : -1 });
+    }
+    // Ships are obstacles for the player's boats
+    world.boatObstacles = world.boatObstacles || [];
+    for (const sh of this.ships) {
+      sh.obs = [-18, 0, 18].map((off) => ({ x: 0, z: 0, r: 6.5, off }));
+      world.boatObstacles.push(...sh.obs);
+    }
   }
   update(dt, t) {
-    this.z += this.dir * 7 * dt;
-    if (Math.abs(this.z) > 1700) this.dir *= -1;
-    this.mesh.position.set(SHORE_X + 1100, WATER_Y + Math.sin(t * 0.4) * 0.15, this.z);
-    this.mesh.rotation.y = this.dir > 0 ? 0 : Math.PI;
-    this.mesh.rotation.z = Math.sin(t * 0.3) * 0.01;
+    const q = {};
+    for (const sh of this.ships) {
+      sh.s += sh.dir * sh.v * dt;
+      if (sh.s < 60 || sh.s > this.line.len - 60) {
+        sh.dir *= -1;
+        sh.s = clamp(sh.s, 60, this.line.len - 60);
+      }
+      this.line.at(sh.s, q);
+      // keep to the east half going one way, the west going the other
+      const off = sh.dir * 45;
+      sh.mesh.position.set(q.x + q.tz * off, WATER_Y + Math.sin(t * 0.4 + sh.s) * 0.08, q.z - q.tx * off);
+      sh.mesh.rotation.y = Math.atan2(q.tx * sh.dir, q.tz * sh.dir);
+      sh.mesh.rotation.z = Math.sin(t * 0.3) * 0.008;
+      const fx = Math.sin(sh.mesh.rotation.y);
+      const fz = Math.cos(sh.mesh.rotation.y);
+      for (const o of sh.obs) {
+        o.x = sh.mesh.position.x + fx * o.off;
+        o.z = sh.mesh.position.z + fz * o.off;
+      }
+    }
   }
 }
