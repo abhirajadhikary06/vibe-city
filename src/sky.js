@@ -80,6 +80,10 @@ function hexTexture() {
   return t;
 }
 
+const _r = new THREE.Vector3();
+const _u = new THREE.Vector3();
+const _f = new THREE.Vector3();
+
 export class DayCycle {
   constructor(scene, renderer) {
     this.scene = scene;
@@ -240,9 +244,23 @@ export class DayCycle {
       sun.color.copy(MOON);
       sun.intensity = smoothstep(0.02, 0.2, -sE) * 0.35;
     }
-    // Keep the shadow lightmap near the player
-    sun.target.position.copy(focus);
-    sun.position.copy(focus).addScaledVector(this.lightDir, 400);
+    // Keep the shadow lightmap near the player, snapped to whole shadow texels in light
+    // space so shadow edges don't shimmer as the player moves
+    const L = this.lightDir;
+    const sc = sun.shadow.camera;
+    const texel = (sc.right - sc.left) / sun.shadow.mapSize.x;
+    const rx = -L.z;
+    const rz = L.x;
+    const rl = Math.hypot(rx, rz) || 1;
+    const R = _r.set(rx / rl, 0, rz / rl);
+    const U = _u.crossVectors(L, R).normalize();
+    const pr = focus.x * R.x + focus.y * R.y + focus.z * R.z;
+    const pu = focus.x * U.x + focus.y * U.y + focus.z * U.z;
+    const snapped = _f.set(focus.x, focus.y, focus.z)
+      .addScaledVector(R, Math.round(pr / texel) * texel - pr)
+      .addScaledVector(U, Math.round(pu / texel) * texel - pu);
+    sun.target.position.copy(snapped);
+    sun.position.copy(snapped).addScaledVector(L, 400);
     sun.target.updateMatrixWorld();
 
     // Ambient
@@ -259,13 +277,13 @@ export class DayCycle {
 
     // Environment map refresh
     this.envTimer -= dt;
-    if (Math.abs(sE - this.lastEnvY) > 0.012 && this.envTimer <= 0) this.bakeEnv(sE);
+    if (Math.abs(sE - this.lastEnvY) > 0.03 && this.envTimer <= 0) this.bakeEnv(sE);
     this.scene.environmentIntensity = lerp(1, 0.55, night);
   }
 
   bakeEnv(sE) {
     this.lastEnvY = sE;
-    this.envTimer = 0.4;
+    this.envTimer = 4;
     const su = this.sky.material.uniforms;
     const eu = this.envSky.material.uniforms;
     for (const k of ['sunPosition', 'rayleigh', 'turbidity', 'mieCoefficient', 'mieDirectionalG', 'up']) {

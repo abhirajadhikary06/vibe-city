@@ -1,40 +1,12 @@
 import * as THREE from 'three';
 import { buildCarMesh, setCarLOD, TYPES, crashDamage } from './car.js';
-import { N, lineAt, LANE, ROAD } from './world.js';
 import { clamp, dampAngle } from './utils.js';
 
-const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
-const COLORS = [0xf5f5f5, 0x1d1f24, 0x8a8f96, 0x2a4fa8, 0xb8262e, 0x3fa7c9, 0xe8c547, 0x2f6b46, 0x6b3fa0, 0xf08a3a, 0xc9c2b0, 0x14324d, 0xff7eb3, 0x5fd3e8];
-const TYPE_POOL = ['sedan', 'sedan', 'sedan', 'taxi', 'van', 'coupe', 'sedan', 'taxi', 'pickup', 'pickup', 'truck', 'bus', 'schoolbus', 'sedan', 'van'];
-const FIXED_COLOR = { taxi: 0xffcf2e, schoolbus: 0xf2b705, truck: 0x1b2440, bus: [0x1f8a8a, 0xd8336b, 0x2f5fb3] };
-const inside = (i, k) => i >= 0 && i <= N && k >= 0 && k <= N;
-const right = (d) => [-d[1], d[0]];
+// Kolkata traffic: yellow taxis everywhere, buses in WBTC blue, private-bus colours and CTC green
+const COLORS = [0xf5f5f5, 0xf5f5f5, 0x1d1f24, 0x8a8f96, 0x2a4fa8, 0xb8262e, 0xc9c2b0, 0x14324d, 0xd9d4c5, 0x6b6f75];
+const TYPE_POOL = ['taxi', 'taxi', 'taxi', 'taxi', 'taxi', 'ambassador', 'ambassador', 'sedan', 'sedan', 'van', 'bus', 'bus', 'bus', 'pickup', 'truck', 'rickshaw', 'rickshaw', 'bike', 'auto', 'auto', 'auto'];
+const FIXED_COLOR = { taxi: 0xf2c21b, ambassador: [0xf4f4f0, 0xf4f4f0, 0x1d1f24, 0xe8e2d0], rickshaw: [0x2b4a8a, 0xffffff], schoolbus: 0xf2b705, truck: [0xd8682a, 0x2f6b46, 0x1b4f9a], bus: [0x2f5fb3, 0xd99a22, 0x2f8a4a, 0xc8382c, 0x2f5fb3, 0xd99a22] };
 
-function laneStart(i, k, d) {
-  const r = right(d);
-  return { x: lineAt(i) + d[0] * (ROAD / 2 + 0.5) + r[0] * LANE, z: lineAt(k) + d[1] * (ROAD / 2 + 0.5) + r[1] * LANE };
-}
-function laneEnd(i, k, d) {
-  const r = right(d);
-  return { x: lineAt(i) - d[0] * (ROAD / 2 + 0.5) + r[0] * LANE, z: lineAt(k) - d[1] * (ROAD / 2 + 0.5) + r[1] * LANE };
-}
-function line(a, b) {
-  return { a, b, c: null, len: Math.hypot(b.x - a.x, b.z - a.z) };
-}
-function curve(a, c, b) {
-  let len = 0;
-  let px = a.x;
-  let pz = a.z;
-  for (let i = 1; i <= 8; i++) {
-    const t = i / 8;
-    const x = (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * c.x + t * t * b.x;
-    const z = (1 - t) * (1 - t) * a.z + 2 * (1 - t) * t * c.z + t * t * b.z;
-    len += Math.hypot(x - px, z - pz);
-    px = x;
-    pz = z;
-  }
-  return { a, b, c, len };
-}
 function evalSeg(seg, t, out) {
   const { a, b, c } = seg;
   if (!c) {
@@ -50,89 +22,149 @@ function evalSeg(seg, t, out) {
     out.tz = 2 * u * (c.z - a.z) + 2 * t * (b.z - c.z);
   }
 }
+function curveLen(a, c, b) {
+  let len = 0;
+  let px = a.x;
+  let pz = a.z;
+  for (let i = 1; i <= 8; i++) {
+    const t = i / 8;
+    const u = 1 - t;
+    const x = u * u * a.x + 2 * u * t * c.x + t * t * b.x;
+    const z = u * u * a.z + 2 * u * t * c.z + t * t * b.z;
+    len += Math.hypot(x - px, z - pz);
+    px = x;
+    pz = z;
+  }
+  return len;
+}
+const trimOf = (lane) => Math.min(6, lane.len * 0.3);
 
 /**
- * AI traffic following the road graph. When a car is hijacked or knocked
- * hard, it is "released" into a free physics Vehicle via onRelease().
+ * AI traffic on the real street graph (keeping left, obeying one-way streets).
+ * When a car is hijacked or knocked hard, it is "released" into a free physics
+ * Vehicle via onRelease().
  */
 export class Traffic {
   constructor(scene, world, effects, count = 24) {
     this.scene = scene;
     this.world = world;
+    this.graph = world.graph;
     this.fx = effects;
     this.cars = [];
     this.count = count;
     this.tmp = { x: 0, z: 0, tx: 0, tz: 1 };
+    this.near = [];
     this.onRelease = null;
     this.honk = null;
-    for (let n = 0; n < count; n++) this.cars.push(this.makeCar(null));
+    const start = world.spawn || { x: 0, z: 0 };
+    for (let n = 0; n < count; n++) this.cars.push(this.makeCar(start, 0));
   }
 
-  makeCar(near) {
+  makeCar(near, minD = 120) {
     const type = TYPE_POOL[Math.floor(Math.random() * TYPE_POOL.length)];
     const fixed = FIXED_COLOR[type];
     const color = fixed === undefined ? COLORS[Math.floor(Math.random() * COLORS.length)] : Array.isArray(fixed) ? fixed[Math.floor(Math.random() * fixed.length)] : fixed;
     const mesh = buildCarMesh(type, color);
     this.scene.add(mesh.root);
     const def = TYPES[type];
-    const car = { mesh, type, def, color, x: 0, z: 0, yaw: 0, speed: 0, cruise: 0, vel: new THREE.Vector2(), stopT: 0, ghost: 0, spin: 0, honkT: 0, panicT: 0 };
-    this.spawn(car, near);
+    const car = { mesh, type, def, color, x: 0, z: 0, y: 0, yaw: 0, speed: 0, cruise: 0, vel: new THREE.Vector2(), stopT: 0, ghost: 0, spin: 0, honkT: 0, panicT: 0 };
+    this.spawn(car, near, minD);
     return car;
   }
 
-  spawn(car, near) {
+  spawn(car, near, minD = 120, maxD = 280) {
+    const list = this.graph.edgesNear(near.x, near.z, maxD, this.near);
     for (let tries = 0; tries < 60; tries++) {
-      const i = Math.floor(Math.random() * (N + 1));
-      const k = Math.floor(Math.random() * (N + 1));
-      const dirs = DIRS.filter((d) => inside(i + d[0], k + d[1]));
-      const d = dirs[Math.floor(Math.random() * dirs.length)];
-      const p = { x: lineAt(i), z: lineAt(k) };
-      if (near) {
-        const dist = Math.hypot(p.x - near.x, p.z - near.z);
-        if (dist < 120 || dist > 280) continue;
-      }
-      if (this.cars.some((o) => o !== car && Math.hypot(o.x - p.x, o.z - p.z) < 30)) continue;
-      car.J = [i + d[0], k + d[1]];
-      car.d = d;
-      car.seg = line(laneStart(i, k, d), laneEnd(car.J[0], car.J[1], d));
-      car.next = null;
-      car.s = Math.random() * car.seg.len * 0.8;
-      car.cruise = (11 + Math.random() * 6) * (car.def.mass > 3 ? 0.75 : 1);
-      car.speed = car.cruise;
+      const e = list[Math.floor(Math.random() * list.length)];
+      if (!e || e.c > 4 || e.len < 25) continue;
+      // rickshaws keep to the side streets, buses to the main roads
+      if (car.type === 'rickshaw' && e.c < 3) continue;
+      if (car.type === 'auto' && e.c < 2) continue;
+      if (car.type === 'bus' && e.c > 3) continue;
+      const dirs = [1, -1].filter((d) => e.lanes[d]);
+      const dir = dirs[Math.floor(Math.random() * dirs.length)];
+      const lane = e.lanes[dir];
+      const trim = trimOf(lane);
+      const s = trim + Math.random() * (lane.len - trim * 2);
+      lane.at(s, this.tmp);
+      const dist = Math.hypot(this.tmp.x - near.x, this.tmp.z - near.z);
+      if (dist < minD || dist > maxD) continue;
+      if (this.cars.some((o) => o !== car && Math.hypot(o.x - this.tmp.x, o.z - this.tmp.z) < 25)) continue;
+      car.e = e;
+      car.dir = dir;
+      car.lane = lane;
+      car.seg = null;
+      car.s = s;
+      car.sEnd = lane.len - trim;
+      car.cruise = (0.85 + Math.random() * 0.3) * (car.def.mass > 3 ? 0.8 : 1);
+      car.speed = Math.min(e.speed, 12) * car.cruise;
       car.ghost = 0;
-      evalSeg(car.seg, car.s / car.seg.len, this.tmp);
       car.x = this.tmp.x;
       car.z = this.tmp.z;
       car.yaw = Math.atan2(this.tmp.tx, this.tmp.tz);
-      return;
+      return true;
     }
+    return false;
   }
 
+  /** At the end of a lane: pick the next street and build a curve through the junction. */
   advance(car) {
-    if (!car.seg.c) {
-      const [i, k] = car.J;
-      const back = [-car.d[0], -car.d[1]];
-      let opts = DIRS.filter((d) => inside(i + d[0], k + d[1]) && !(d[0] === back[0] && d[1] === back[1]));
-      if (!opts.length) opts = [DIRS.find((d) => d[0] === back[0] && d[1] === back[1])];
-      const straight = opts.find((d) => d[0] === car.d[0] && d[1] === car.d[1]);
-      const d2 = straight && Math.random() < 0.5 ? straight : opts[Math.floor(Math.random() * opts.length)];
-      const from = car.seg.b;
-      const to = laneStart(i, k, d2);
-      let ctrl;
-      if (d2 === straight) ctrl = { x: (from.x + to.x) / 2, z: (from.z + to.z) / 2 };
-      else {
-        const r1 = right(car.d);
-        const r2 = right(d2);
-        ctrl = { x: lineAt(i) + (r1[0] + r2[0]) * LANE, z: lineAt(k) + (r1[1] + r2[1]) * LANE };
-      }
-      car.seg = curve(from, ctrl, to);
-      car.next = line(to, laneEnd(i + d2[0], k + d2[1], d2));
-      car.d = d2;
-      car.J = [i + d2[0], k + d2[1]];
-    } else {
-      car.seg = car.next;
+    if (car.seg) {
+      // finished the turn: onto the next lane
+      car.e = car.next.e;
+      car.dir = car.next.dir;
+      car.lane = car.e.lanes[car.dir];
+      car.s = trimOf(car.lane);
+      car.sEnd = car.lane.len - trimOf(car.lane);
+      car.seg = null;
       car.next = null;
+      return;
     }
+    const g = this.graph;
+    const node = g.nodes[car.dir > 0 ? car.e.b : car.e.a];
+    const t0 = car.lane.at(car.sEnd, {});
+    let opts = node.out.filter((o) => o.e !== car.e && o.e.c <= 5);
+    if (!opts.length) opts = node.out.filter((o) => o.e === car.e);
+    if (!opts.length) opts = [{ e: car.e, dir: -car.dir }].filter((o) => o.e.lanes[o.dir]);
+    if (!opts.length) {
+      car.respawn = true;
+      return;
+    }
+    // Prefer carrying straight on, and staying on roads at least as big
+    let total = 0;
+    const w = opts.map((o) => {
+      const l = o.e.lanes[o.dir];
+      const p = l.at(trimOf(l), {});
+      const straight = 0.25 + Math.max(0, p.tx * t0.tx + p.tz * t0.tz);
+      const size = o.e.c <= car.e.c ? 1.6 : o.e.c >= 5 ? 0.25 : 0.8;
+      const v = straight * size;
+      total += v;
+      return v;
+    });
+    let r = Math.random() * total;
+    let pick = opts[0];
+    for (let i = 0; i < opts.length; i++) {
+      r -= w[i];
+      if (r <= 0) {
+        pick = opts[i];
+        break;
+      }
+    }
+    const nl = pick.e.lanes[pick.dir];
+    const t1 = nl.at(trimOf(nl), {});
+    const a = { x: t0.x, z: t0.z };
+    const b = { x: t1.x, z: t1.z };
+    // Control point where the two lanes' lines meet; the midpoint if they don't
+    let c = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+    const den = t0.tx * t1.tz - t0.tz * t1.tx;
+    if (Math.abs(den) > 0.15) {
+      const k = ((b.x - a.x) * t1.tz - (b.z - a.z) * t1.tx) / den;
+      const m = ((b.x - a.x) * t0.tz - (b.z - a.z) * t0.tx) / den;
+      if (k > 0 && m > 0 && k < 25 && m < 25) c = { x: a.x + t0.tx * k, z: a.z + t0.tz * k };
+    }
+    car.seg = { a, b, c, len: Math.max(0.5, curveLen(a, c, b)) };
+    car.s = 0;
+    car.next = pick;
   }
 
   /** Remove a car from AI control; a fresh car spawns elsewhere to keep density. */
@@ -168,8 +200,9 @@ export class Traffic {
     for (let ci = 0; ci < this.cars.length; ci++) {
       const car = this.cars[ci];
       const distP = Math.hypot(car.x - focus.x, car.z - focus.z);
-      if (distP > 320) {
-        this.spawn(car, focus);
+      if (distP > 330 || car.respawn) {
+        car.respawn = false;
+        if (!this.spawn(car, focus)) this.spawn(car, focus, 40, 400);
         continue;
       }
       const fx = Math.sin(car.yaw);
@@ -193,16 +226,20 @@ export class Traffic {
       for (const o of obstacles) check(o.pos.x, o.pos.z, o.isPed ? 2 : 0, o.def ? o.def.hl : o.isPed ? 0 : 2.4);
       if (car.ghost <= 0) for (const o of this.cars) if (o !== car) check(o.x, o.z, 1, o.def.hl);
       car.panicT -= dt;
-      const cruise = car.panicT > 0 ? Math.min(car.def.top * 0.6, car.cruise * 1.8) : car.cruise;
-      let target = car.seg.c ? Math.min(cruise, 8) : cruise;
+      const roadSpeed = Math.min(car.e.speed * car.cruise, car.def.top * 0.85);
+      const cruise = car.panicT > 0 ? Math.min(car.def.top * 0.6, roadSpeed * 1.8) : roadSpeed;
+      let target = car.seg ? Math.min(cruise, 6.5) : cruise;
+      // ease off before the junction
+      if (!car.seg) target = Math.min(target, 6.5 + (car.sEnd - car.s) * 0.6);
       target *= clamp((block - 1.6) / 8, 0, 1);
-      car.speed = car.speed < target ? Math.min(target, car.speed + 5 * dt) : Math.max(target, car.speed - 16 * dt);
+      car.speed = car.speed < target ? Math.min(target, car.speed + 4 * dt) : Math.max(target, car.speed - 14 * dt);
       car.honkT -= dt;
       if (car.speed < 0.3 && (aiBlock || playerBlock)) {
         car.stopT += dt;
-        if (playerBlock && car.stopT > 1.2 && car.honkT <= 0 && this.honk && distP < 40) {
+        // Kolkata drivers lean on the horn
+        if (car.stopT > 0.8 && car.honkT <= 0 && this.honk && distP < 45) {
           this.honk(car);
-          car.honkT = 4;
+          car.honkT = 2.5 + Math.random() * 3;
         }
         if (aiBlock && car.stopT > 3.5) {
           car.ghost = 2.5;
@@ -212,22 +249,30 @@ export class Traffic {
       car.ghost -= dt;
 
       car.s += car.speed * dt;
-      while (car.s >= car.seg.len) {
-        car.s -= car.seg.len;
+      for (let guard = 0; guard < 4; guard++) {
+        const end = car.seg ? car.seg.len : car.sEnd;
+        if (car.s < end || car.respawn) break;
+        car.s -= end;
         this.advance(car);
       }
-      evalSeg(car.seg, car.s / car.seg.len, t);
+      if (car.respawn) continue;
+      if (car.seg) {
+        evalSeg(car.seg, clamp(car.s / car.seg.len, 0, 1), t);
+      } else car.lane.at(car.s, t);
       car.x = t.x;
       car.z = t.z;
       car.yaw = dampAngle(car.yaw, Math.atan2(t.tx, t.tz), 12, dt);
       car.vel.set(Math.sin(car.yaw) * car.speed, Math.cos(car.yaw) * car.speed);
       car.spin += (car.speed * dt) / car.def.wr;
+      const onBridge = car.e.br || (car.next && car.next.e.br);
+      car.y = onBridge ? (this.world.deckAt(car.x, car.z) ?? 0) : 0;
       const m = car.mesh;
-      m.root.position.set(car.x, this.world.height(car.x, car.z), car.z);
+      m.root.position.set(car.x, car.y, car.z);
       m.root.rotation.y = car.yaw;
       const dc = Math.hypot(car.x - camPos.x, car.z - camPos.z);
       setCarLOD(m, dc);
       if (m.near) for (const w of m.wheels) w.spin.rotation.x = car.spin;
+      if (m.anim && m.near) m.anim(car.spin, car.speed);
       m.root.visible = dc < 260;
       const shadow = dc < 80;
       if (m.shadowOn !== shadow) {
@@ -248,7 +293,7 @@ export class Traffic {
       const dx0 = v.pos.x - car.x;
       const dz0 = v.pos.z - car.z;
       const reach = vd.hl + cd.hl + 2;
-      if (dx0 * dx0 + dz0 * dz0 > reach * reach) continue;
+      if (dx0 * dx0 + dz0 * dz0 > reach * reach || Math.abs(v.pos.y - car.y) > 3) continue;
       const cfx = Math.sin(car.yaw);
       const cfz = Math.cos(car.yaw);
       const rr = vd.rad + cd.rad;

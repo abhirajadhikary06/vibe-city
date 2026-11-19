@@ -1,12 +1,19 @@
-import { N, lineAt, ROAD, HALF, COAST_X, SHORE_X, BOUND, PIER } from './world.js';
+import { BOUNDS } from './world.js';
+import { MAP } from './geo.js';
 import * as THREE from 'three';
 import { clamp } from './utils.js';
 import { EMOTE_LIST, EMOTE_LABELS } from './character.js';
 import { SLOTS, WEAPONS } from './weapons.js';
 
 const $ = (id) => document.getElementById(id);
-const MAP_SIZE = 1400; // 1px = 1m, centred on the origin
-const MAP_HALF = MAP_SIZE / 2;
+// Overview image of the whole map; close up, the map is drawn from vectors
+const MAP_PPM = 0.5; // pixels per metre
+const MAP_PAD = 500;
+const MAP_X0 = BOUNDS.x0 - MAP_PAD;
+const MAP_Z0 = BOUNDS.z0 - MAP_PAD;
+const MAP_W = BOUNDS.x1 - BOUNDS.x0 + MAP_PAD * 2;
+const MAP_H = BOUNDS.z1 - BOUNDS.z0 + MAP_PAD * 2;
+const COL = { ground: '#24271f', outside: '#1b1d19', building: '#4a4b4f', buildingEdge: '#56575c', water: '#1d4f6e', green: '#2f5a2a', road: '#8d939c', major: '#d9a54e', foot: '#5d6066', rail: '#b8bcc2', deck: '#c9b48a' };
 
 export class HUD {
   constructor(world) {
@@ -28,8 +35,10 @@ export class HUD {
     this.sp = $('speedo').getContext('2d');
     this.shownMoney = 0;
     this.targetMoney = 0;
+    this.world = world;
+    this.transit = { lines: [], stations: [] };
     this.map = this.buildMap(world);
-    this.mapHalf = MAP_HALF;
+    this.mapRect = { x0: MAP_X0, z0: MAP_Z0, w: MAP_W, h: MAP_H };
     this.route = null;
     this.waypointEl = $('wpdist');
     this.driftEls = { score: this.el.drift.querySelector('.score'), mult: this.el.drift.querySelector('.mult') };
@@ -56,32 +65,52 @@ export class HUD {
 
   /** Rail lines, the metro and their stations drawn onto the map. */
   drawTransit(lines, stations) {
+    this.transit = { lines, stations };
     const g = this.map.getContext('2d');
-    const X = (v) => v + MAP_HALF;
+    g.save();
+    g.scale(MAP_PPM, MAP_PPM);
+    g.translate(-MAP_X0, -MAP_Z0);
+    this.drawTransitLayer(g, 1 / MAP_PPM);
+    g.restore();
+  }
+  /** Transit in world units; px = metres per screen pixel (keeps line widths constant). */
+  drawTransitLayer(g, px, names = false) {
+    const { lines, stations } = this.transit;
     for (const { pts, color, width, dash } of lines) {
       g.save();
       g.strokeStyle = color;
-      g.lineWidth = width;
-      g.setLineDash(dash || []);
+      g.lineWidth = width * px;
+      g.setLineDash((dash || []).map((d) => d * px));
       g.beginPath();
-      pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), X(z)) : g.moveTo(X(x), X(z))));
+      pts.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z)));
       g.stroke();
       g.restore();
     }
-    for (const { x, z, color, label } of stations) {
+    for (const { x, z, color, label, name, small } of stations) {
+      if (small && px > 2.5) continue;
       g.beginPath();
-      g.arc(X(x), X(z), 6, 0, Math.PI * 2);
+      g.arc(x, z, (small ? 4.5 : 6) * px, 0, Math.PI * 2);
       g.fillStyle = color;
       g.fill();
-      g.lineWidth = 2;
+      g.lineWidth = 2 * px;
       g.strokeStyle = '#fff';
       g.stroke();
       if (label) {
         g.fillStyle = '#fff';
-        g.font = 'bold 9px Rajdhani';
+        g.font = `bold ${9 * px}px Rajdhani`;
         g.textAlign = 'center';
         g.textBaseline = 'middle';
-        g.fillText(label, X(x), X(z) + 0.5);
+        g.fillText(label, x, z + 0.5 * px);
+      }
+      if (names && name && px < (small ? 1.1 : 1.8)) {
+        g.font = `bold ${11 * px}px Rajdhani`;
+        g.textAlign = 'center';
+        g.textBaseline = 'top';
+        g.lineWidth = 3 * px;
+        g.strokeStyle = 'rgba(0,0,0,0.8)';
+        g.strokeText(name, x, z + 8 * px);
+        g.fillStyle = color;
+        g.fillText(name, x, z + 8 * px);
       }
     }
   }
@@ -212,6 +241,24 @@ export class HUD {
     el.textContent = text;
     this.bubbleRoot.appendChild(el);
     this.bubbles.push({ ch, el, until: performance.now() + dur * 1000 });
+    // ...and say it out loud, from where they stand
+    if (this.voice && ch.mesh) {
+      const p = ch.mesh.position;
+      const cam = this.camera;
+      let dist = 4;
+      let pan = 0;
+      if (cam) {
+        const c = cam.position;
+        dist = Math.max(0, Math.hypot(p.x - c.x, p.y - c.y, p.z - c.z) - 4);
+        // left/right of the camera
+        const e = cam.matrixWorld.elements;
+        const dx = p.x - c.x;
+        const dz = p.z - c.z;
+        const l = Math.hypot(dx, dz) || 1;
+        pan = (dx * e[0] + dz * e[2]) / l;
+      }
+      this.voice.speak(text, { female: !!(ch.look && ch.look.female), dist, pan, priority: dist < 8, seed: ch.mesh.id });
+    }
   }
   updateBubbles(camera) {
     const now = performance.now();
@@ -282,31 +329,119 @@ export class HUD {
 
   buildMap(world) {
     const c = document.createElement('canvas');
-    c.width = c.height = MAP_SIZE;
+    c.width = Math.round(MAP_W * MAP_PPM);
+    c.height = Math.round(MAP_H * MAP_PPM);
     const g = c.getContext('2d');
-    const X = (x) => x + MAP_HALF;
-    g.fillStyle = '#1e2a1c';
-    g.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-    g.fillStyle = '#c9ad7a';
-    g.fillRect(X(COAST_X), 0, SHORE_X - COAST_X, MAP_SIZE);
-    g.fillStyle = '#123651';
-    g.fillRect(X(SHORE_X), 0, MAP_SIZE, MAP_SIZE);
-    for (const b of world.blocks) {
-      g.fillStyle = b.type === 'park' ? '#2f5a2a' : b.type === 'downtown' ? '#3a3f4b' : b.type === 'beach' ? '#5a4552' : '#363a42';
-      g.fillRect(X(b.x0), X(b.z0), b.x1 - b.x0, b.z1 - b.z0);
-    }
-    g.fillStyle = '#9aa0aa';
-    for (let k = 0; k <= N; k++) {
-      g.fillRect(X(lineAt(k) - ROAD / 2), X(-HALF - ROAD / 2), ROAD, HALF * 2 + ROAD);
-      g.fillRect(X(-HALF - ROAD / 2), X(lineAt(k) - ROAD / 2), HALF * 2 + ROAD, ROAD);
-    }
-    g.fillStyle = '#9b7b5a';
-    g.fillRect(X(PIER.x0), X(-PIER.hw), PIER.x1 - PIER.x0, PIER.hw * 2);
-    g.fillRect(X(PIER.plat0), X(-PIER.phw), PIER.plat1 - PIER.plat0, PIER.phw * 2);
-    g.strokeStyle = '#2f4a22';
-    g.lineWidth = 3;
-    g.strokeRect(X(-BOUND), X(-BOUND), COAST_X + BOUND, BOUND * 2);
+    g.scale(MAP_PPM, MAP_PPM);
+    g.translate(-MAP_X0, -MAP_Z0);
+    g.fillStyle = COL.outside;
+    g.fillRect(MAP_X0, MAP_Z0, MAP_W, MAP_H);
+    g.fillStyle = COL.ground;
+    for (const [x0, z0, x1, z1] of MAP.tiles) g.fillRect(x0, z0, x1 - x0, z1 - z0);
+    this.drawWorldLayer(g, MAP_X0, MAP_Z0, MAP_X0 + MAP_W, MAP_Z0 + MAP_H, 1 / MAP_PPM, true);
     return c;
+  }
+
+  /** Streets, buildings, water and parks inside a world rectangle; px = metres per pixel. */
+  drawWorldLayer(g, x0, z0, x1, z1, px, all = false) {
+    const w = this.world;
+    const vis = (p) => all || !(p.x1 < x0 || p.x0 > x1 || p.z1 < z0 || p.z0 > z1);
+    const path = (p) => {
+      g.beginPath();
+      for (let i = 0; i < p.n; i++) (i ? g.lineTo : g.moveTo).call(g, p.xs[i], p.zs[i]);
+      g.closePath();
+    };
+    g.fillStyle = COL.green;
+    for (const p of w.greens) if (vis(p)) {
+      path(p);
+      g.fill();
+    }
+    g.fillStyle = COL.water;
+    for (const p of w.waterPolys) if (vis(p)) {
+      path(p);
+      g.fill();
+    }
+    // Roads: lanes first, then main roads on top
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    const edges = [];
+    if (all) edges.push(...w.graph.edges);
+    else w.graph.grid.query(x0, x1, z0, z1, (e) => edges.push(e));
+    edges.sort((a, b) => b.c - a.c);
+    for (const e of edges) {
+      g.strokeStyle = e.br ? COL.deck : e.c <= 2 ? COL.major : COL.road;
+      g.lineWidth = Math.max(e.w, px * (e.c <= 2 ? 3 : 1.6));
+      g.beginPath();
+      for (let i = 0; i < e.pts.length; i += 2) (i ? g.lineTo : g.moveTo).call(g, e.pts[i], e.pts[i + 1]);
+      g.stroke();
+    }
+    g.fillStyle = COL.building;
+    if (all) {
+      for (const p of w.buildingPolys) {
+        path(p);
+        g.fill();
+      }
+    } else {
+      w.grid.query(x0, x1, z0, z1, (o) => {
+        if (o.t !== 2) return;
+        path(o.p);
+        g.fill();
+      });
+    }
+  }
+
+  /** Draw the map for a view: the overview image when zoomed out, vectors close up. */
+  drawMapView(g, x0, z0, x1, z1, px, names = false) {
+    g.fillStyle = COL.outside;
+    g.fillRect(x0, z0, x1 - x0, z1 - z0);
+    this.drawRegionLayer(g, x0, z0, x1, z1, px);
+    if (px > 1 / MAP_PPM * 0.7) {
+      g.imageSmoothingEnabled = true;
+      g.drawImage(this.map, MAP_X0, MAP_Z0, MAP_W, MAP_H);
+      return;
+    }
+    g.fillStyle = COL.ground;
+    for (const [tx0, tz0, tx1, tz1] of MAP.tiles) g.fillRect(tx0, tz0, tx1 - tx0, tz1 - tz0);
+    this.drawWorldLayer(g, x0, z0, x1, z1, px);
+    this.drawTransitLayer(g, px, names);
+  }
+
+  /** Kolkata beyond the playable area: the suburban railway and every Metro line. */
+  drawRegionLayer(g, x0, z0, x1, z1, px) {
+    const R = MAP.region;
+    if (!R) return;
+    if (!this.regionLines) {
+      // official Metro colours: 1 Blue, 2 Green, 3 Purple, 4 Yellow, 5 Pink, 6 Orange
+      const metroColor = (n = '') =>
+        /line.?1|blue|north.?south|dakshine|kavi subhash/i.test(n) ? '#2f6fe0' : /line.?2|green|east.?west/i.test(n) ? '#2fbf5a' : /line.?3|purple|joka/i.test(n) ? '#9b4dca' : /line.?4|yellow|noapara|barasat/i.test(n) ? '#e8c21b' : /line.?5|pink/i.test(n) ? '#e85aa0' : /line.?6|orange|new garia|airport/i.test(n) ? '#f07d1e' : '#7f8fb0';
+      this.regionLines = R.rails.map((r) => {
+        let bx0 = Infinity;
+        let bx1 = -Infinity;
+        let bz0 = Infinity;
+        let bz1 = -Infinity;
+        for (let i = 0; i < r.p.length; i += 2) {
+          bx0 = Math.min(bx0, r.p[i]);
+          bx1 = Math.max(bx1, r.p[i]);
+          bz0 = Math.min(bz0, r.p[i + 1]);
+          bz1 = Math.max(bz1, r.p[i + 1]);
+        }
+        const metro = r.k !== 'rail';
+        return { p: r.p, bx0, bx1, bz0, bz1, metro, color: metro ? (r.c && r.c.startsWith('#') ? r.c : metroColor(r.name)) : '#9aa0a8' };
+      });
+      this.regionLines.sort((a, b) => a.metro - b.metro);
+    }
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    for (const l of this.regionLines) {
+      if (l.bx1 < x0 || l.bx0 > x1 || l.bz1 < z0 || l.bz0 > z1) continue;
+      g.strokeStyle = l.color;
+      g.lineWidth = (l.metro ? 3 : 1.8) * px;
+      g.setLineDash(l.metro ? [] : [6 * px, 3 * px]);
+      g.beginPath();
+      for (let i = 0; i < l.p.length; i += 2) (i ? g.lineTo : g.moveTo).call(g, l.p[i], l.p[i + 1]);
+      g.stroke();
+    }
+    g.setLineDash([]);
   }
 
   /* ---------- Title / loading ---------- */
@@ -371,6 +506,7 @@ export class HUD {
 
   /* ---------- Per-frame ---------- */
   update(dt, player, hours, blips, vehicle, camera) {
+    this.camera = camera;
     if (this.dmgFlash > 0.001 || this._flash) {
       this.dmgFlash *= Math.exp(-2.5 * dt);
       const o = this.dmgFlash.toFixed(2);
@@ -381,7 +517,7 @@ export class HUD {
       this.shownMoney += Math.sign(d) * Math.max(1, Math.abs(d) * Math.min(1, dt * 6));
       if (Math.abs(this.targetMoney - this.shownMoney) < 1) this.shownMoney = this.targetMoney;
     }
-    const money = `$${Math.round(this.shownMoney).toLocaleString()}`;
+    const money = `₹${Math.round(this.shownMoney).toLocaleString('en-IN')}`;
     if (money !== this._money) this.el.money.textContent = this._money = money;
     const h = Math.floor(hours);
     const m = Math.floor((hours - h) * 60);
@@ -405,20 +541,19 @@ export class HUD {
     const g = this.mm;
     const S = 440;
     const C = S / 2;
-    const zoom = 1.7 - clamp(p.speed / 60, 0, 1) * 0.6;
+    const zoom = 1.5 - clamp(p.speed / 40, 0, 1) * 0.85;
     const rot = -Math.PI / 2 - Math.atan2(Math.cos(p.yaw), Math.sin(p.yaw));
     g.save();
     g.clearRect(0, 0, S, S);
     g.beginPath();
     g.arc(C, C, C, 0, Math.PI * 2);
     g.clip();
-    g.fillStyle = '#123651';
-    g.fillRect(0, 0, S, S);
     g.translate(C, C);
     g.rotate(rot);
     g.scale(zoom, zoom);
-    g.translate(-(p.pos.x + MAP_HALF), -(p.pos.z + MAP_HALF));
-    g.drawImage(this.map, 0, 0);
+    g.translate(-p.pos.x, -p.pos.z);
+    const R = C / zoom;
+    this.drawMapView(g, p.pos.x - R, p.pos.z - R, p.pos.x + R, p.pos.z + R, 1 / zoom);
     // GPS route to the waypoint
     if (this.route && this.route.length > 1) {
       g.lineJoin = 'round';
@@ -427,7 +562,7 @@ export class HUD {
         g.strokeStyle = col;
         g.lineWidth = w / zoom;
         g.beginPath();
-        this.route.forEach(([x, z], i) => (i ? g.lineTo(x + MAP_HALF, z + MAP_HALF) : g.moveTo(x + MAP_HALF, z + MAP_HALF)));
+        this.route.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z)));
         g.stroke();
       }
     }

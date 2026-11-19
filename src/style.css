@@ -178,7 +178,7 @@ html, body {
 .title-inner { text-align: center; padding: 0 16px; }
 .logo-main {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(72px, 14vw, 190px);
+  font-size: clamp(48px, 8vw, 140px);
   line-height: 0.9;
   letter-spacing: 10px;
   background: linear-gradient(180deg, #fff6c9 0%, #ffb35c 35%, #ff3fa4 70%, #8b3bff 100%);
@@ -356,6 +356,21 @@ html, body {
   cursor: pointer;
 }
 #quality button.on { background: var(--cyan); color: #081018; border-color: var(--cyan); box-shadow: 0 0 16px rgba(56, 243, 255, 0.5); }
+.sound { margin-top: 14px; display: flex; gap: 10px; justify-content: center; align-items: center; position: relative; z-index: 2; }
+.sound .ql { letter-spacing: 3px; font-size: 14px; opacity: 0.7; margin-right: 6px; }
+.sound button {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 2px;
+  padding: 6px 16px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.sound button.on { background: var(--cyan); color: #081018; border-color: var(--cyan); box-shadow: 0 0 16px rgba(56, 243, 255, 0.5); }
 #hint { flex-wrap: wrap; justify-content: center; max-width: 90vw; }
 
 /* ---------- Combat HUD ---------- */
@@ -492,4 +507,68 @@ html, body {
 @media (max-width: 720px) {
   #wpdist { left: 18px; bottom: 180px; }
   #bigmap .mhelp { white-space: normal; width: 90vw; text-align: center; bottom: 120px; }
+}
+
+/* Map search */
+.msearch {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(440px, 70vw);
+  z-index: 3;
+  font-family: Rajdhani, sans-serif;
+}
+.msearch input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  font: 600 16px Rajdhani, sans-serif;
+  color: #fff;
+  background: rgba(12, 16, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  outline: none;
+}
+.msearch input:focus {
+  border-color: #ff3fa4;
+}
+.mresults {
+  margin-top: 4px;
+  background: rgba(12, 16, 28, 0.95);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.mres {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 15px;
+}
+.mres span {
+  color: #9aa3b5;
+  font-size: 13px;
+}
+.mres:hover {
+  background: rgba(255, 63, 164, 0.25);
+}
+
+.mpick {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: #f4c51c;
+  color: #111;
+  font: 700 16px Rajdhani, sans-serif;
+  border-radius: 6px;
+  z-index: 2;
+  white-space: nowrap;
+}
+.mpick.hidden {
+  display: none;
 }

@@ -1,0 +1,3 @@
+# Source data and build tools: kept in the repo, not needed to deploy
+map-data/
+tools/

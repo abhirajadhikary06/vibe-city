@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vibe City</title>
+    <title>Vibe City Kolkata</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -49,27 +49,31 @@
     <div id="title">
       <div class="title-inner">
         <div class="logo">
-          <div class="logo-main">VIBE CITY</div>
-          <div class="logo-sub">an open-world drive along the coast</div>
+          <div class="logo-main">VIBE CITY KOLKATA</div>
+          <div class="logo-sub">city of joy · from howrah to park street</div>
         </div>
         <div id="loading">
           <div class="bar"><div class="fill"></div></div>
           <div class="text">Loading…</div>
         </div>
-        <button id="play" class="hidden">PRESS ENTER TO DRIVE</button>
+        <button id="play" class="hidden">PRESS ENTER TO PLAY</button>
         <div id="quality">
           <span class="ql">GRAPHICS</span>
           <button data-q="ultra">ULTRA</button><button data-q="high">HIGH</button><button data-q="medium">MEDIUM</button>
         </div>
+        <div class="sound">
+          <span class="ql">SOUND</span>
+          <button data-s="music">MUSIC</button><button data-s="voices">VOICES</button>
+        </div>
         <div class="controls">
           <div><b>WASD</b> Walk / Drive</div><div><b>MOUSE</b> Look around (click to lock)</div>
-          <div><b>F</b> Enter / exit any vehicle</div><div><b>E</b> Talk to people</div>
+          <div><b>F</b> Enter / exit any vehicle</div><div><b>E</b> Talk · buy at stalls</div>
           <div><b>1–7</b> / <b>WHEEL</b> Switch weapon</div><div><b>RIGHT CLICK</b> Aim · <b>CLICK</b> Fire / punch</div>
           <div><b>R</b> Reload · Reset vehicle</div><div>Hold <b>TAB</b> Weapon wheel · <b>G</b> Gestures</div>
           <div><b>SHIFT</b> Sprint · Nitro</div><div><b>SPACE</b> Jump · Handbrake</div>
-          <div><b>C</b> Camera · <b>H</b> Horn</div><div><b>T</b> Time warp · <b>Q</b> Radio · <b>ESC</b> Pause</div>
+          <div><b>C</b> Camera · <b>H</b> Horn</div><div><b>T</b> Time warp · <b>Q</b> Music · <b>ESC</b> Pause</div>
         </div>
-        <div class="tagline">Grab any ride, from motorbikes to trams · Fight, shoot, or dance with strangers · Drift for cash</div>
+        <div class="tagline">Real streets from OpenStreetMap · Ride trams, local trains, the Metro and Ganga ferries · Cross Howrah Bridge</div>
       </div>
     </div>
 
@@ -81,13 +85,17 @@
       <div class="mzoom"><button class="zin">+</button><button class="zout">−</button></div>
       <div class="mlegend">
         <span><i style="background:#5dff9e"></i>Cash</span><span><i style="background:#ffd36b"></i>Ammo</span><span><i style="background:#ff3fa4"></i>Time Trial</span>
-        <span><i class="ln" style="background:#d8336b"></i>Tram</span><span><i class="ln" style="background:#c8ccd2"></i>Train</span><span><i class="ln" style="background:#8b5cf6"></i>Metro</span>
+        <span><i class="ln" style="background:#3f86d8"></i>Tram</span><span><i class="ln" style="background:#8f949b"></i>Railway</span><span><i class="ln" style="background:#2f6fe0"></i>Metro Blue</span><span><i class="ln" style="background:#2fbf5a"></i>Metro Green</span>
       </div>
     </div>
 
     <div id="pause" class="hidden">
       <div class="pause-title">PAUSED</div>
       <div class="pause-sub">Click or press ESC to resume</div>
+      <div class="sound">
+        <span class="ql">SOUND</span>
+        <button data-s="music">MUSIC</button><button data-s="voices">VOICES</button><button data-s="mute">ALL SOUND</button>
+      </div>
       <div class="keys">
         <section>
           <h3>On foot</h3>
@@ -96,7 +104,7 @@
           <div><b>X</b>Toggle walk / jog</div>
           <div><b>SPACE</b>Jump</div>
           <div><b>F</b>Enter / exit any vehicle</div>
-          <div><b>E</b>Talk to someone</div>
+          <div><b>E</b>Talk to someone · buy at a stall</div>
           <div><b>G</b> (hold) Gesture wheel</div>
         </section>
         <section>
@@ -122,12 +130,13 @@
           <h3>Trams, trains, metro &amp; boats</h3>
           <div><b>F</b>At either cab of a stopped tram, train or metro</div>
           <div><b>W / S</b>Drive along the line · brake / back up</div>
-          <div><b>F</b>Boats: board from the pier or beach</div>
-          <div>Step off a boat slowly beside the pier or beach</div>
+          <div><b>F</b>Boats: board from a ghat jetty or the bank</div>
+          <div>Step off a boat slowly beside a jetty or the bank</div>
+          <div>Buy a ticket (<b>E</b>) before the platforms, or the TTE fines you</div>
           <h3>General</h3>
           <div><b>M</b>Map &amp; waypoints</div>
           <div><b>T</b> (hold) Fast-forward time</div>
-          <div><b>Q</b>Radio · <b>N</b> Mute</div>
+          <div><b>Q</b>Music on/off · <b>N</b> Mute all</div>
           <div><b>ESC</b>Pause</div>
         </section>
       </div>

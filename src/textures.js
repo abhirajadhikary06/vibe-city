@@ -158,6 +158,51 @@ export function sidewalk() {
   return tex(c);
 }
 
+/** Dusty packed earth and broken concrete: open ground between Kolkata's streets. */
+export function dirt() {
+  const S = 512;
+  const r = makeRng(23);
+  const [c, g] = mk(S);
+  g.fillStyle = '#8f8471';
+  g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 60; i++) blotch(g, S, r() * S, r() * S, r.range(15, 70), r() < 0.5 ? `rgba(70,60,45,${r.range(0.08, 0.2)})` : `rgba(170,160,140,${r.range(0.06, 0.16)})`);
+  for (let i = 0; i < 25; i++) blotch(g, S, r() * S, r() * S, r.range(10, 30), `rgba(70,85,40,${r.range(0.08, 0.2)})`);
+  for (let i = 0; i < 2500; i++) {
+    g.fillStyle = `rgba(${r() < 0.5 ? '40,35,28' : '200,190,170'},${r.range(0.15, 0.4)})`;
+    g.fillRect(r() * S, r() * S, r.range(1, 3), r.range(1, 3));
+  }
+  grain(g, S, S, 26, r);
+  return tex(c);
+}
+
+/** Flat concrete roof: tar patches, stains and seams. Near-grey so vertex colours can tint it. */
+export function roof() {
+  const S = 256;
+  const r = makeRng(29);
+  const [c, g] = mk(S);
+  g.fillStyle = '#d6d2ca';
+  g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 26; i++) blotch(g, S, r() * S, r() * S, r.range(8, 40), `rgba(30,28,24,${r.range(0.06, 0.2)})`);
+  g.fillStyle = 'rgba(0,0,0,0.12)';
+  for (let k = 0; k < S; k += 64) {
+    g.fillRect(k, 0, 2, S);
+    g.fillRect(0, k, S, 2);
+  }
+  grain(g, S, S, 30, r);
+  return tex(c);
+}
+
+/** White dashed centre line, running along v. */
+export function laneDash() {
+  const [c, g] = mk(16, 128);
+  g.clearRect(0, 0, 16, 128);
+  g.fillStyle = 'rgba(240,238,228,0.9)';
+  g.fillRect(0, 0, 16, 64);
+  const t = tex(c);
+  t.anisotropy = 4;
+  return t;
+}
+
 export function grass() {
   const S = 512;
   const r = makeRng(31);
@@ -460,6 +505,83 @@ export function facade(kind, o, seed) {
         litWin(x, y, w, h, p);
       }
     }
+  } else if (kind === 'calcutta') {
+    // Old Kolkata: arched windows with louvred shutters, a cornice per floor,
+    // iron-railed balconies and monsoon streaks. The wall is near-white so a
+    // per-building vertex colour can tint it ochre, pink, cream or brick.
+    g.fillStyle = o.wall;
+    g.fillRect(0, 0, S, S);
+    mg.fillStyle = 'rgb(0,235,0)';
+    mg.fillRect(0, 0, S, S);
+    for (let row = 0; row < 8; row++) {
+      const p = rowP();
+      const y0 = row * C;
+      g.fillStyle = 'rgba(255,255,255,0.55)';
+      g.fillRect(0, y0 + C - 8, S, 5);
+      g.fillStyle = 'rgba(0,0,0,0.22)';
+      g.fillRect(0, y0 + C - 3, S, 3);
+      const balcony = r() < 0.45;
+      for (let col = 0; col < 8; col++) {
+        const x = col * C + 16;
+        const y = y0 + 12;
+        const w = 32;
+        const h = 38;
+        // window recess with a round arch
+        g.fillStyle = '#1e1a17';
+        g.beginPath();
+        g.moveTo(x, y + h);
+        g.lineTo(x, y + w / 2);
+        g.arc(x + w / 2, y + w / 2, w / 2, Math.PI, 0);
+        g.lineTo(x + w, y + h);
+        g.closePath();
+        g.fill();
+        mg.fillStyle = 'rgb(0,40,170)';
+        mg.fillRect(x, y, w, h);
+        const open = r() < 0.35;
+        litWin(x + 4, y + 8, w - 8, h - 10, open ? p * 1.2 : p * 0.4);
+        // louvred shutters (khorkhori), sometimes folded open
+        g.fillStyle = o.shutter;
+        if (open) {
+          g.fillRect(x - 9, y + 6, 8, h - 6);
+          g.fillRect(x + w + 1, y + 6, 8, h - 6);
+        } else {
+          g.fillRect(x + 1, y + w / 2 - 2, w - 2, h - w / 2 + 1);
+          g.fillStyle = 'rgba(0,0,0,0.35)';
+          for (let k = y + w / 2; k < y + h; k += 3) g.fillRect(x + 1, k, w - 2, 1);
+          g.fillRect(x + w / 2 - 0.5, y + w / 2 - 2, 1, h - w / 2 + 1);
+          ge.fillStyle = '#000';
+          ge.fillRect(x, y, w, h);
+        }
+        // white plaster surround
+        g.strokeStyle = 'rgba(255,255,255,0.6)';
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(x - 2, y + h);
+        g.lineTo(x - 2, y + w / 2);
+        g.arc(x + w / 2, y + w / 2, w / 2 + 2, Math.PI, 0);
+        g.lineTo(x + w + 2, y + h);
+        g.stroke();
+        if (balcony && row < 7) {
+          g.fillStyle = 'rgba(90,90,90,0.9)';
+          g.fillRect(col * C + 4, y0 + C - 12, C - 8, 3);
+          g.fillStyle = 'rgba(30,30,30,0.85)';
+          g.fillRect(col * C + 4, y0 + C - 26, C - 8, 2);
+          for (let k = 0; k <= C - 8; k += 4) g.fillRect(col * C + 4 + k, y0 + C - 26, 1.5, 14);
+        }
+      }
+    }
+    // Monsoon stains running down from the cornices
+    for (let i = 0; i < 70; i++) {
+      const x = r() * S;
+      const y = r() * S;
+      const len = r.range(20, 140);
+      const gr = g.createLinearGradient(0, y, 0, y + len);
+      gr.addColorStop(0, `rgba(40,34,26,${r.range(0.12, 0.3)})`);
+      gr.addColorStop(1, 'rgba(40,34,26,0)');
+      g.fillStyle = gr;
+      g.fillRect(x, y, r.range(3, 14), len);
+    }
+    for (let i = 0; i < 18; i++) blotch(g, S, r() * S, r() * S, r.range(10, 40), `rgba(60,50,35,${r.range(0.05, 0.12)})`);
   } else {
     // residential
     g.fillStyle = o.wall;

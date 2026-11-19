@@ -11,12 +11,18 @@ export const TYPES = {
   coupe: { label: 'Sports Coupe', wz: 1.45, accel: 19, top: 62, grip: 11, steer: 0.6, seatZ: -0.35, seatY: -0.42 },
   convertible: { label: 'Convertible', wz: 1.45, accel: 16, top: 56, grip: 10.5, steer: 0.6, seatZ: -0.3, seatY: -0.42 },
   sedan: { label: 'Sedan', wz: 1.5, accel: 13, top: 50, grip: 10, steer: 0.55, seatZ: -0.2, seatY: -0.38 },
-  taxi: { label: 'Taxi', wz: 1.5, accel: 13.5, top: 52, grip: 10, steer: 0.55, seatZ: -0.2, seatY: -0.38 },
+  // Hindustan Ambassador: Kolkata's yellow taxi, and the white sarkari car
+  taxi: { label: 'Ambassador Taxi', wz: 1.24, tw: 0.74, accel: 9.5, top: 36, grip: 8.5, steer: 0.5, seatZ: -0.25, seatY: -0.3, hw: 0.86, hl: 2.2, h: 1.62, headZ: 2.17, headY: 0.8, engine: 0.8, offs: [-1.35, 0, 1.35], rad: 0.9 },
+  ambassador: { label: 'Ambassador', wz: 1.24, tw: 0.74, accel: 9.5, top: 36, grip: 8.5, steer: 0.5, seatZ: -0.25, seatY: -0.3, hw: 0.86, hl: 2.2, h: 1.62, headZ: 2.17, headY: 0.8, engine: 0.8, offs: [-1.35, 0, 1.35], rad: 0.9 },
   van: { label: 'Van', wz: 1.65, accel: 10, top: 42, grip: 9, steer: 0.5, seatZ: 0.75, seatY: -0.05, hw: 1.02, hl: 2.6, h: 2.1, mass: 1.4, camDist: 1.2, camH: 0.6, headZ: 2.5, headY: 0.85, hp: 130, engine: 0.85 },
   pickup: { label: 'Pickup Truck', axles: [1.75, -1.65], accel: 12, top: 47, grip: 9.5, steer: 0.52, seatZ: 0.15, seatY: 0.02, wr: 0.42, tw: 0.86, hw: 1.0, hl: 2.78, h: 1.95, offs: [-1.7, 0, 1.7], rad: 1.05, mass: 1.6, camDist: 1, camH: 0.5, headZ: 2.72, headY: 1.0, hp: 140, engine: 0.75 },
   truck: { label: 'Box Truck', axles: [2.85, -2.2], dual: true, accel: 7, top: 33, grip: 8, steer: 0.45, seatX: 0.5, seatZ: 2.75, seatY: 0.62, wr: 0.52, tw: 0.92, hw: 1.25, hl: 4.0, h: 3.6, offs: [-3, -1, 1, 3], rad: 1.3, mass: 4, camDist: 5, camH: 2, headZ: 3.98, headY: 1.0, hp: 220, engine: 0.55, nitro: false },
   schoolbus: { label: 'School Bus', axles: [4.35, -2.7], dual: true, accel: 6, top: 30, grip: 8, steer: 0.42, seatX: 0.55, seatZ: 3.25, seatY: 0.4, wr: 0.52, tw: 0.92, hw: 1.25, hl: 5.62, h: 3.1, offs: [-4.4, -2.2, 0, 2.2, 4.4], rad: 1.3, mass: 5, camDist: 7, camH: 2.2, headZ: 5.62, headY: 1.25, hp: 260, engine: 0.5, nitro: false },
   bus: { label: 'City Bus', axles: [3.9, -2.3], dual: true, accel: 6, top: 30, grip: 8, steer: 0.42, seatX: 0.55, seatZ: 4.85, seatY: 0.42, wr: 0.52, tw: 0.92, hw: 1.27, hl: 6.05, h: 3.25, offs: [-4.6, -2.3, 0, 2.3, 4.6], rad: 1.3, mass: 6, camDist: 7.5, camH: 2.4, headZ: 6.05, headY: 0.8, hp: 280, engine: 0.45, nitro: false },
+  // Auto-rickshaw: three wheels, the driver up front, a bench behind
+  auto: { label: 'Auto Rickshaw', axles: [1.05, -0.62], wr: 0.25, tw: 0.6, accel: 6.5, top: 15, grip: 8, steer: 0.6, seatX: 0, seatZ: 0.32, seatY: -0.22, hw: 0.72, hl: 1.45, h: 1.8, offs: [-0.7, 0.7], rad: 0.75, mass: 0.55, camDist: -0.6, camH: 0.1, headZ: 1.45, headY: 0.95, hp: 70, engine: 1.6, nitro: false, pass: [0, -0.5, -0.12] },
+  // Hand-pulled rickshaw: two big wooden wheels, the puller between the shafts
+  rickshaw: { label: 'Hand-pulled Rickshaw', axles: [1.6, -0.25], wr: 0.62, tw: 0.78, accel: 2.4, top: 5, grip: 9, steer: 0.7, seatX: 0, seatZ: -0.25, seatY: 0.3, hw: 0.75, hl: 1.7, h: 1.9, offs: [-0.45, 0.95], rad: 0.75, mass: 0.45, camDist: 0.6, camH: 0.3, headZ: 2.2, headY: 1.3, hp: 50, engine: 0, nitro: false },
   bike: { label: 'Motorbike', axles: [0.74, -0.72], accel: 22, top: 66, grip: 12, steer: 0.55, seatX: 0, seatZ: -0.2, seatY: -0.04, wr: 0.33, tw: 0, hw: 0.42, hl: 1.1, h: 1.2, offs: [-0.55, 0.55], rad: 0.55, mass: 0.4, camDist: -1.6, camH: -0.4, headZ: 0.98, headY: 1.0, hp: 60, engine: 1.45, lean: true },
 };
 for (const k of Object.keys(TYPES)) {
@@ -25,7 +31,7 @@ for (const k of Object.keys(TYPES)) {
   d.wz ??= d.axles[0];
 }
 /** Vehicle types that use the bigger builders in fleet.js. */
-const FLEET = new Set(['pickup', 'truck', 'schoolbus', 'bus', 'bike']);
+const FLEET = new Set(['pickup', 'truck', 'schoolbus', 'bus', 'bike', 'rickshaw', 'auto']);
 export const hooks = { explode: null, burning: null };
 
 const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
@@ -99,7 +105,8 @@ const DIMS = {
   van: { front: 2.55, rear: -2.6, hw: 1.02, belt: 1.2, seams: [1.5, 0.45, -1.15], glassHW: 1.03, cab: [2.0, -2.5], head: [0.72, 0.85, 2.47, 0.42, 0.22], plateF: 0.52, plateR: 0.7, grille: [0.82, 2.56, 1.15, 4] },
 };
 DIMS.convertible = { ...DIMS.coupe, cab: [0.6, -1.6] };
-DIMS.taxi = DIMS.sedan;
+DIMS.taxi = { front: 2.17, rear: -2.16, hw: 0.84, belt: 1.0, seams: [0.92, -0.12, -1.18], glassHW: 0.74, cab: [0.92, -1.32], head: [0.56, 0.8, 2.15, 0.27, 0.27], plateF: 0.36, plateR: 0.6, grille: [0.78, 2.19, 0.62, 6] };
+DIMS.ambassador = DIMS.taxi;
 
 function details(type) {
   const d = DIMS[type];
@@ -173,30 +180,59 @@ function geosFor(type) {
       ]);
       extra = new THREE.TorusGeometry(0.17, 0.025, 6, 18).rotateX(-0.5).translate(0.38, 1.08, 0.25);
     }
-  } else if (type === 'sedan' || type === 'taxi') {
+  } else if (type === 'taxi' || type === 'ambassador') {
+    // Hindustan Ambassador: round nose and boot, upright glasshouse, domed roof
     const body = extrude(
       profile(
         {
-          rearBottom: -2.35,
-          path: [[2.3, 0.42], [2.44, 0.6], [2.42, 0.8], [2.3, 0.92, 2.0, 0.95], [1.0, 1.0], [-1.6, 1.03], [-2.3, 1.0], [-2.46, 0.96, -2.46, 0.8], [-2.42, 0.5]],
+          rearBottom: -1.95,
+          path: [[2.02, 0.42], [2.15, 0.5], [2.17, 0.78], [2.1, 0.92, 1.82, 0.98], [1.2, 1.02], [0.92, 1.01], [-1.3, 1.01], [-1.62, 1.0, -1.9, 0.94], [-2.12, 0.86, -2.16, 0.66], [-2.12, 0.48]],
         },
-        [-1.5, 1.5],
+        [-1.24, 1.24],
+        0.46,
       ),
-      1.92,
-      0.1,
+      1.68,
+      0.15,
     );
-    const cs = new THREE.Shape();
-    cs.moveTo(1.08, 0.98);
-    cs.lineTo(0.45, 1.5);
-    cs.lineTo(-1.05, 1.52);
-    cs.lineTo(-1.72, 1.0);
-    cs.closePath();
-    glass = extrude(cs, 1.62, 0.06);
-    paint = merge([body, box(1.52, 0.05, 1.45, 0, 1.55, -0.3), box(0.07, 0.5, 0.12, 0.79, 1.27, -0.25), box(0.07, 0.5, 0.12, -0.79, 1.27, -0.25), box(0.2, 0.1, 0.14, 0.96, 1.05, 0.8), box(0.2, 0.1, 0.14, -0.96, 1.05, 0.8)]);
-    trim = merge([box(1.2, 0.2, 0.08, 0, 0.62, 2.44), box(1.72, 0.26, 4.3, 0, 0.42, 0), box(1.9, 0.14, 0.14, 0, 0.5, -2.44), box(1.9, 0.14, 0.14, 0, 0.5, 2.44)]);
-    head = merge([box(0.4, 0.14, 0.08, 0.66, 0.78, 2.42), box(0.4, 0.14, 0.08, -0.66, 0.78, 2.42)]);
-    tail = merge([box(0.38, 0.16, 0.08, 0.66, 0.82, -2.45), box(0.38, 0.16, 0.08, -0.66, 0.82, -2.45)]);
-    if (type === 'taxi') extra = box(0.7, 0.22, 0.3, 0, 1.68, -0.3);
+    const ws = new THREE.Shape();
+    ws.moveTo(0.92, 1.0);
+    ws.lineTo(0.52, 1.44);
+    ws.lineTo(-0.78, 1.48);
+    ws.lineTo(-1.34, 1.0);
+    ws.closePath();
+    glass = extrude(ws, 1.5, 0.05);
+    const roof = new THREE.Shape();
+    roof.moveTo(0.58, 1.4);
+    roof.quadraticCurveTo(0.45, 1.6, -0.1, 1.63);
+    roof.quadraticCurveTo(-0.72, 1.62, -0.9, 1.42);
+    roof.closePath();
+    const pillars = [];
+    for (const s of [1, -1]) {
+      pillars.push(box(0.07, 0.48, 0.1, s * 0.75, 1.24, -0.12), box(0.07, 0.48, 0.12, s * 0.74, 1.22, -1.08));
+    }
+    paint = merge([body, extrude(roof, 1.54, 0.1), ...pillars, box(1.5, 0.05, 0.12, 0, 1.44, 0.5)]);
+    trim = merge([box(1.5, 0.22, 3.6, 0, 0.42, -0.05)]);
+    // chrome bumpers, grille surround, round lamps with chrome rings
+    const lamps = [];
+    const rings = [];
+    for (const s of [1, -1]) {
+      lamps.push(new THREE.CylinderGeometry(0.12, 0.12, 0.05, 18).rotateX(Math.PI / 2).translate(s * 0.58, 0.8, 2.17));
+      rings.push(new THREE.TorusGeometry(0.13, 0.025, 6, 18).translate(s * 0.58, 0.8, 2.18));
+      lamps.push(new THREE.CylinderGeometry(0.045, 0.045, 0.04, 10).rotateX(Math.PI / 2).translate(s * 0.4, 0.6, 2.17));
+    }
+    head = merge(lamps);
+    tail = merge([box(0.12, 0.2, 0.06, 0.66, 0.76, -2.15), box(0.12, 0.2, 0.06, -0.66, 0.76, -2.15)]);
+    extra = merge([
+      ...rings,
+      box(1.78, 0.13, 0.14, 0, 0.5, 2.22),
+      box(1.78, 0.13, 0.14, 0, 0.5, -2.2),
+      box(0.12, 0.25, 0.16, 0.32, 0.6, 2.25),
+      box(0.12, 0.25, 0.16, -0.32, 0.6, 2.25),
+      box(0.8, 0.32, 0.04, 0, 0.78, 2.17),
+      box(0.04, 0.035, 3.1, 0.855, 0.98, -0.1),
+      box(0.04, 0.035, 3.1, -0.855, 0.98, -0.1),
+    ]);
+    if (type === 'taxi') interior = merge([box(0.025, 0.07, 3.7, 0.86, 0.66, -0.05), box(0.025, 0.07, 3.7, -0.86, 0.66, -0.05)]);
   } else {
     // van
     const body = extrude(
@@ -228,7 +264,8 @@ function geosFor(type) {
   const det = details(type);
   trim = merge([trim, ...det.trim]);
   const wz = TYPES[type].wz;
-  const lodWheels = merge([[0.84, wz], [-0.84, wz], [0.84, -wz], [-0.84, -wz]].map(([x, z]) => new THREE.CylinderGeometry(0.36, 0.36, 0.26, 12).rotateZ(Math.PI / 2).translate(x, 0.36, z)));
+  const tw = TYPES[type].tw;
+  const lodWheels = merge([[tw, wz], [-tw, wz], [tw, -wz], [-tw, -wz]].map(([x, z]) => new THREE.CylinderGeometry(0.36, 0.36, 0.26, 12).rotateZ(Math.PI / 2).translate(x, 0.36, z)));
   GEO[type] = { paint, glass, trim, head, tail, extra, interior, chrome: det.chrome, plate: det.plate, lodWheels, ...wheelGeos(), shadow: new THREE.PlaneGeometry(2.6, 5.6).rotateX(-Math.PI / 2) };
   return GEO[type];
 }
@@ -283,19 +320,22 @@ function plateTexture() {
   const g = c.getContext('2d');
   const gr = g.createLinearGradient(0, 0, 0, 64);
   gr.addColorStop(0, '#ffffff');
-  gr.addColorStop(1, '#ffe4f0');
+  gr.addColorStop(1, '#f1f1ee');
   g.fillStyle = gr;
   g.fillRect(0, 0, 256, 64);
-  g.strokeStyle = '#1f2a5c';
+  g.strokeStyle = '#111111';
   g.lineWidth = 4;
   g.strokeRect(3, 3, 250, 58);
-  g.fillStyle = '#ff3fa4';
-  g.font = 'bold 11px Arial';
+  // West Bengal plate: a small IND badge and the registration
+  g.fillStyle = '#1f3f9a';
+  g.fillRect(8, 8, 24, 48);
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 10px Arial';
   g.textAlign = 'center';
-  g.fillText('VIBE CITY', 128, 16);
-  g.fillStyle = '#1f2a5c';
-  g.font = 'bold 36px Arial';
-  g.fillText('NT 1985', 128, 52);
+  g.fillText('IND', 20, 52);
+  g.fillStyle = '#111111';
+  g.font = 'bold 34px Arial';
+  g.fillText('WB 06 K 1985', 142, 44);
   PLATE = new THREE.CanvasTexture(c);
   PLATE.colorSpace = THREE.SRGBColorSpace;
   return PLATE;
@@ -316,6 +356,7 @@ function mats() {
     head: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff1d6, emissiveIntensity: 1 }),
     tail: new THREE.MeshStandardMaterial({ color: 0x330000, emissive: 0xff1a2a, emissiveIntensity: 0.6 }),
     sign: new THREE.MeshStandardMaterial({ map: sign, emissiveMap: sign, emissive: 0xffffff, emissiveIntensity: 1 }),
+    taxiStripe: new THREE.MeshStandardMaterial({ color: 0x2849a0, roughness: 0.5 }),
     shadow: new THREE.MeshBasicMaterial({ map: T.glow(), color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false }),
   };
   return M;
@@ -329,6 +370,7 @@ export function setTrafficLights(night) {
   m.plate.emissiveIntensity = lerp(0.05, 0.6, night);
 }
 
+const amby0 = (type) => type === 'taxi' || type === 'ambassador';
 export function buildCarMesh(type, color) {
   if (FLEET.has(type)) return buildFleetMesh(type, color, { mats: mats(), wheels: wheelGeos(), paintV, def: TYPES[type] });
   const g = geosFor(type);
@@ -336,7 +378,8 @@ export function buildCarMesh(type, color) {
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
-  const paint = new THREE.MeshPhysicalMaterial({ color, metalness: 0.6, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 });
+  // the Ambassadors are old, plain enamel; modern cars get metallic clearcoat
+  const paint = amby0(type) ? new THREE.MeshPhysicalMaterial({ color, metalness: 0.15, roughness: 0.45, clearcoat: 0.4, clearcoatRoughness: 0.2 }) : new THREE.MeshPhysicalMaterial({ color, metalness: 0.6, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 });
   const parts = [
     [g.paint, paint],
     [g.glass, type === 'convertible' ? m.clearGlass : m.glass],
@@ -345,8 +388,10 @@ export function buildCarMesh(type, color) {
     [g.tail, m.tail],
   ];
   parts.push([g.chrome, m.chrome], [g.plate, m.plate]);
-  if (g.extra) parts.push([g.extra, type === 'taxi' ? m.sign : type === 'convertible' ? m.trim : paint]);
-  if (g.interior) parts.push([g.interior, m.interior]);
+  const amby = type === 'taxi' || type === 'ambassador';
+  if (g.extra) parts.push([g.extra, amby ? m.chrome : type === 'convertible' ? m.trim : paint]);
+  // on the taxi the "interior" slot carries the blue side stripe
+  if (g.interior) parts.push([g.interior, type === 'taxi' ? m.taxiStripe : m.interior]);
   const meshes = {};
   for (const [geo, mat] of parts) {
     const mesh = new THREE.Mesh(geo, mat);
@@ -357,7 +402,8 @@ export function buildCarMesh(type, color) {
   }
   const wheels = [];
   const wz = TYPES[type].wz;
-  for (const [x, z] of [[0.84, wz], [-0.84, wz], [0.84, -wz], [-0.84, -wz]]) {
+  const tw = TYPES[type].tw;
+  for (const [x, z] of [[tw, wz], [-tw, wz], [tw, -wz], [-tw, -wz]]) {
     const pivot = new THREE.Group();
     pivot.position.set(x, 0.36, z);
     const spin = new THREE.Group();
@@ -384,6 +430,7 @@ export function buildCarMesh(type, color) {
 
 /** Distance LOD: far cars drop wheel/brake/trim detail meshes to save draw calls. */
 export function setCarLOD(car, dist) {
+  if (car.noLod) return;
   const near = dist < 70;
   if (near === car.near) return;
   car.near = near;
@@ -414,6 +461,7 @@ export class Vehicle {
     this.yaw = 0;
     this.angVel = 0;
     this.steer = 0;
+    this.steerIn = 0;
     this.nitro = 1;
     this.pitch = 0;
     this.roll = 0;
@@ -446,13 +494,14 @@ export class Vehicle {
     return this.wrecked ? `Burnt-out ${this.def.label}` : this.def.label;
   }
 
-  place(x, z, yaw, vel = null) {
-    this.pos.set(x, this.world.height(x, z), z);
+  place(x, z, yaw, vel = null, y = null) {
+    this.pos.set(x, y ?? this.world.height(x, z), z);
     this.yaw = yaw;
     if (vel) this.vel.copy(vel);
     else this.vel.set(0, 0);
     this.angVel = 0;
     this.steer = 0;
+    this.steerIn = 0;
     this.asleep = false;
     this.applyVisuals(0, 0);
   }
@@ -581,11 +630,19 @@ export class Vehicle {
 
     const speed = Math.abs(vf);
     const wb = d.axles[0] - d.axles[d.axles.length - 1];
-    const maxSteer = lerp(d.steer, 0.15, clamp(speed / 55, 0, 1));
-    this.steer = damp(this.steer, (lock ? 0 : inp.steer) * maxSteer, 9, dt);
-    const targetYaw = (-this.steer * vf) / Math.max(2.7, wb * 0.9);
+    // Keys are all-or-nothing: ease the wheel in over ~half a second, let it centre faster
+    const want = lock ? 0 : inp.steer;
+    const back = Math.abs(want) < Math.abs(this.steerIn) || Math.sign(want) !== Math.sign(this.steerIn);
+    const rate = (back ? 4.5 : 2.2) * dt;
+    this.steerIn += clamp(want - this.steerIn, -rate, rate);
+    // Cap the turn rate by speed: tight when crawling, gentle at speed
+    const leng = Math.max(2.7, wb * 0.9);
+    const maxYaw = lerp(1.15, 0.5, clamp(speed / 30, 0, 1));
+    const maxSteer = Math.min(d.steer, (maxYaw * leng) / Math.max(speed, 1));
+    this.steer = this.steerIn * maxSteer;
+    const targetYaw = (-this.steer * vf) / leng;
     const drifting = Math.abs(vl) > 4;
-    const yawK = hand ? 3.2 : drifting ? 5 : 10;
+    const yawK = hand ? 3.2 : drifting ? 4.5 : 7;
     this.angVel = damp(this.angVel, targetYaw * (hand && this.driven ? 1.45 : drifting ? 1.2 : 1), yawK, dt);
     this.yaw += this.angVel * dt;
 
@@ -600,7 +657,7 @@ export class Vehicle {
     const nfz = Math.cos(this.yaw);
     for (let it = 0; it < 2; it++) {
       for (const off of d.offs) {
-        const hit = this.world.collideCircle(this.pos.x + nfx * off, this.pos.z + nfz * off, d.rad);
+        const hit = this.world.collideAt(this.pos.x + nfx * off, this.pos.z + nfz * off, d.rad, this.pos.y);
         if (!hit) continue;
         this.pos.x += hit.px;
         this.pos.z += hit.pz;
@@ -618,7 +675,7 @@ export class Vehicle {
     }
     crashDamage(this, this.impact);
 
-    const gy = this.world.height(this.pos.x, this.pos.z);
+    const gy = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y);
     this.hvy -= 22 * dt;
     this.hy = Math.max(0, this.hy + this.hvy * dt);
     if (this.hy === 0) this.hvy = 0;
@@ -660,6 +717,7 @@ export class Vehicle {
       w.spin.rotation.x = this.wheelSpin;
       if (w.front) w.pivot.rotation.y = -this.steer * 1.2;
     }
+    if (c.anim) c.anim(this.wheelSpin, this.speed);
     if (this.ownLights) {
       this.ownLights.tail.emissiveIntensity = this.braking ? 8 : lerp(0.6, 3.5, night);
       this.ownLights.head.emissiveIntensity = lerp(0.6, 8, night);
