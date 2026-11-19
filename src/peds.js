@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Character, randomLook } from './character.js';
 import { LINES } from './lines.js';
+import { MAP } from './geo.js';
 import { clamp, damp, dampAngle } from './utils.js';
 import { buildWeaponMesh, WEAPONS } from './weapons.js';
 
@@ -101,24 +102,33 @@ export class Peds {
       }
     }, delay * 1000);
   }
-  talk(n, from) {
+  /** Answer the player's question (convo from lines.js conversation()). */
+  talk(n, from, convo) {
     if (n.state === 'down' || n.state === 'flee' || n.state === 'dead' || n.state === 'fight' || n.state === 'shoot') return null;
     this.face(n, from.x, from.z);
     n.state = 'react';
     n.ch.speed = 0;
-    n.timer = 4.5;
-    const tip = Math.random() < 0.18;
-    const line = tip ? pick(LINES.tip) : Math.random() < 0.4 ? pick(LINES.greet) : pick(LINES.talk);
+    n.timer = 5;
+    let dx = 0;
+    let dz = 0;
+    if (convo.dir) {
+      const p = MAP.pois.find((q) => q.n === convo.dir) || MAP.stations.find((q) => q.n.startsWith(convo.dir));
+      if (p) {
+        dx = p.x - n.x;
+        dz = p.z - n.z;
+      }
+    }
+    const line = convo.answer(dx, dz);
     setTimeout(() => {
       if (n.state !== 'react') return;
-      n.ch.play('talk');
-      this.say(n, line, 3.2);
-    }, 1300);
+      n.ch.play(convo.dir ? 'point' : 'talk');
+      this.say(n, line, 3.4);
+    }, 1900);
     setTimeout(() => {
       if (n.state !== 'react') return;
       n.ch.play(pick(['wave', 'laugh', 'thumbsUp', 'shrug']));
-    }, 3600);
-    return tip ? 20 + Math.floor(Math.random() * 6) * 10 : 0;
+    }, 4600);
+    return true;
   }
   danceParty(x, z, r) {
     let n = 0;

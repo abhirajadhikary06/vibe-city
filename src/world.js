@@ -17,7 +17,7 @@ export const SIDEWALK_H = 0;
 export const METRO_DEPTH = -12;
 export const PLATFORM_H = 1.05;
 const BANK_DEPTH = WATER_Y - 2.5;
-const CHUNK = 800;
+const CHUNK = 700;
 const MAX_HOLES = 24;
 
 /** Bounds of all downloaded tiles. */
@@ -157,6 +157,7 @@ export class World {
     this.under = null; // underground layer (metro) — see groundAt()
     this.time = { value: 0 };
     this.decks = [];
+    this.reflectSkip = [];
     this.waterGrid = new Grid(80);
     this.openings = [];
     this.graph = new RoadGraph(MAP.roads);
@@ -484,15 +485,18 @@ export class World {
 
     /* ---- Materials ---- */
     const plain = T.asphalt(false);
-    const roadMat = new THREE.MeshStandardMaterial({ map: plain.map, roughnessMap: plain.rough, roughness: 1, metalness: 0, color: 0xb8b4ae, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-    const sidewalkMat = new THREE.MeshStandardMaterial({ map: T.sidewalk(), roughness: 0.9, color: 0xd6cfc2, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    // Dark asphalt that reads clearly against the paler ground and pavements
+    const roadMat = new THREE.MeshStandardMaterial({ map: plain.map, roughnessMap: plain.rough, roughness: 1, metalness: 0, color: 0x7d7b78, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const kerbMat = new THREE.MeshStandardMaterial({ map: T.kerb(), roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xe8e6de, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
+    const sidewalkMat = new THREE.MeshStandardMaterial({ map: T.sidewalk(), roughness: 0.9, color: 0xe6e0d4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     const footMat = sidewalkMat.clone();
     footMat.polygonOffsetFactor = footMat.polygonOffsetUnits = -2.5;
     const dashMat = new THREE.MeshStandardMaterial({ map: T.laneDash(), transparent: true, alphaTest: 0.3, roughness: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
     const grassTex = T.grass();
     const grassMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     const dirtTex = T.dirt();
-    const groundMat = new THREE.MeshStandardMaterial({ map: dirtTex, roughness: 1 });
+    const groundMat = new THREE.MeshStandardMaterial({ map: dirtTex, color: 0xc2b394, roughness: 1 });
     const areaMat = new THREE.MeshStandardMaterial({ map: dirtTex, color: 0xa79e8e, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     const bankMat = new THREE.MeshStandardMaterial({ map: T.sidewalk(), color: 0x8a7e6c, roughness: 1, side: THREE.DoubleSide });
     const propsMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.1 });
@@ -610,7 +614,8 @@ export class World {
       };
       mat.customProgramCacheKey = () => 'cut';
     };
-    for (const m of [groundMat, roadMat, sidewalkMat, footMat, grassMat, areaMat, dashMat]) cut(m);
+    for (const m of [groundMat, roadMat, sidewalkMat, footMat, grassMat, areaMat, dashMat, kerbMat, edgeMat]) cut(m);
+    this.roadMats = { kerbMat, edgeMat };
 
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(MB.x1 - MB.x0, MB.z1 - MB.z0, 1, 1), groundMat);
     ground.geometry.rotateX(-Math.PI / 2);
@@ -710,6 +715,7 @@ export class World {
     /* ---- Trees, street lights, distant skyline ---- */
     this.buildTrees(rng);
     this.buildLights(rng);
+    this.buildHawkers(rng);
     this.buildSkyline(rng);
 
     /* ---- Pickup spots on pavements beside roads ---- */
@@ -810,8 +816,10 @@ export class World {
       const overRiver = wet > 60;
       const overPond = !overRiver && pts.some((_, i) => i % 2 === 0 && this.overWater(pts[i], pts[i + 1]));
       if (!overRiver && !overPond) continue;
-      const H = overRiver ? 7.5 : 0.35;
-      const R = overRiver ? Math.min(110, poly.len / 3) : Math.min(8, poly.len / 3);
+      // Vidyasagar Setu's deck rides ~26 m over the river on long approach ramps
+      const setu = overRiver && /vidyasagar/i.test(c.name);
+      const H = setu ? 26 : overRiver ? 7.5 : 0.35;
+      const R = setu ? Math.min(420, poly.len / 3) : overRiver ? Math.min(110, poly.len / 3) : Math.min(8, poly.len / 3);
       const L = poly.len;
       const b = poly.bounds();
       const deck = { poly, pts, hw: c.w / 2 + 1.6, H, river: overRiver, name: c.name, x0: b.x0 - 20, x1: b.x1 + 20, z0: b.z0 - 20, z1: b.z1 + 20, y: (s) => H * smoothstep(0, R, s) * smoothstep(0, R, L - s) };
@@ -824,6 +832,8 @@ export class World {
     const sideBuf = new Buf();
     const footBuf = new Buf();
     const dashBuf = new Buf();
+    const kerbBuf = new Buf();
+    const edgeBuf = new Buf();
     const deckRoad = new Buf();
     const tmp = {};
     // Roads on bridges follow the deck's height
@@ -854,8 +864,34 @@ export class World {
       // Dashed centre line on two-way main roads
       if (r.c <= 3 && !r.o && r.w >= 7) ribbon(deck ? deckRoad : dashBuf, pts, 0.16, deck ? 0.07 : y + 0.015, { uv: 'along', scale: 6, yAt });
     }
+    // Painted kerbs and white edge lines, street by street, stopping short of each junction
+    const G = this.graph;
+    const q = {};
+    for (const e of G.edges) {
+      if (e.c > 4 || e.br || e.w < 5 || !inTiles(e.pts[0], e.pts[1], 50)) continue;
+      const trim = (node) => {
+        const links = G.allLinks(node);
+        if (links.length <= 2) return 0;
+        let w = 0;
+        for (const { e: o } of links) if (o !== e) w = Math.max(w, o.w);
+        return w / 2 + 1.2;
+      };
+      const t0 = trim(e.a);
+      const t1 = trim(e.b);
+      if (e.len - t0 - t1 < 3) continue;
+      const P = e.poly;
+      const sub = [];
+      P.at(t0, q);
+      sub.push(q.x, q.z);
+      for (let i = 1; i < P.n - 1; i++) if (P.cum[i] > t0 && P.cum[i] < e.len - t1) sub.push(P.x[i], P.z[i]);
+      P.at(e.len - t1, q);
+      sub.push(q.x, q.z);
+      const y = 0.02 + (5 - Math.min(e.c, 5)) * 0.008;
+      for (const side of [1, -1]) ribbon(kerbBuf, offsetLine(sub, side * (e.w / 2 + 0.12)), 0.3, y + 0.02, { uv: 'along', scale: 1.0 });
+      if (e.c <= 2 && e.w >= 9) for (const side of [1, -1]) ribbon(edgeBuf, offsetLine(sub, side * (e.w / 2 - 0.55)), 0.13, y + 0.012, { uv: 'along', scale: 4 });
+    }
     void tmp;
-    for (const [buf, mat] of [[sideBuf, sidewalkMat], [footBuf, footMat], [roadBuf, roadMat], [dashBuf, dashMat]]) {
+    for (const [buf, mat] of [[sideBuf, sidewalkMat], [footBuf, footMat], [roadBuf, roadMat], [dashBuf, dashMat], [kerbBuf, this.roadMats.kerbMat], [edgeBuf, this.roadMats.edgeMat]]) {
       const g = buf.geometry();
       if (!g) continue;
       const m = new THREE.Mesh(g, mat);
@@ -1031,15 +1067,33 @@ export class World {
         this.scene.add(m);
       }
     }
-    // Instanced rooftop tanks
+    // Rooftop water tanks: instanced per 250 m cell, shown only near the camera
     if (tanks.length) {
-      const tg = new THREE.CylinderGeometry(0.75, 0.75, 1.5, 12).translate(0, 0.75, 0);
-      const tm = new THREE.InstancedMesh(tg, new THREE.MeshStandardMaterial({ color: 0x1b1b1d, roughness: 0.55 }), tanks.length);
+      const tg = new THREE.CylinderGeometry(0.75, 0.75, 1.5, 8).translate(0, 0.75, 0);
+      const tmat = new THREE.MeshStandardMaterial({ color: 0x1b1b1d, roughness: 0.55 });
+      const cells = new Map();
+      for (const t of tanks) {
+        const k = `${Math.floor(t[0] / 250)},${Math.floor(t[2] / 250)}`;
+        if (!cells.has(k)) cells.set(k, []);
+        cells.get(k).push(t);
+      }
       const m4 = new THREE.Matrix4();
-      tanks.forEach(([x, y, z, s], i) => tm.setMatrixAt(i, m4.makeScale(s, s, s).setPosition(x, y, z)));
-      tm.castShadow = true;
-      tm.computeBoundingSphere();
-      this.scene.add(tm);
+      this.tankCells = [];
+      for (const list of cells.values()) {
+        const tm = new THREE.InstancedMesh(tg, tmat, list.length);
+        let cx = 0;
+        let cz = 0;
+        list.forEach(([x, y, z, s], i) => {
+          tm.setMatrixAt(i, m4.makeScale(s, s, s).setPosition(x, y, z));
+          cx += x;
+          cz += z;
+        });
+        tm.computeBoundingSphere();
+        tm.userData.dynamic = true;
+        this.scene.add(tm);
+        this.reflectSkip.push(tm);
+        this.tankCells.push({ group: tm, x: cx / list.length, z: cz / list.length });
+      }
     }
   }
 
@@ -1096,29 +1150,11 @@ export class World {
       lumps.push(g);
     }
     const crown = merge(lumps);
+    // Far away: one low-poly blob on a thin trunk (fog hides the difference)
+    const crownLo = new THREE.IcosahedronGeometry(3.6, 0).scale(1.15, 0.85, 1.15).translate(0, 6.6, 0);
+    const trunkLo = new THREE.CylinderGeometry(0.3, 0.42, 5, 4).translate(0, 2.5, 0);
     const barkMat = new THREE.MeshStandardMaterial({ map: T.trunk(), color: 0x8a7a68, roughness: 0.95 });
     const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true });
-    const tI = new THREE.InstancedMesh(trunk, barkMat, trees.length);
-    const cI = new THREE.InstancedMesh(crown, leafMat, trees.length);
-    const m4 = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const e = new THREE.Euler();
-    const col = new THREE.Color();
-    trees.forEach(([x, z, s, ry], i) => {
-      e.set(0, ry, 0);
-      q.setFromEuler(e);
-      m4.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(s, s * rng.range(0.85, 1.15), s));
-      tI.setMatrixAt(i, m4);
-      cI.setMatrixAt(i, m4);
-      col.setHSL(rng.range(0.22, 0.3), rng.range(0.35, 0.55), rng.range(0.2, 0.3));
-      cI.setColorAt(i, col);
-    });
-    for (const m of [tI, cI]) {
-      m.castShadow = true;
-      m.receiveShadow = true;
-      m.computeBoundingSphere();
-      this.scene.add(m);
-    }
     this.leafMat = leafMat;
 
     // Coconut palms (the old palm model)
@@ -1141,20 +1177,95 @@ export class World {
         transformed.z += cos(uTime * 1.1 + ph) * 0.05 * sw;`,
       );
     };
-    const pT = new THREE.InstancedMesh(palmGeo.trunk, new THREE.MeshStandardMaterial({ map: T.trunk(), roughness: 0.95 }), palms.length);
-    const pF = new THREE.InstancedMesh(palmGeo.fronds, frondMat, palms.length);
-    pF.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: leafTex, alphaTest: 0.45 });
-    palms.forEach(([x, z, s, ry], i) => {
+    const palmTrunkMat = new THREE.MeshStandardMaterial({ map: T.trunk(), roughness: 0.95 });
+
+    // Every tree's transform and colour, kept for the level-of-detail sort
+    const all = [...trees.map((t) => [...t, 0]), ...palms.map((t) => [...t, 1])];
+    const n = all.length;
+    this.flora = { xs: new Float32Array(n), zs: new Float32Array(n), mats: new Float32Array(n * 16), cols: new Float32Array(n * 3), palm: new Uint8Array(n), n, lastX: 1e9, lastZ: 1e9 };
+    const F = this.flora;
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const col = new THREE.Color();
+    all.forEach(([x, z, s, ry, palm], i) => {
       e.set(0, ry, 0);
       q.setFromEuler(e);
-      m4.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(s, s, s));
-      pT.setMatrixAt(i, m4);
-      pF.setMatrixAt(i, m4);
+      m4.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(s, palm ? s : s * rng.range(0.85, 1.15), s));
+      m4.toArray(F.mats, i * 16);
+      F.xs[i] = x;
+      F.zs[i] = z;
+      F.palm[i] = palm;
+      col.setHSL(palm ? rng.range(0.24, 0.3) : rng.range(0.22, 0.3), rng.range(0.35, 0.55), rng.range(0.2, 0.3));
+      col.toArray(F.cols, i * 3);
     });
-    for (const m of [pT, pF]) {
-      m.castShadow = true;
-      m.computeBoundingSphere();
+    // Near: full trees and palms that cast shadows. Far: the simple versions, no shadows.
+    const NEAR_MAX = 2500;
+    const mk = (geo, mat, count, shadow) => {
+      const m = new THREE.InstancedMesh(geo, mat, count);
+      m.count = 0;
+      m.castShadow = shadow;
+      m.receiveShadow = shadow;
+      m.frustumCulled = false;
+      m.userData.dynamic = true;
       this.scene.add(m);
+      return m;
+    };
+    F.near = { trunk: mk(trunk, barkMat, NEAR_MAX, true), crown: mk(crown, leafMat, NEAR_MAX, true), pTrunk: mk(palmGeo.trunk, palmTrunkMat, NEAR_MAX, true), pFronds: mk(palmGeo.fronds, frondMat, NEAR_MAX, true) };
+    F.near.pFronds.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: leafTex, alphaTest: 0.45 });
+    F.far = { trunk: mk(trunkLo, barkMat, n, false), crown: mk(crownLo, leafMat, n, false) };
+    F.near.crown.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(NEAR_MAX * 3), 3);
+    F.far.crown.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+    F.nearMax = NEAR_MAX;
+    // too fine to matter in a rippling reflection
+    this.reflectSkip.push(F.near.trunk, F.near.crown, F.near.pTrunk, F.near.pFronds, F.far.trunk, F.far.crown);
+    this.updateFlora(0, 0, true);
+  }
+
+  /** Re-sort trees into full-detail (near the camera) and simple (far) sets when the camera moves. */
+  updateFlora(cx, cz, force = false) {
+    const F = this.flora;
+    if (!F) return;
+    if (!force && Math.hypot(cx - F.lastX, cz - F.lastZ) < 30) return;
+    F.lastX = cx;
+    F.lastZ = cz;
+    const NEAR = 230 * 230;
+    const FAR = 1900 * 1900;
+    const N = F.near;
+    const L = F.far;
+    let nt = 0;
+    let np = 0;
+    let nf = 0;
+    const put = (mesh, k, i) => mesh.instanceMatrix.array.set(F.mats.subarray(i * 16, i * 16 + 16), k * 16);
+    for (let i = 0; i < F.n; i++) {
+      const dx = F.xs[i] - cx;
+      const dz = F.zs[i] - cz;
+      const d = dx * dx + dz * dz;
+      if (d > FAR) continue;
+      if (d < NEAR && (F.palm[i] ? np : nt) < F.nearMax) {
+        if (F.palm[i]) {
+          put(N.pTrunk, np, i);
+          put(N.pFronds, np, i);
+          np++;
+        } else {
+          put(N.trunk, nt, i);
+          put(N.crown, nt, i);
+          N.crown.instanceColor.array.set(F.cols.subarray(i * 3, i * 3 + 3), nt * 3);
+          nt++;
+        }
+      } else {
+        put(L.trunk, nf, i);
+        put(L.crown, nf, i);
+        L.crown.instanceColor.array.set(F.cols.subarray(i * 3, i * 3 + 3), nf * 3);
+        nf++;
+      }
+    }
+    N.trunk.count = N.crown.count = nt;
+    N.pTrunk.count = N.pFronds.count = np;
+    L.trunk.count = L.crown.count = nf;
+    for (const m of [N.trunk, N.crown, N.pTrunk, N.pFronds, L.trunk, L.crown]) {
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
   }
 
@@ -1217,15 +1328,99 @@ export class World {
       m.computeBoundingSphere();
       this.scene.add(m);
     }
+    this.reflectSkip.push(pools, cones);
     this.lampHeadMat = headMat;
     this.poolMat = poolMat;
+  }
+
+  /** Hawkers' stalls under tarpaulins along the main-road pavements: thick round Esplanade, New Market and the stations. */
+  buildHawkers(rng) {
+    const hubs = [];
+    for (const p of MAP.pois) if (/^(esplanade|dharmatala|new market|bara ?bazar|sealdah|howrah junction|college street|gariahat)/i.test(p.n)) hubs.push([p.x, p.z]);
+    for (const s of MAP.stations) hubs.push([s.x, s.z]);
+    const busy = (x, z) => hubs.reduce((m, [hx, hz]) => Math.max(m, 1 - Math.hypot(hx - x, hz - z) / 700), 0);
+    const stalls = [];
+    const tmp = {};
+    for (const e of this.graph.edges) {
+      if (e.c > 3 || e.br || e.len < 30 || !inTiles(e.pts[0], e.pts[1])) continue;
+      for (let s = 8; s < e.len - 8; s += 4.2) {
+        e.poly.at(s, tmp);
+        const p = 0.04 + busy(tmp.x, tmp.z) * 0.55;
+        if (rng() > p) {
+          s += 6;
+          continue;
+        }
+        const side = rng() < 0.5 ? 1 : -1;
+        const off = e.w / 2 + (e.c <= 2 ? 2.4 : 1.8);
+        const x = tmp.x + tmp.tz * off * side;
+        const z = tmp.z - tmp.tx * off * side;
+        if (this.overWater(x, z) || this.collideCircle(x, z, 1.1)) continue;
+        // facing the street
+        stalls.push([x, z, Math.atan2(-tmp.tz * side, tmp.tx * side), rng()]);
+        this.addCircle(x, z, 0.9);
+      }
+    }
+    if (!stalls.length) return;
+    // table with goods, two poles, and the sloping tarp (its colour per stall)
+    const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+    const frame = merge([box(1.8, 0.75, 1.0, 0, 0.42, 0), box(0.05, 2.3, 0.05, 1.0, 1.15, -0.6), box(0.05, 2.3, 0.05, -1.0, 1.15, -0.6)]);
+    const goods = merge([box(1.4, 0.3, 0.7, 0, 0.95, 0), box(0.5, 0.3, 0.4, 0.3, 1.25, -0.1)]);
+    const tarp = new THREE.PlaneGeometry(2.4, 1.9).rotateX(-Math.PI / 2 + 0.22).translate(0, 2.1, 0.15);
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x5a4636, roughness: 0.9 });
+    const goodsMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+    const tarpMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: THREE.DoubleSide });
+    // the blue, orange, yellow and green plastic sheets every Kolkata pavement knows
+    const tarps = ['#1f5fbf', '#2b6fd6', '#e8742a', '#e8c21b', '#2f8a4a', '#c8382c', '#1f5fbf', '#f2f0ea'];
+    const wares = ['#e8c97a', '#c0392b', '#f2c14e', '#3c8d2f', '#ffffff', '#d98a1f', '#8e44ad', '#2e6da4'];
+    // one small set of meshes per 250 m cell, so far-off cells can be switched off
+    const cells = new Map();
+    for (const st of stalls) {
+      const k = `${Math.floor(st[0] / 250)},${Math.floor(st[1] / 250)}`;
+      if (!cells.has(k)) cells.set(k, []);
+      cells.get(k).push(st);
+    }
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const one = new THREE.Vector3(1, 1, 1);
+    const col = new THREE.Color();
+    const Y = new THREE.Vector3(0, 1, 0);
+    this.stallCells = [];
+    for (const list of cells.values()) {
+      const group = new THREE.Group();
+      const fM = new THREE.InstancedMesh(frame, frameMat, list.length);
+      const gM = new THREE.InstancedMesh(goods, goodsMat, list.length);
+      const tM = new THREE.InstancedMesh(tarp, tarpMat, list.length);
+      let cx = 0;
+      let cz = 0;
+      list.forEach(([x, z, yaw, r], i) => {
+        cx += x;
+        cz += z;
+        q.setFromAxisAngle(Y, yaw);
+        m4.compose(new THREE.Vector3(x, 0, z), q, one);
+        fM.setMatrixAt(i, m4);
+        gM.setMatrixAt(i, m4);
+        tM.setMatrixAt(i, m4);
+        tM.setColorAt(i, col.set(tarps[Math.floor(r * tarps.length)]));
+        gM.setColorAt(i, col.set(wares[Math.floor(r * 97) % wares.length]));
+      });
+      tM.castShadow = true;
+      for (const m of [fM, gM, tM]) {
+        m.receiveShadow = true;
+        m.computeBoundingSphere();
+        group.add(m);
+        this.reflectSkip.push(m);
+      }
+      group.userData.dynamic = true;
+      this.scene.add(group);
+      this.stallCells.push({ group, x: cx / list.length, z: cz / list.length });
+    }
   }
 
   /** Low-detail blocks beyond the mapped tiles so the city doesn't end at a cliff. */
   buildSkyline(rng) {
     const boxes = [];
     const R = 1300;
-    const S = 34;
+    const S = 42;
     for (let x = BOUNDS.x0 - R; x < BOUNDS.x1 + R; x += S) {
       for (let z = BOUNDS.z0 - R; z < BOUNDS.z1 + R; z += S) {
         const px = x + rng.range(-8, 8);
@@ -1254,6 +1449,7 @@ export class World {
     mesh.computeBoundingSphere();
     mesh.receiveShadow = false;
     this.scene.add(mesh);
+    this.reflectSkip.push(mesh);
   }
 
   /** Pavements either side of streets, and footpaths, as walkable paths. */
@@ -1291,8 +1487,14 @@ export class World {
     return out;
   }
 
-  update(dt, t, night, sunDir) {
+  update(dt, t, night, sunDir, camPos = null) {
     this.time.value = t;
+    if (camPos) {
+      this.updateFlora(camPos.x, camPos.z);
+      // hawkers' stalls only near the camera
+      if (this.stallCells) for (const c of this.stallCells) c.group.visible = Math.abs(c.x - camPos.x) < 420 && Math.abs(c.z - camPos.z) < 420;
+      if (this.tankCells) for (const c of this.tankCells) c.group.visible = Math.abs(c.x - camPos.x) < 520 && Math.abs(c.z - camPos.z) < 520;
+    }
     for (const m of Object.values(this.facadeMats)) m.emissiveIntensity = lerp(0.04, 0.8, night);
     this.shopMat.emissiveIntensity = lerp(0.35, 1.4, night);
     this.mats.neonMat.color.setScalar(lerp(1.3, 3, night));

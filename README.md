@@ -26,7 +26,7 @@ npm run dev      # start the dev server, then open the printed URL
 
 The `dist/` folder is plain static files, so you can host it on any static host (GitHub Pages, Netlify, Vercel, itch.io and so on).
 
-**Tip:** add `?t=HOUR` to the URL to start at a given time of day, e.g. `?t=21.5` for night (Howrah Bridge lights up) or `?t=18` for sunset.
+**Time:** the game runs on the real clock in Kolkata (IST): day there is day in the game, night is night. To try another time, add `?t=HOUR` to the URL, e.g. `?t=21.5` for night (Howrah Bridge and Vidyasagar Setu light up).
 
 ---
 
@@ -63,11 +63,9 @@ Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributor
 | **H** | — | Horn or bell (startles nearby people) |
 | **R** | Reload | Reset the vehicle onto the nearest road |
 | **C** | Change camera distance | Cycle chase / far / hood camera |
-| **T** (hold) | Fast-forward time | Fast-forward time |
 | **Q** | Background music on/off | Background music on/off |
 | **M** | Map: drag, scroll to zoom, click to set a waypoint, right-click to clear | Map |
 | **N** | Mute everything | Mute everything |
-| **Backspace** | Cancel an active Time Trial | Cancel an active Time Trial |
 | **Esc** | Pause (shows the full key guide) | Pause |
 
 Gamepads work too: left stick to steer, triggers for throttle and brake (aim and fire on foot), D-pad left/right to switch weapons, A for handbrake, B or RB for nitro, Y to enter or exit, X to talk, LB for the camera.
@@ -117,7 +115,7 @@ Modelled in code and placed on their real footprints:
 - **Locals** walk the pavements and footpaths of the real streets, in Kolkata looks, and talk in English and Bengali ("Ki khobor, dada?"). Talk to them, wave, start a dance, or start a fight: combat works as before.
 
 ### Gameplay
-- **Money in ₹:** cash pickups on the pavements, drift scoring, and a **Time Trial** round central Kolkata: Esplanade → Park Street → Victoria Memorial → St Paul's → Eden Gardens → B.B.D. Bagh → Nakhoda Masjid → Esplanade.
+- **Money in ₹:** cash pickups on the pavements; spend it on fares, tickets and street food. No missions or timers: just the city.
 
 ### Ride or drive
 Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a passenger.
@@ -125,6 +123,26 @@ Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a
 - **Bus:** ₹10 to the conductor; it runs a route along the main roads and stops every few hundred metres. F gets you off at the next stop.
 - **Trains, trams, Metro:** board any car of a stopped train (₹10 local, ₹7 tram, ₹20 Metro, ₹120 Rajdhani). The next station is announced at each stop; F gets you off there. A train ticket also satisfies the TTE.
 - **Ferry launch:** ₹6, get off when it docks at a ghat.
+
+### Stations and timetables
+- **Departure boards** at Howrah (the big concourse board), every railway platform, every Metro platform and every tram stop: train number, destination (Bandel, Bardhaman, Krishnanagar, Canning, Dum Dum…), platform, and minutes to arrival, worked out from where each train really is, on the real Kolkata clock.
+- **Trains and trams** run more often: seven out of Howrah, four out of Sealdah, two on the Circular Railway, two trams a line. Every train stops properly at every station.
+
+### Trains and trams (Indian designs)
+- **EMU local:** silver with a maroon band, three open doorways a side, barred windows, the flat yellow cab with its red band, a pantograph.
+- **Rajdhani Express:** a WAP-7 electric locomotive and red LHB coaches with a cream stripe.
+- **Kolkata tram:** WBTC white over blue, grilled windows, the white chevron, red rounded roof, route board and trolley pole.
+- **Overhead catenary** masts and wires along the electrified main lines.
+
+### Dharmatala bus stand
+- The Esplanade bus terminus beside Shaheed Minar: shelters, a ticket booth, and buses in their bays with route boards (12C/1 Howrah Stn, S-163 Shobhabazar, 24B Sealdah, S-101 B.B.D. Bag, RT-27 Park Circus, 213 Babughat). Board one with V (₹10) and it takes you there, stopping on the way.
+
+### More of Kolkata
+- **Vidyasagar Setu:** the cable-stayed bridge, 457 m main span, two H pylons and fans of stays, its deck 26 m over the river.
+- **Heritage buildings** on their real footprints: Writers' Building (red brick, portico, statues), Town Hall (Doric portico), Indian Museum (colonnade), New Market (Hogg Market clock tower), Birla Planetarium (dome), Marble Palace, Presidency.
+- **Streets:** dark asphalt, Kolkata's black-and-yellow kerbs, white edge lines, hawkers' stalls under blue, orange and yellow tarps along the busy pavements.
+- **Conversations** that make sense: ask "Esplanade kon dike?" and you're told which way and how far from where you're standing.
+- **Horns** only from real vehicles near you.
 
 ### Railways
 - Inside the playable city: seven trains out of Howrah, three out of Sealdah plus a **Sealdah South** local via Park Circus, and the **Circular Railway** along the river, each stopping at its real stations and waiting at the terminus so there's usually one at the platform.
@@ -186,6 +204,9 @@ Unchanged: the full day/night cycle, seven weapons and the HUD all carry over.
 - **Weapons and vehicles:** every gun, vehicle, tram and train is modelled in code from primitives, extrusions and rounded boxes.
 
 ### Performance
+- **Level of detail:** full trees, palms, rooftop tanks and hawkers' stalls only near the camera; simple versions or nothing beyond. Trains, parked vehicles and the underground metro are only drawn when near.
+- **River reflection:** redrawn only near the river, every third frame, without trees and glows; shadows update at half rate; nothing is drawn beyond the haze (~3 km).
+- **No black flashes:** invalid pixels are scrubbed before the bloom pass.
 - **Fewer draw calls:** buildings are merged by material in 800 m chunks; trees, palms, rooftop tanks, street lights and light cones use instancing.
 - **Distance detail:** far cars drop wheel and trim detail; far people animate less often and stop casting shadows.
 - **Cheaper reflections:** the river reflection updates every other frame and skips people, traffic and particles.
@@ -222,6 +243,9 @@ src/
   landmarks.js      Howrah Bridge, Howrah Station, Victoria Memorial, Shaheed Minar,
                     Eden Gardens, St Paul's, Nakhoda Masjid, Prinsep memorial
   station.js        Howrah Station life: stalls, ticket window, TTE, buses and taxis
+  trains.js         Indian rolling stock (EMU, WAP-7 + LHB, Kolkata tram) and overhead catenary
+  boards.js         Departure boards with live arrival times
+  busstand.js       The Esplanade (Dharmatala) bus terminus and its routes
   ride.js           Riding as a passenger: hired taxis/autos/rickshaws, buses, trains, ferries
   lines.js          Everything people say: romanised Bengali + Bengali script
   voice.js          Plays the recorded Bengali lines
@@ -239,7 +263,7 @@ src/
   traffic.js        AI traffic on the road graph, hijack/crash hand-off
   weapons.js        Weapon stats, gun models and the player's arsenal
   combat.js         Bullets, tracers, decals, explosions and area damage
-  gameplay.js       Cash pickups, drift scoring, Time Trial
+  gameplay.js       Cash and ammo pickups
   effects.js        Particles (smoke, sparks, nitro flame) and skid marks
   post.js           Post-processing chain and colour-grade shader
   hud.js            Minimap, speedometer, notifications, bubbles, gesture wheel

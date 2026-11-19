@@ -237,9 +237,10 @@ export class Traffic {
       if (car.speed < 0.3 && (aiBlock || playerBlock)) {
         car.stopT += dt;
         // Kolkata drivers lean on the horn
-        if (car.stopT > 0.8 && car.honkT <= 0 && this.honk && distP < 45) {
+        // a driver held up by the player leans on the horn, but not endlessly
+        if (playerBlock && car.stopT > 2.5 && car.honkT <= 0 && this.honk && distP < 45) {
           this.honk(car);
-          car.honkT = 2.5 + Math.random() * 3;
+          car.honkT = 6 + Math.random() * 6;
         }
         if (aiBlock && car.stopT > 3.5) {
           car.ghost = 2.5;

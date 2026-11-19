@@ -222,17 +222,6 @@ export class AudioEngine {
       this.crowd.f.frequency.setTargetAtTime(450 + Math.random() * 700, t, 0.2);
       this.river.f.frequency.setTargetAtTime(280 + Math.random() * 300, t, 0.4);
     }
-    // horns: Kolkata never stops honking
-    A.hornT -= dt;
-    if (A.hornT <= 0 && !underground) {
-      A.hornT = (0.6 + Math.random() * 2.6) / Math.max(0.4, Math.min(2, traffic * 0.25 + 0.4));
-      const kinds = [[420, 523], [392, 494], [277, 349, 415], [660, 784], [349, 440]];
-      const chord = kinds[Math.floor(Math.random() * kinds.length)];
-      const v = (0.008 + Math.random() * 0.02) * (1 - night * 0.5);
-      const pan = Math.random() * 2 - 1;
-      const n = Math.random() < 0.4 ? 2 : 1;
-      for (let k = 0; k < n; k++) for (const fr of chord) this.toneP(fr, 0.18 + Math.random() * 0.3, 'square', v, null, k * 0.32, pan, 1600);
-    }
     // crows by day
     A.crowT -= dt;
     if (A.crowT <= 0) {
@@ -243,6 +232,17 @@ export class AudioEngine {
         for (let k = 0; k < caws; k++) this.caw(k * 0.42, pan, 0.02 + Math.random() * 0.02);
       }
     }
+  }
+
+  /** A horn from a vehicle dist metres away, pan -1..1, in that kind of vehicle's voice. */
+  hornAt(kind, dist, pan) {
+    if (!this.ctx) return;
+    const S = SOUND[KIND_SOUND[kind] || 'car'];
+    if (!S.horn) return;
+    const v = Math.min(0.06, 1.2 / Math.max(dist, 6) / 6);
+    const n = Math.random() < 0.3 ? 2 : 1;
+    const len = S.hornType === 'sawtooth' ? 0.5 : 0.22 + Math.random() * 0.2;
+    for (let k = 0; k < n; k++) for (const fr of S.horn) this.toneP(fr, len, S.hornType, v, null, k * 0.3, pan, Math.max(700, 2200 - dist * 15));
   }
 
   /** One crow's "kaa". */
@@ -359,10 +359,9 @@ export class AudioEngine {
     o.stop(t + dur + 0.05);
   }
 
-  honk(dist = 10) {
+  honk(dist = 10, kind = 'car', pan = 0) {
     if (!this.ctx) return;
-    const v = Math.min(0.08, 0.6 / Math.max(dist, 3));
-    [349, 440].forEach((f) => this.tone(f, 0.45, 'square', v));
+    this.hornAt(kind, dist, pan);
   }
   pickup() {
     [880, 1109, 1319, 1760].forEach((f, i) => this.tone(f, 0.25, 'triangle', 0.12, null, i * 0.05));

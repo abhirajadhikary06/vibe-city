@@ -536,8 +536,11 @@ export function buildGhats(world, scene) {
     }
     if (ends.length < 2) continue;
     // Route: dock A, the mapped line across, dock B
+    // Route: dock A, the mapped line across, dock B. Points of the line close to either
+    // jetty would lead the launch back into it, so the crossing starts from the docks.
     route.pts.push(ends[0].dock);
-    for (const pt of pts.slice(1, -1)) if (inPoly(river, pt[0], pt[1])) route.pts.push(pt);
+    const clear = (pt) => ends.every((e) => Math.hypot(pt[0] - e.x, pt[1] - e.z) > 60);
+    for (const pt of pts.slice(1, -1)) if (inPoly(river, pt[0], pt[1]) && clear(pt)) route.pts.push(pt);
     route.pts.push(ends[1].dock);
     route.ends = ends;
     docks.push(route);
