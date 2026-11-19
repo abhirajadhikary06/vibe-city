@@ -536,7 +536,8 @@ async function boot() {
       z += Math.cos(yaw) * 3;
     }
     b.place(x, z, yaw);
-    b.route = { pts: d.pts, i: 1, dir: 1, wait: 2 + i * 4 };
+    // berths: where a launch ties up at each end, bow to the pontoon
+    b.route = { pts: d.pts, i: 1, dir: 1, wait: 2 + i * 4, berths: d.ends.map((e) => ({ x: e.dock[0], z: e.dock[1], yaw: e.yaw + Math.PI })) };
     vehicles.push(b);
     // a couple of noukas tied up beside each jetty, a speedboat at the first
     for (const [k, end] of d.ends.entries()) {

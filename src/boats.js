@@ -275,17 +275,20 @@ export class Boat extends Vehicle {
   landingSpot() {
     const d = this.def;
     const W = this.world;
-    let best = null;
+    // dry = a pontoon/pier deck, or ground that isn't the river (height is 0 under the water too)
+    const dry = (x, z, h) => h > 0.15 || !(W.overWater(x, z) || (W.river && inPoly(W.river, x, z)));
+    const cands = [];
     for (const side of [1, -1]) {
-      for (const along of [0, d.hl * 0.5, -d.hl * 0.5, d.hl * 0.9, -d.hl * 0.9]) {
-        for (const out of [0.9, 2, 3.5]) {
-          const p = this.local(side * (d.hw + out), along);
-          const h = W.height(p.x, p.z);
-          if (h > WATER_Y + 0.25 && !W.collideCircle(p.x, p.z, 0.35)) {
-            const score = out + Math.abs(along) * 0.1;
-            if (!best || score < best.score) best = { x: p.x, z: p.z, score };
-          }
-        }
+      for (const along of [0, d.hl * 0.5, -d.hl * 0.5, d.hl * 0.9, -d.hl * 0.9]) for (const out of [0.9, 2, 3.5]) cands.push([side * (d.hw + out), along, out + Math.abs(along) * 0.1]);
+    }
+    // over the bow or the stern (a launch ties up bow-on to its jetty)
+    for (const end of [1, -1]) for (const out of [1.2, 2.5]) for (const lat of [0, 1.5, -1.5]) cands.push([lat, end * (d.hl + out), out]);
+    let best = null;
+    for (const [lx, lz, score] of cands) {
+      const p = this.local(lx, lz);
+      const h = W.height(p.x, p.z);
+      if (h > WATER_Y + 0.25 && dry(p.x, p.z, h) && !W.collideCircle(p.x, p.z, 0.35)) {
+        if (!best || score < best.score) best = { x: p.x, z: p.z, score };
       }
     }
     return best;
@@ -359,6 +362,27 @@ export class Boat extends Vehicle {
       inp.throttle = 0;
       inp.brake = this.vf > 0.3 ? 0.6 : 0;
       inp.steer = 0;
+      const B = R.berth;
+      if (B) {
+        // tie up square in the berth, bow against the pontoon, so you can step aboard from its end
+        const k = 1 - Math.exp(-1.5 * dt);
+        this.pos.x += (B.x - this.pos.x) * k;
+        this.pos.z += (B.z - this.pos.z) * k;
+        this.yaw += wrapAngle(B.yaw - this.yaw) * k;
+        this.vel.multiplyScalar(1 - k);
+        this.angVel = 0;
+        if (R.wait <= 0) {
+          R.berth = null;
+          R.backT = 7; // cast off: go astern clear of the jetty before turning for the far bank
+        }
+      }
+      return inp;
+    }
+    if (R.backT > 0) {
+      R.backT -= dt;
+      inp.throttle = 0;
+      inp.brake = 1;
+      inp.steer = R.i % 2 ? 1 : -1;
       return inp;
     }
     const pts = R.pts;
@@ -367,9 +391,11 @@ export class Boat extends Vehicle {
     const dz = tz - this.pos.z;
     const dist = Math.hypot(dx, dz);
     const last = R.i === (R.dir > 0 ? pts.length - 1 : 0);
-    if (dist < (last ? 4 : 14)) {
+    // docked once it's right at the berth, or nosed in against the pontoon and stopped
+    if (dist < (last ? 1.5 : 14) || (last && dist < 6 && Math.abs(this.vf) < 0.8)) {
       if (last) {
-        R.wait = 14 + Math.random() * 8;
+        if (R.berths) R.berth = R.berths[R.i === pts.length - 1 ? 1 : 0];
+        R.wait = 35 + Math.random() * 15; // long enough to walk down the gangway and catch it
         R.dir *= -1;
       }
       R.i = clamp(R.i + R.dir, 0, pts.length - 1);
@@ -487,6 +513,7 @@ export function buildGhats(world, scene) {
   const docks = [];
   if (!river) return docks;
   world.jetties = [];
+  const gangways = (world.gangways = []);
   const parts = [];
   for (const f of MAP.ferries) {
     const pts = [];
@@ -521,6 +548,8 @@ export function buildGhats(world, scene) {
         const az = bz + ux * hw * sd;
         world.addWall(ax, az, ax + ux * (L - 3), az + uz * (L - 3), 0.15);
       }
+      // a chain across the river end: you board with V/F, not by stepping off into the Ganga
+      world.addWall(bx + ux * L - uz * hw, bz + uz * L + ux * hw, bx + ux * L + uz * hw, bz + uz * L - ux * hw, 0.15);
       const yaw = Math.atan2(ux, uz);
       const mid = [bx + ux * (L - 5) / 2, bz + uz * (L - 5) / 2];
       parts.push(box(hw * 2, 1.1, L + 5, 0, -0.25, 0, '#3c4044').rotateY(yaw).translate(mid[0], 0, mid[1]));
@@ -528,14 +557,62 @@ export function buildGhats(world, scene) {
         parts.push(box(0.06, 0.06, L - 3, sd * hw, 1.25, -(L + 5) / 2 + (L - 3) / 2 + 5, '#d8d8d0').rotateY(yaw).translate(mid[0], 0, mid[1]));
         for (let k = 0; k < L - 3; k += 2) parts.push(box(0.06, 1.0, 0.06, sd * hw, 0.8, -(L + 5) / 2 + 5 + k, '#d8d8d0').rotateY(yaw).translate(mid[0], 0, mid[1]));
       }
+      for (const sd of [-1, 1]) parts.push(box(0.1, 1.0, 0.1, sd * hw, 0.8, (L + 5) / 2 - 0.4, '#d8d8d0').rotateY(yaw).translate(mid[0], 0, mid[1]));
+      parts.push(box(hw * 2, 0.05, 0.05, 0, 1.0, (L + 5) / 2 - 0.4, '#c9a43a').rotateY(yaw).translate(mid[0], 0, mid[1]));
       // tin-roofed ticket shed at the landward end
       parts.push(box(hw * 2 + 1, 0.15, 6, 0, 3.2, -(L + 5) / 2 + 3, '#8a3a2c').rotateY(yaw).translate(mid[0], 0, mid[1]));
       for (const [sx, sz] of [[-1, 0], [1, 0], [-1, 5.6], [1, 5.6]]) parts.push(box(0.12, 2.9, 0.12, sx * (hw + 0.3), 1.75, -(L + 5) / 2 + 0.2 + sz, '#2a2b2e').rotateY(yaw).translate(mid[0], 0, mid[1]));
-      ends.push({ x: bx, z: bz, ux, uz, dock: [bx + ux * (L + 14), bz + uz * (L + 14)], yaw });
+      // Gangway: where the mapped ferry line starts out on the water, a walkway joins the
+      // pontoon's landward end to the bank so it can be reached on foot.
+      {
+        const jx = bx - ux * 5;
+        const jz = bz - uz * 5;
+        const wet = (x, z) => inPoly(river, x, z) || world.overWater(x, z);
+        // walk out from the pontoon both straight back and towards the nearest bank; take the shorter
+        const reach = (dx, dz) => {
+          const l = Math.hypot(dx, dz) || 1;
+          for (let d = 0; d < 200; d += 0.5) if (!wet(jx + (dx / l) * d, jz + (dz / l) * d)) return { d, x: jx + (dx / l) * d, z: jz + (dz / l) * d };
+          return null;
+        };
+        const n = nearestOnRing(river, jx, jz, {});
+        const opts = [reach(-ux, -uz), reach(n.x - jx, n.z - jz)].filter(Boolean).sort((a, b) => a.d - b.d);
+        const lx = opts.length ? opts[0].x : n.x;
+        const lz = opts.length ? opts[0].z : n.z;
+        let gx = lx - jx;
+        let gz = lz - jz;
+        const gl = Math.hypot(gx, gz);
+        if (gl > 0.3) {
+          gx /= gl;
+          gz /= gl;
+          const len = gl + 3; // runs 3 m onto the bank
+          const gw = 1.6;
+          const at = (a, b) => [jx + gx * a - gz * b, jz + gz * a + gx * b];
+          const ringG = [];
+          for (const [a, b] of [[-0.5, -gw], [len, -gw], [len, gw], [-0.5, gw]]) ringG.push(...at(a, b));
+          world.addPad(ringG, 0.3);
+          world.addOpening(polygon(ringG));
+          world.jetties.push(polygon(ringG)); // boats can't sail through it
+          gangways.push({ land: [lx, lz], jetty: [jx, jz], len: gl });
+          const gyaw = Math.atan2(gx, gz);
+          const [mx, mz] = at(len / 2 - 0.25, 0);
+          parts.push(box(gw * 2, 0.5, len + 0.5, 0, 0.05, 0, '#5a5048').rotateY(gyaw).translate(mx, 0, mz));
+          for (let k = 0.75; k < len; k += 1.5) parts.push(box(gw * 2 + 0.1, 0.04, 0.12, 0, 0.32, -(len + 0.5) / 2 + k, '#3a332c').rotateY(gyaw).translate(mx, 0, mz));
+          for (const sd of [-1, 1]) {
+            const [ax, az] = at(0, gw * sd);
+            const [ex, ez] = at(len - 1, gw * sd);
+            world.addWall(ax, az, ex, ez, 0.12);
+            parts.push(box(0.06, 0.06, len - 1, sd * gw, 1.25, -(len + 0.5) / 2 + 0.5 + (len - 1) / 2, '#d8d8d0').rotateY(gyaw).translate(mx, 0, mz));
+            for (let k = 0; k <= len - 1; k += 2) parts.push(box(0.06, 1.0, 0.06, sd * gw, 0.8, -(len + 0.5) / 2 + 0.5 + k, '#d8d8d0').rotateY(gyaw).translate(mx, 0, mz));
+          }
+          // pontoon floats under the walkway every few metres
+          for (let k = 4; k < gl - 1; k += 8) parts.push(box(gw * 2 + 0.6, 0.5, 2.2, 0, -0.35, -(len + 0.5) / 2 + k, '#2a2d30').rotateY(gyaw).translate(mx, 0, mz));
+        }
+      }
+      // dock: the launch (24 m) comes in bow-first with its bow against the pontoon's river end
+      ends.push({ x: bx, z: bz, ux, uz, dock: [bx + ux * (L + 12.6), bz + uz * (L + 12.6)], yaw });
       void p;
     }
     if (ends.length < 2) continue;
-    // Route: dock A, the mapped line across, dock B
     // Route: dock A, the mapped line across, dock B. Points of the line close to either
     // jetty would lead the launch back into it, so the crossing starts from the docks.
     route.pts.push(ends[0].dock);
