@@ -177,15 +177,12 @@ html, body {
 #title.out { opacity: 0; pointer-events: none; }
 .title-inner { text-align: center; padding: 0 16px; }
 .logo-main {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(48px, 8vw, 140px);
-  line-height: 0.9;
-  letter-spacing: 10px;
-  background: linear-gradient(180deg, #fff6c9 0%, #ffb35c 35%, #ff3fa4 70%, #8b3bff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 0 30px rgba(255, 63, 164, 0.55)) drop-shadow(0 6px 0 rgba(0, 0, 0, 0.5));
+  display: block;
+  margin: 0 auto;
+  width: auto;
+  max-width: min(560px, 86vw);
+  max-height: 36vh;
+  filter: drop-shadow(0 0 30px rgba(255, 63, 164, 0.45)) drop-shadow(0 6px 0 rgba(0, 0, 0, 0.5));
 }
 .logo-sub {
   font-size: clamp(14px, 2vw, 22px);
