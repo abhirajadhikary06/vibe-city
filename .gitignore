@@ -40,5 +40,3 @@ desktop.ini
 coverage/
 *.lcov
 
-# OpenStreetMap exports (large, regenerate the game map with npm run build:map)
-map-data/*.osm
