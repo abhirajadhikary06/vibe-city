@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import * as T from './textures.js';
 import { Buf, ribbon, flatPoly, inTiles } from './world.js';
-import { MAP, nodeXZ, polygon, inPoly, offsetLine, Poly, nearestOnRing } from './geo.js';
+import { MAP, nodeXZ, polygon, inPoly, offsetLine, Poly, nearestOnRing, Grid } from './geo.js';
+import { buildIndianCar, buildCatenary } from './trains.js';
 import { merge, clamp, damp, lerp } from './utils.js';
 import { crashDamage } from './car.js';
 
@@ -190,7 +191,8 @@ function bodyMat(c) {
 }
 
 /** One rail car. cabF / cabB put a sloped driver's cab on the front / back end. */
-function buildRailCar(kind, cabF, cabB, paint, middle) {
+function buildRailCar(kind, cabF, cabB, paint, middle, index = 0) {
+  if (kind === 'train' || kind === 'express' || kind === 'tram') return buildIndianCar(kind, KINDS[kind], cabF, cabB, index);
   const K = KINDS[kind];
   const M = railMats();
   const { L, hw, base, roof, floor } = K;
@@ -361,7 +363,7 @@ export class Consist {
     this.paint = new THREE.MeshStandardMaterial({ color: color ?? K.color, roughness: 0.4, metalness: 0.3 });
     this.cars = [];
     for (let i = 0; i < K.cars; i++) {
-      const c = buildRailCar(kind, i === 0, i === K.cars - 1, this.paint, i === 1);
+      const c = buildRailCar(kind, i === 0, i === K.cars - 1, this.paint, i === 1, i);
       scene.add(c.root);
       this.cars.push({ ...c, x: 0, z: 0, yaw: 0 });
     }
@@ -509,6 +511,17 @@ export class Consist {
     }
     // Buffer stops at the ends of the line
     let ns = this.s + this.v * dt;
+    // Arriving at a stop: if this step crosses the stopping point at low speed, stop on it
+    // (otherwise a train can roll a few metres past and never open its doors)
+    const tgt = this._target;
+    if (!this.driven && this.state === 'run' && tgt !== undefined && tgt !== this.lastStop && Math.abs(this.v) < 4 && (tgt - this.s) * (tgt - ns) <= 0) {
+      ns = tgt;
+      this.v = 0;
+      this.state = 'dwell';
+      this.lastStop = tgt;
+      const atEnd = tgt <= this.sMin + 1 || tgt >= this.sMax - 1;
+      this.dwell = atEnd && this.termDwell ? this.termDwell : this.kind === 'tram' ? 9 : this.kind === 'express' ? 30 : this.kind === 'train' ? 18 : 14;
+    }
     if (ns > this.sMax || ns < this.sMin) {
       if (Math.abs(this.v) > 2) {
         this.impact = Math.abs(this.v);
@@ -551,11 +564,13 @@ export class Consist {
     // Next stop in the direction of travel
     let target = this.dir > 0 ? this.sMax : this.sMin;
     for (const st of this.dir > 0 ? this.stops : [...this.stops].reverse()) {
-      if ((st - this.s) * this.dir > 0.4) {
+      // the next stop ahead that this train hasn't just served
+      if ((st - this.s) * this.dir > -0.5 && st !== this.lastStop) {
         target = st;
         break;
       }
     }
+    this._target = target;
     const dist = Math.abs(target - this.s);
     let want = Math.min(K.top, Math.sqrt(2 * K.dec * 0.85 * dist));
     // Obstacles on the line
@@ -593,6 +608,7 @@ export class Consist {
     if (dist < 0.4 && Math.abs(this.v) < 0.6) {
       this.v = 0;
       this.state = 'dwell';
+      this.lastStop = target;
       const atEnd = this.s <= this.sMin + 1 || this.s >= this.sMax - 1;
       this.dwell = atEnd && this.termDwell ? this.termDwell : this.kind === 'tram' ? 9 : this.kind === 'express' ? 30 : this.kind === 'train' ? 18 : 14;
     }
@@ -775,6 +791,30 @@ export class Rail {
       const pts = r.n.flatMap(nodeXZ);
       for (const o of [0.72, -0.72]) ribbon(grooves, offsetLine(pts, o), 0.09, 0.045);
     }
+    // Overhead catenary over the main lines; masts only where they clear the neighbouring tracks
+    {
+      const segGrid = new Grid(25);
+      for (const r of heavy) {
+        for (let i = 1; i < r.n.length; i++) {
+          const [ax, az] = nodeXZ(r.n[i - 1]);
+          const [bx, bz] = nodeXZ(r.n[i]);
+          const sg = { ax, az, bx, bz };
+          segGrid.insert(sg, Math.min(ax, bx) - 3, Math.max(ax, bx) + 3, Math.min(az, bz) - 3, Math.max(az, bz) + 3);
+        }
+      }
+      const clear = (x, z) => {
+        let ok = true;
+        segGrid.query(x - 3, x + 3, z - 3, z + 3, (sg) => {
+          const dx = sg.bx - sg.ax;
+          const dz = sg.bz - sg.az;
+          const t = clamp(((x - sg.ax) * dx + (z - sg.az) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+          if (Math.hypot(x - sg.ax - dx * t, z - sg.az - dz * t) < 2.6) ok = false;
+        });
+        return ok && !world.collideCircle(x, z, 0.4);
+      };
+      const cat = buildCatenary(scene, heavy.filter((r) => !r.sv).map((r) => r.n.flatMap(nodeXZ)), clear);
+      if (cat) statics.push(...cat);
+    }
     const bedMat = new THREE.MeshStandardMaterial({ map: sleeperTexture(), roughness: 1, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     for (const [b, m] of [[bed, bedMat], [steel, M.steel], [grooves, M.steel]]) {
       const g = b.geometry();
@@ -936,12 +976,13 @@ export class Rail {
     };
     if (shed) {
       const q = {};
-      terminus((x, z) => inPoly(shed, x, z) || nearestOnRing(shed, x, z, q).d < 90, 7, ['train', 'express', 'train', 'train', 'express', 'train', 'train']);
+      for (const { cs } of terminus((x, z) => inPoly(shed, x, z) || nearestOnRing(shed, x, z, q).d < 90, 7, ['train', 'express', 'train', 'train', 'express', 'train', 'train'])) cs.origin = 'howrah';
     }
     const sealdah = MAP.stations.find((st) => /^sealdah$/i.test(st.n) && st.k === 'rail');
     if (sealdah) {
       const near = (x, z) => Math.hypot(x - sealdah.x, z - sealdah.z) < 420;
       const made = terminus(near, 3, ['train', 'express', 'train'], 4500);
+      for (const { cs } of made) cs.origin = 'sealdah';
       // Sealdah South: make sure a local runs out past Park Circus
       const pc = MAP.stations.find((st) => /park circus/i.test(st.n));
       if (pc && !made.some(({ pl }) => pl.project(pc.x, pc.z).d < 70)) {
@@ -963,6 +1004,7 @@ export class Rail {
           this.trainTracks.push({ track, color: 0x2f6b9a });
           this.consists.push(cs);
           this.southLocal = cs;
+          cs.origin = 'sealdah-south';
         }
       }
     }
@@ -990,9 +1032,17 @@ export class Rail {
               const p = pl.project(st.x, st.z);
               if (p.d < 60 && p.s > 150 && p.s < pl.len - 150) stops.push(p.s);
             }
-            const cs = new Consist(scene, track, 'train', stops, fx, 0x1f6b3a);
+            for (const k of [0, 1]) {
+              const cs = new Consist(scene, track, 'train', stops, fx, 0x1f6b3a);
+              cs.s = k ? cs.sMax : cs.sMin;
+              cs.dir = k ? -1 : 1;
+              cs.termDwell = 40;
+              cs.dwell = 6 + k * 15;
+              cs.circular = true;
+              cs.place();
+              this.consists.push(cs);
+            }
             this.trainTracks.push({ track, color: 0x1f6b3a });
-            this.consists.push(cs);
           }
         }
       }
@@ -1003,9 +1053,22 @@ export class Rail {
     const tends = [...tadj.keys()].filter((n) => tadj.get(n).size === 1);
     const tpaths = tends.map((n) => walkRail(tadj, n, null, 6000, 0.7)).filter((p) => p.len > 700).sort((a, b) => b.len - a.len);
     const lines = [];
+    // distinct routes: a line that mostly runs beside one already chosen (the other track
+    // of a double-track route) doesn't count
+    const near = (p, l) => {
+      const L = l.poly || (l.poly = new Poly(l.nodes.flatMap(nodeXZ)));
+      let close = 0;
+      let all = 0;
+      for (let i = 0; i < p.nodes.length; i += 3) {
+        const [x, z] = nodeXZ(p.nodes[i]);
+        all++;
+        if (L.project(x, z).d < 25) close++;
+      }
+      return close / Math.max(1, all);
+    };
     for (const p of tpaths) {
       if (lines.length >= 3) break;
-      if (lines.some((l) => overlap(p, l) > 0.4)) continue;
+      if (lines.some((l) => overlap(p, l) > 0.4 || near(p, l) > 0.5)) continue;
       lines.push(p);
     }
     const wire = [];
@@ -1037,9 +1100,17 @@ export class Rail {
         const pz = q0.z - (q0.tx / l) * 3.6;
         stopPosts.push({ x: px, z: pz, yaw: Math.atan2(q0.tx, q0.tz) });
       }
-      const tram = new Consist(scene, track, 'tram', stops, fx);
-      this.trams.push(tram);
-      this.consists.push(tram);
+      // two trams a line, running opposite ways
+      for (const k of [0, 1]) {
+        const tram = new Consist(scene, track, 'tram', stops, fx);
+        tram.s = k ? tram.sMax - 5 : tram.sMin + 5;
+        tram.dir = k ? -1 : 1;
+        tram.dwell = 4 + k * 6;
+        tram.termDwell = 25;
+        tram.place();
+        this.trams.push(tram);
+        this.consists.push(tram);
+      }
       this.tramTracks.push({ track, color: KINDS.tram.color });
       wire.push(...alongTrack(track, 20, (len) => [box(0.025, 0.025, len, 0, 6.0, 0)]));
       const q = {};
@@ -1149,7 +1220,7 @@ export class Rail {
     objs.length = 0;
     const under = player.mode === 'foot' && player.pos.y < -2.5;
     if (player.mode === 'foot' && !under) objs.push({ x: player.pos.x, z: player.pos.z, r: 0.6 });
-    for (const v of vehicles) if (!v.rail) objs.push({ x: v.pos.x, z: v.pos.z, r: v.def.hw + 0.3 });
+    for (const v of vehicles) if (!v.rail && !v.boat) objs.push({ x: v.pos.x, z: v.pos.z, r: v.def.hw + 0.3 });
     for (const c of traffic.cars) objs.push({ x: c.x, z: c.z, r: c.def.hw + 0.3 });
     const aiCtx = { objs, audio, near, consists: this.consists };
     // Underground trains only meet the player (and each other)
@@ -1197,9 +1268,9 @@ export class Rail {
         n.z += (dz / d) * (rr - d);
         if (moving && n.state !== 'dead') peds.damage(n, cs.speed * 8, cvx * 0.8 + (dx / d) * 3, cvz * 0.8 + (dz / d) * 3, null, 'vehicle');
       }
-      // Road vehicles
+      // Road vehicles (boats are on the water: a train beside the river never touches them)
       for (const v of vehicles) {
-        if (v.rail) continue;
+        if (v.rail || v.boat) continue;
         const fx = Math.sin(v.yaw);
         const fz = Math.cos(v.yaw);
         for (const off of v.def.offs) {

@@ -62,8 +62,9 @@ for (const f of files) {
 console.log(`${nodes.size} nodes, ${ways.size} ways, ${rels.size} relations from ${files.length} files`);
 
 /* ---------- Projection ---------- */
-const lat0 = (Math.min(...tiles.map((t) => t[0])) + Math.max(...tiles.map((t) => t[2]))) / 2;
-const lon0 = (Math.min(...tiles.map((t) => t[1])) + Math.max(...tiles.map((t) => t[3]))) / 2;
+// A fixed origin, so adding map tiles never shifts existing coordinates
+const lat0 = 22.5662;
+const lon0 = 88.35862;
 const MY = 110574.3 + 1.15 * (lat0 - 22) * 10; // metres per degree of latitude (close enough at 22.5° N)
 const MX = 111320 * Math.cos((lat0 * Math.PI) / 180);
 const r1 = (v) => Math.round(v * 10) / 10;

@@ -192,6 +192,20 @@ export function roof() {
   return tex(c);
 }
 
+/** Kolkata kerb paint: alternating black and yellow blocks along v. */
+export function kerb() {
+  const [c, g] = mk(16, 64);
+  g.fillStyle = '#e9c21c';
+  g.fillRect(0, 0, 16, 32);
+  g.fillStyle = '#1b1b1b';
+  g.fillRect(0, 32, 16, 32);
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  for (let y = 0; y < 64; y += 4) g.fillRect(0, y, 16, 1);
+  const t = tex(c);
+  t.anisotropy = 4;
+  return t;
+}
+
 /** White dashed centre line, running along v. */
 export function laneDash() {
   const [c, g] = mk(16, 128);

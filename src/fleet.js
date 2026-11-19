@@ -358,8 +358,13 @@ function lmat(hex, emissive = false) {
   return LMAT.get(k);
 }
 const BOARDS = new Map();
-function routeBoard(L) {
-  if (BOARDS.has(L)) return BOARDS.get(L);
+/** A bus's route board for a particular route: { no, bn, en } on the livery's board colours. */
+export function busRouteBoard(color, route) {
+  const L = { ...(LIVERIES[color] || LIVERIES[0x2f5fb3]), ...route };
+  return routeBoard(L, `${color}:${route.no}`).board;
+}
+function routeBoard(L, key = L) {
+  if (BOARDS.has(key)) return BOARDS.get(key);
   const tex = canvasTex(512, 96, (g, w, h) => {
     g.fillStyle = L.board;
     g.fillRect(0, 0, w, h);
@@ -386,7 +391,8 @@ function routeBoard(L) {
     board: new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.9 }),
     name: new THREE.MeshStandardMaterial({ map: name, roughness: 0.5 }),
   };
-  BOARDS.set(L, m);
+  m.board.userData.dest = true;
+  BOARDS.set(key, m);
   return m;
 }
 

@@ -56,6 +56,26 @@ const GradeShader = {
     }`,
 };
 
+/**
+ * Bloom spreads every pixel over a wide blur, so one NaN or infinite value (a glancing
+ * specular highlight, say) turns the whole frame black for a moment. Scrub those and cap
+ * extreme brightness before bloom sees the image.
+ */
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    float fix(float v) { return (v >= 0.0 && v < 1.0e4) ? min(v, 48.0) : 0.0; }
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      gl_FragColor = vec4(fix(c.r), fix(c.g), fix(c.b), 1.0);
+    }`,
+};
+
 export function createPost(renderer, scene, camera) {
   const size = renderer.getSize(new THREE.Vector2());
   const composer = new EffectComposer(renderer);
@@ -66,6 +86,7 @@ export function createPost(renderer, scene, camera) {
   gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.2, scale: 1.1, samples: 12 });
   gtao.enabled = false;
   composer.addPass(gtao);
+  composer.addPass(new ShaderPass(SanitizeShader));
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.55, 0.5, 0.88);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());

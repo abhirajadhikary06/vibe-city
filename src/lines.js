@@ -144,6 +144,60 @@ const L = {
   busStop: [['Stop esechhe, namun!', 'স্টপ এসেছে, নামুন!']],
 };
 
+/*
+ * Conversations: what the player asks, and answers that actually fit.
+ * `dir` answers are worked out from where you're standing (see directions()).
+ */
+const CONVO = [
+  { q: ['Ki khobor, dada?', 'কী খবর, দাদা?'], a: [['Bhalo, tomar ki khobor?', 'ভালো, তোমার কী খবর?'], ['Ei cholchhe, dada. Tumi bolo?', 'এই চলছে, দাদা। তুমি বলো?']] },
+  { q: ['Kemon achhen?', 'কেমন আছেন?'], a: [['Bhalo achhi, apni kemon achhen?', 'ভালো আছি, আপনি কেমন আছেন?'], ['Ei to, cholchhe. Dhonnobad!', 'এই তো, চলছে। ধন্যবাদ!']] },
+  { q: ['Bhalo mishti doi kothay pabo?', 'ভালো মিষ্টি দই কোথায় পাবো?'], a: [['Ganguram-e jan, darun mishti doi.', 'গাঙ্গুরামে যান, দারুণ মিষ্টি দই।'], ['Parar mishtir dokan-e paben, ekdom tatka.', 'পাড়ার মিষ্টির দোকানে পাবেন, একদম টাটকা।']] },
+  { q: ['Ekhane bhalo phuchka kothay?', 'এখানে ভালো ফুচকা কোথায়?'], a: [['Metro-r pashe phuchka-wala achhe, darun!', 'মেট্রোর পাশে ফুচকাওয়ালা আছে, দারুণ!'], ['Moidan-er dhare, shondhe-belay jan.', 'ময়দানের ধারে, সন্ধেবেলায় যান।']] },
+  { q: ['Aaj Eden-e khela achhe?', 'আজ ইডেনে খেলা আছে?'], a: [['Haan, shondhe-belay match. Tikit pele jan!', 'হ্যাঁ, সন্ধেবেলায় ম্যাচ। টিকিট পেলে যান!'], ['Aaj nei, porer shoptahe.', 'আজ নেই, পরের সপ্তাহে।']] },
+  { q: ['Ki gorom aaj, na?', 'কী গরম আজ, না?'], a: [['Ar bolben na! Ekta cha khaben?', 'আর বলবেন না! একটা চা খাবেন?'], ['Haan, ghame bhije gechhi.', 'হ্যাঁ, ঘামে ভিজে গেছি।']] },
+  { q: ['Pujo-y ki plan?', 'পুজোয় কী প্ল্যান?'], a: [['Pandal hopping, shara raat!', 'প্যান্ডেল হপিং, সারা রাত!'], ['Barir pujo, shobai ashbe.', 'বাড়ির পুজো, সবাই আসবে।']] },
+  { q: ['Mohun Bagan na East Bengal?', 'মোহনবাগান না ইস্টবেঙ্গল?'], a: [['Mohun Bagan, chirokal!', 'মোহনবাগান, চিরকাল!'], ['East Bengal chhara kichhu nei!', 'ইস্টবেঙ্গল ছাড়া কিছু নেই!']] },
+  { q: ['Taxi kothay pabo?', 'ট্যাক্সি কোথায় পাবো?'], a: [['Rastay haat dekhan, peye jaben.', 'রাস্তায় হাত দেখান, পেয়ে যাবেন।'], ['Howrah-r samne line kore dNariye thake.', 'হাওড়ার সামনে লাইন করে দাঁড়িয়ে থাকে।']] },
+  { q: ['Ekhane kotodin achhen?', 'এখানে কতদিন আছেন?'], a: [['Jonmo theke, ei parar chhele.', 'জন্ম থেকে, এই পাড়ার ছেলে।'], ['Bish bochhor holo.', 'বিশ বছর হলো।']] },
+  { q: ['Esplanade kon dike?', 'এসপ্ল্যানেড কোন দিকে?'], dir: 'Esplanade' },
+  { q: ['Howrah Station kon dike?', 'হাওড়া স্টেশন কোন দিকে?'], dir: 'Howrah' },
+  { q: ['Park Street kon dike?', 'পার্ক স্ট্রিট কোন দিকে?'], dir: 'Park Street' },
+];
+const DIRS = { north: ['uttor', 'উত্তর'], south: ['dokkhin', 'দক্ষিণ'], east: ['purbo', 'পূর্ব'], west: ['poshchim', 'পশ্চিম'] };
+const cap = (w) => w[0].toUpperCase() + w.slice(1);
+const DIR_LINES = {};
+for (const [k, [r, b]] of Object.entries(DIRS)) {
+  DIR_LINES[k] = {
+    near: [`Kachhei, ${r} dike hNete chole jan.`, `কাছেই, ${b} দিকে হেঁটে চলে যান।`],
+    mid: [`${cap(r)} dike, ektu dur. Auto niye nin.`, `${b} দিকে, একটু দূর। অটো নিয়ে নিন।`],
+    far: [`Onek dur, ${r} dike. Taxi dhorun.`, `অনেক দূর, ${b} দিকে। ট্যাক্সি ধরুন।`],
+  };
+}
+L.convoQ = CONVO.map((c) => c.q);
+for (const c of CONVO) if (c.a) L['a:' + c.q[0]] = c.a;
+for (const d of Object.values(DIR_LINES)) L['dir:' + d.near[0]] = [d.near, d.mid, d.far];
+L.tipAnswer = [
+  ['Bhalo! Eta rakho, kichhu kheye nio.', 'ভালো! এটা রাখো, কিছু খেয়ে নিও।'],
+  ['Tumi to bhalo chhele! Nao, cha kheyo.', 'তুমি তো ভালো ছেলে! নাও, চা খেয়ো।'],
+];
+
+/** A conversation: { q: what the player says, answer(x, z, place) -> what they hear back, tip }. */
+export function conversation(tip = false) {
+  const c = CONVO[Math.floor(Math.random() * CONVO.length)];
+  return {
+    q: c.q[0],
+    dir: c.dir || null,
+    answer(dx, dz) {
+      if (tip) return pick(L.tipAnswer)[0];
+      if (!c.dir) return pick(c.a)[0];
+      // dx, dz: from the speaker to the place (x east, z south)
+      const k = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : dz > 0 ? 'south' : 'north';
+      const d = Math.hypot(dx, dz);
+      return DIR_LINES[k][d < 600 ? 'near' : d < 2000 ? 'mid' : 'far'][0];
+    },
+  };
+}
+
 export const LINES = {};
 const BN = new Map();
 for (const [k, list] of Object.entries(L)) {

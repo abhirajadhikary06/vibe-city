@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Character, PLAYER_LOOK, playerMaterial } from './character.js';
-import { LINES } from './peds.js';
+import { LINES, conversation } from './lines.js';
 import { TYPES } from './car.js';
 import { Arsenal, SLOTS } from './weapons.js';
 import { clamp, damp, dampAngle, lerp } from './utils.js';
@@ -757,9 +757,14 @@ export class Player {
     const g = this.game;
     this.yaw = Math.atan2(n.x - this.pos.x, n.z - this.pos.z);
     this.ch.play('talk');
-    g.hud.say(this.ch, pick(LINES.playerTalk), 1.8);
-    const tip = g.peds.talk(n, this.pos);
-    if (tip) setTimeout(() => g.gameplay.addMoney(tip, `TIP +$${tip}`), 4200);
+    // ask something, and get an answer that fits (now and then a kind soul tips you)
+    const tip = Math.random() < 0.12;
+    const convo = conversation(tip);
+    g.hud.say(this.ch, convo.q, 1.8);
+    if (g.peds.talk(n, this.pos, convo) && tip) {
+      const amt = 20 + Math.floor(Math.random() * 6) * 10;
+      setTimeout(() => g.gameplay.addMoney(amt, `TIP +₹${amt}`), 4400);
+    }
   }
 
   gesture(name) {

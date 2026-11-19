@@ -10,7 +10,21 @@ import { MAP, polygon, inPoly, nearestOnRing } from './geo.js';
  */
 
 /** Buildings whose OSM footprint is replaced by a model here. */
-export const LANDMARK_FOOTPRINTS = [/^victoria memorial$/i, /^howrah junction$/i, /saint paul's anglican cathedral$/i, /^nakhoda mosque$/i];
+export const LANDMARK_FOOTPRINTS = [/^victoria memorial$/i, /^howrah junction$/i, /saint paul's anglican cathedral$/i, /^nakhoda mosque$/i, /^writers' building$/i, /^calcutta town hall$/i, /^indian museum$/i, /^kolkata new market$/i, /^birla planetarium$/i, /^marble palace$/i, /^presidency university main building$/i];
+
+/**
+ * Heritage buildings modelled from their footprints: colour, height, and the features
+ * that make them recognisable (porticoes, colonnades, towers, domes, statues).
+ */
+const HERITAGE = [
+  { re: /^writers' building$/i, H: 21, wall: '#a8432f', trim: '#f0e2c4', floors: 3, portico: { cols: 8, w: 0.18 }, pediments: 3, statues: true },
+  { re: /^calcutta town hall$/i, H: 19, wall: '#efe3c6', trim: '#ffffff', floors: 2, portico: { cols: 6, w: 0.45, doric: true } },
+  { re: /^indian museum$/i, H: 18, wall: '#e6c8a4', trim: '#fbf3e4', floors: 2, colonnade: true },
+  { re: /^kolkata new market$/i, H: 11, wall: '#a8432f', trim: '#efe3c6', floors: 2, tower: { h: 36, clock: true }, arcade: true },
+  { re: /^birla planetarium$/i, H: 6, wall: '#f4f1ea', trim: '#ffffff', floors: 1, dome: 0.95, stupa: true },
+  { re: /^marble palace$/i, H: 17, wall: '#f1eee6', trim: '#ffffff', floors: 3, portico: { cols: 6, w: 0.4 } },
+  { re: /^presidency university main building$/i, H: 20, wall: '#c9b48a', trim: '#f3ead6', floors: 3, portico: { cols: 4, w: 0.25 }, tower: { h: 30 } },
+];
 
 /** Real heights where the generic estimate is off. */
 const HEIGHTS = [
@@ -148,6 +162,7 @@ export function buildLandmarks(world, scene) {
     return k;
   };
   howrahBridge(world, kit());
+  vidyasagarSetu(world, kit());
   victoriaMemorial(world, kit());
   shaheedMinar(world, kit());
   howrahStation(world, kit(), scene);
@@ -155,6 +170,10 @@ export function buildLandmarks(world, scene) {
   stPauls(world, kit());
   nakhoda(world, kit());
   prinsep(world, kit());
+  for (const spec of HERITAGE) {
+    const b = findB(spec.re);
+    if (b) heritage(world, kit(), b, spec, scene);
+  }
 
   const byMat = {};
   for (const k of kits) for (const [m, list] of Object.entries(k.parts)) (byMat[m] ||= []).push(...list);
@@ -173,7 +192,7 @@ export function buildLandmarks(world, scene) {
 
 /* ---------- Howrah Bridge (Rabindra Setu): a cantilever truss with two 82 m towers ---------- */
 function howrahBridge(world, K) {
-  const deck = world.decks.filter((d) => d.river).sort((a, b) => (/howrah|rabindra/i.test(b.name) ? 1 : 0) - (/howrah|rabindra/i.test(a.name) ? 1 : 0) || b.poly.len - a.poly.len)[0];
+  const deck = world.decks.filter((d) => d.river && /howrah|rabindra/i.test(d.name))[0] || world.decks.filter((d) => d.river && !/vidyasagar/i.test(d.name)).sort((a, b) => b.poly.len - a.poly.len)[0];
   if (!deck || !world.river) return;
   const P = deck.poly;
   const tmp = {};
@@ -264,6 +283,174 @@ function howrahBridge(world, K) {
   for (const side of [1, -1]) {
     for (let s = s0; s < s1 - 6; s += 6) K.beam('steel', at(s, side * 1.04, 1.4), at(s + 6, side * 1.04, 1.4), 0.12, '#6d7276');
   }
+}
+
+/* ---------- Vidyasagar Setu: cable-stayed, 457 m main span, two H pylons, fan stays ---------- */
+function vidyasagarSetu(world, K) {
+  const deck = world.decks.find((d) => d.river && /vidyasagar/i.test(d.name));
+  if (!deck || !world.river) return;
+  const P = deck.poly;
+  const tmp = {};
+  let sA = null;
+  let sB = null;
+  for (let s = 0; s <= P.len; s += 2) {
+    P.at(s, tmp);
+    if (inPoly(world.river, tmp.x, tmp.z)) {
+      if (sA === null) sA = s;
+      sB = s;
+    }
+  }
+  if (sA === null) return;
+  const mid = (sA + sB) / 2;
+  const MAIN = Math.min(457, (sB - sA) * 0.82);
+  const tA = mid - MAIN / 2;
+  const tB = mid + MAIN / 2;
+  const SIDE = MAIN * 0.4; // the side spans
+  const hw = deck.hw;
+  const PY = 100; // pylon height above the deck
+  const at = (s, side, h) => {
+    P.at(s, tmp);
+    return [tmp.x + tmp.tz * side, deck.y(s) + h, tmp.z - tmp.tx * side];
+  };
+  const grey = '#d6d8d6';
+  const cable = '#efe6c8';
+  // Box girder under the deck, from ramp to ramp over the river
+  for (let s = Math.max(0, tA - SIDE - 40); s < Math.min(P.len, tB + SIDE + 40) - 8; s += 8) {
+    const a = at(s, 0, -1.6);
+    const b = at(s + 8, 0, -1.6);
+    K.beam('stone', a, b, 3.2, '#8d918f');
+    // edge girders and railings
+    for (const side of [1, -1]) {
+      K.beam('steel', at(s, side * (hw - 0.3), 0.6), at(s + 8, side * (hw - 0.3), 0.6), 0.25, '#b8bcbf');
+      K.beam('steel', at(s, side * (hw - 0.3), -0.8), at(s + 8, side * (hw - 0.3), -0.8), 1.4, '#9da1a3');
+    }
+  }
+  for (const t of [tA, tB]) {
+    // two legs rising from caissons in the river, joined by cross-beams: an H
+    for (const side of [1, -1]) {
+      const foot = at(t, side * (hw + 2.5), 0);
+      foot[1] = -4;
+      const top = at(t, side * (hw - 2.5), PY);
+      K.beam('stone', foot, top, 4.2, grey);
+    }
+    for (const h of [-3, PY * 0.45, PY - 6]) K.beam('stone', at(t, hw + 2.5 - (h + 4) / (PY + 4) * 5, h), at(t, -(hw + 2.5 - (h + 4) / (PY + 4) * 5), h), 3.2, grey);
+    // aviation lights on top
+    for (const side of [1, -1]) K.box('glow', 1, 1, 1, 0, 0, 0, '#ff2a2a').translate(...at(t, side * (hw - 2.5), PY + 1));
+    P.at(t, tmp);
+    K.box('stone', 14, 8, hw * 2 + 14, tmp.x, -3.5, tmp.z, '#7f776b', Math.atan2(tmp.tx, tmp.tz) + Math.PI / 2);
+    (world.boatObstacles ||= []).push({ x: tmp.x, z: tmp.z, r: hw + 6 });
+    // fans of stay cables in two planes, out over the main span and back over the side span
+    const N = 13;
+    for (const side of [1, -1]) {
+      for (let i = 1; i <= N; i++) {
+        const anchor = at(t, side * (hw - 2.5), PY - 4 - i * 2.4);
+        const dist = (i / N) * (MAIN / 2 - 6);
+        const inward = t === tA ? 1 : -1;
+        K.beam('steel', anchor, at(t + inward * dist, side * (hw - 0.5), 0.8), 0.16, cable);
+        const back = (i / N) * (SIDE - 6);
+        K.beam('steel', at(t, side * (hw - 2.5), PY - 4 - i * 2.4), at(t - inward * back, side * (hw - 0.5), 0.8), 0.16, cable);
+      }
+    }
+  }
+  // LED strips along the cables' deck anchors (lit after dark)
+  for (const side of [1, -1]) K.beam('glow', at(tA - SIDE, side * (hw - 0.4), 1.2), at(tB + SIDE, side * (hw - 0.4), 1.2), 0.14, '#ffe0a0');
+}
+
+/* ---------- A heritage building on its footprint, facing its street ---------- */
+function heritage(world, K, b, spec, scene) {
+  const f = frame(b.p);
+  // which long side faces the nearest main road
+  const q = world.graph.nearest(f.cx, f.cz, 200, (e) => e.c <= 4);
+  let a = f.a;
+  if (q) {
+    const vx = q.x - f.cx;
+    const vz = q.z - f.cz;
+    const along = vx * f.ux + vz * f.uz;
+    const across = -vx * f.uz + vz * f.ux;
+    // local +z (across) should point at the road; turn the frame if the road is off the short end
+    if (Math.abs(along) / Math.max(f.hu, 1) > Math.abs(across) / Math.max(f.hv, 1)) a += along > 0 ? -Math.PI / 2 : Math.PI / 2;
+    else if (across < 0) a += Math.PI;
+  }
+  const swap = Math.abs(Math.sin(a - f.a)) > 0.5;
+  const hu = swap ? f.hv : f.hu; // half width along the facade
+  const hv = swap ? f.hu : f.hv; // half depth
+  const { H, wall, trim } = spec;
+  const k = 'stone';
+  K.box(k, hu * 2, H, hv * 2, 0, H / 2, 0, wall);
+  // plinth, string courses at every floor, cornice and a balustrade
+  K.box(k, hu * 2 + 0.6, 1.2, hv * 2 + 0.6, 0, 0.6, 0, trim);
+  const fh = (H - 1.5) / spec.floors;
+  for (let i = 1; i < spec.floors; i++) K.box(k, hu * 2 + 0.3, 0.45, hv * 2 + 0.3, 0, 1.2 + fh * i, 0, trim);
+  K.box(k, hu * 2 + 0.9, 0.8, hv * 2 + 0.9, 0, H - 0.2, 0, trim);
+  if (!spec.stupa) {
+    for (let x = -hu + 0.6; x <= hu - 0.6; x += 1.1) for (const z of [hv + 0.25, -hv - 0.25]) K.box(k, 0.22, 0.9, 0.22, x, H + 0.65, z, trim);
+    for (const z of [hv + 0.25, -hv - 0.25]) K.box(k, hu * 2 + 0.5, 0.18, 0.4, 0, H + 1.15, z, trim);
+  }
+  // windows: tall arched recesses with shutters, front and back, on each floor
+  for (let i = 0; i < spec.floors && !spec.stupa; i++) {
+    const y = 1.2 + fh * i + fh * 0.5;
+    for (let x = -hu + 2.5; x <= hu - 2.5; x += 3.6) {
+      for (const z of [hv + 0.03, -hv - 0.03]) {
+        K.box(k, 1.5, fh * 0.55, 0.12, x, y, z, '#2a2420');
+        K.box(k, 1.9, 0.25, 0.2, x, y + fh * 0.32, z, trim);
+      }
+    }
+  }
+  // portico: columns, entablature and a pediment on the street front
+  if (spec.portico) {
+    const pw = Math.max(12, hu * 2 * spec.portico.w);
+    const n = spec.portico.cols;
+    const ch = H * 0.82;
+    for (let i = 0; i < n; i++) {
+      const x = -pw / 2 + (pw * i) / (n - 1);
+      K.cyl(k, 0.55, 0.65, ch, x, ch / 2 + 1.2, hv + 3.2, trim, 14);
+      K.box(k, 1.5, 0.5, 1.5, x, 1.45, hv + 3.2, trim);
+    }
+    K.box(k, pw + 2, 1.3, 4.6, 0, ch + 1.85, hv + 2.3, trim);
+    K.add(k, new THREE.CylinderGeometry(0.01, (pw + 2) / 2, 4.4, 3, 1).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).scale(1, 0.55 * (spec.portico.doric ? 0.8 : 1), 1).translate(0, ch + 3.3, hv + 2.3), trim);
+    K.box(k, pw + 2, 0.8, 6, 0, 0.4, hv + 3, trim);
+    for (let i = 0; i < (spec.pediments || 1) - 1; i++) {
+      const x = (i ? 1 : -1) * hu * 0.6;
+      K.add(k, new THREE.CylinderGeometry(0.01, 6, 2.4, 3, 1).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).scale(1, 0.5, 1).translate(x, H + 1.6, hv + 0.4), trim);
+    }
+  }
+  // a colonnade along the whole street front (the Indian Museum)
+  if (spec.colonnade) {
+    for (let x = -hu + 1.5; x <= hu - 1.5; x += 3.2) K.cyl(k, 0.45, 0.5, H - 2.5, x, (H - 2.5) / 2 + 1.2, hv + 2.6, trim, 12);
+    K.box(k, hu * 2, 1, 4, 0, H - 0.8, hv + 2, trim);
+  }
+  // ground-floor shop arcade (New Market)
+  if (spec.arcade) for (let x = -hu + 2; x <= hu - 2; x += 4) K.box(k, 2.8, 3.4, 0.15, x, 2.3, hv + 0.05, '#1e1a17');
+  // statues along the parapet (Writers' Building)
+  if (spec.statues) for (let x = -hu * 0.8; x <= hu * 0.8; x += hu * 0.4) {
+    K.box(k, 1.4, 0.6, 1.4, x, H + 1.5, hv - 0.4, trim);
+    K.cyl(k, 0.35, 0.45, 2.4, x, H + 3, hv - 0.4, '#5d5446', 10);
+    K.add(k, new THREE.SphereGeometry(0.35, 10, 8).translate(x, H + 4.5, hv - 0.4), '#5d5446');
+  }
+  // a tower on the street front: clock faces and a pyramid roof (Hogg Market), or a plain tower
+  if (spec.tower) {
+    const th = spec.tower.h;
+    const tw = 6;
+    K.box(k, tw, th, tw, 0, th / 2, hv - tw / 2, wall);
+    for (const y of [th * 0.45, th - 2]) K.box(k, tw + 0.6, 0.6, tw + 0.6, 0, y, hv - tw / 2, trim);
+    K.pyramid(k, tw + 1.2, 6, 0, th, hv - tw / 2, '#5a5f62');
+    if (spec.tower.clock) for (const [dx, dz, ry] of [[0, tw / 2 + 0.05, 0], [tw / 2 + 0.05, 0, Math.PI / 2], [-tw / 2 - 0.05, 0, Math.PI / 2]]) {
+      const g = new THREE.CylinderGeometry(1.6, 1.6, 0.1, 24).rotateX(Math.PI / 2).rotateY(ry).translate(dx, th - 5, hv - tw / 2 + dz);
+      K.add('lamp', g, '#fff6dc');
+    }
+  }
+  // dome (the planetarium's is a Sanchi-stupa shape)
+  if (spec.dome) {
+    const r = Math.min(hu, hv) * spec.dome;
+    K.cyl(k, r, r, 2, 0, H + 1, 0, trim, 32);
+    K.dome(spec.stupa ? 'marble' : k, r, 0, H + 2, 0, '#f6f3ec', 0.85, 32);
+    K.box(k, 2.4, 1.4, 2.4, 0, H + 2 + r * 0.85 + 0.7, 0, trim);
+    K.cyl(k, 0.15, 0.15, 3, 0, H + 2 + r * 0.85 + 2.6, 0, '#c9a24a', 6);
+  }
+  for (const list of Object.values(K.parts)) for (const g of list) g.rotateY(-a).translate(f.cx, 0, f.cz);
+  const col = polygon(rect(f.cx, f.cz, a, hu + 0.4, hv + (spec.portico || spec.colonnade ? 3.8 : 0.4)));
+  world.addPoly(col);
+  void scene;
 }
 
 /* ---------- Victoria Memorial: white Makrana marble, a central dome crowned by the Angel of Victory ---------- */

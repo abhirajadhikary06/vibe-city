@@ -440,11 +440,13 @@ export class Metro {
     for (const [color, list] of bands) meshes.push([merge(list), new THREE.MeshStandardMaterial({ color, roughness: 0.4, emissive: color, emissiveIntensity: 0.25 })]);
     if (bored.length) meshes.push([merge(bored), new THREE.MeshStandardMaterial({ color: 0x8a8d90, roughness: 0.85, side: THREE.DoubleSide })]);
     if (blueLamps.length) meshes.push([merge(blueLamps), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 1.9, 3.2) })]);
-    if (portal.length) meshes.push([merge(portal), new THREE.MeshStandardMaterial({ color: 0x6f7173, roughness: 0.8 })]);
+    const portalGeo = portal.length ? merge(portal) : null;
+    if (portalGeo) meshes.push([portalGeo, new THREE.MeshStandardMaterial({ color: 0x6f7173, roughness: 0.8 })]);
     this.statics = [];
     for (const [g, m] of meshes) {
       if (!g) continue;
       const mesh = new THREE.Mesh(g, m);
+      if (g === portalGeo) mesh.userData.surface = true;
       mesh.castShadow = m !== this.lampMat;
       mesh.receiveShadow = true;
       scene.add(mesh);
@@ -467,6 +469,7 @@ export class Metro {
       const mTex = mSignTexture(sg.color);
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.95, 0.95), new THREE.MeshStandardMaterial({ map: mTex, emissive: 0xffffff, emissiveMap: mTex, emissiveIntensity: 1.5 }));
       m.position.set(sg.x, sg.y, sg.z);
+      m.userData.surface = true;
       scene.add(m);
       this.statics.push(m);
     }
@@ -475,6 +478,7 @@ export class Metro {
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 1.3), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35 }));
       sign.position.set(p.x, p.y, p.z);
       sign.rotation.y = p.yaw;
+      sign.userData.surface = true;
       scene.add(sign);
       this.statics.push(sign);
     }

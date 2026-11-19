@@ -80,6 +80,13 @@ function hexTexture() {
   return t;
 }
 
+/** Hours (0-24, fractional) on the clock in Kolkata right now. */
+export function kolkataHours() {
+  const d = new Date();
+  const utc = d.getUTCHours() + d.getUTCMinutes() / 60 + d.getUTCSeconds() / 3600;
+  return (utc + 5.5) % 24;
+}
+
 const _r = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _f = new THREE.Vector3();
@@ -88,9 +95,11 @@ export class DayCycle {
   constructor(scene, renderer) {
     this.scene = scene;
     this.renderer = renderer;
-    this.time = 17.4;
-    this.speed = 1 / 40; // game hours per real second
+    // The clock runs on real Kolkata time (IST): day in Kolkata is day in the game
+    this.time = kolkataHours();
+    this.speed = 1 / 3600; // real time: one game hour per real hour
     this.warp = 1;
+    this.syncT = 0;
     this.sunDir = new THREE.Vector3();
     this.lightDir = new THREE.Vector3();
     this.night = 0;
@@ -204,6 +213,12 @@ export class DayCycle {
 
   update(dt, focus, camPos) {
     this.time = (this.time + dt * this.speed * this.warp) % 24;
+    // re-sync with the wall clock now and then (and after the tab sleeps)
+    this.syncT -= dt;
+    if (this.syncT <= 0 && !this.fixed) {
+      this.syncT = 30;
+      this.time = kolkataHours();
+    }
     const phi = ((this.time - 6) / 12) * Math.PI;
     this.sunDir.set(Math.cos(phi), Math.sin(phi) * 0.92, Math.sin(phi) * 0.39).normalize();
     const sE = this.sunDir.y;
@@ -271,7 +286,8 @@ export class DayCycle {
 
     // Fog
     this.fog.color.copy(FOG_DAY).lerp(FOG_SUNSET, dusk).lerp(FOG_NIGHT, night);
-    this.fog.density = lerp(lerp(0.00055, 0.0012, dusk), 0.0011, night);
+    // Kolkata haze: everything past ~2.5 km fades out (and isn't drawn)
+    this.fog.density = lerp(lerp(0.0008, 0.0012, dusk), 0.0011, night);
 
     this.renderer.toneMappingExposure = lerp(lerp(0.4, 0.55, dusk), 0.75, night);
 

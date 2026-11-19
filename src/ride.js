@@ -76,7 +76,8 @@ export class Rides {
     for (const v of g.vehicles) {
       if (v.wrecked || v.driven) continue;
       if (v.boat) {
-        if (v.type === 'launch' && v.route && v.canBoard(p)) consider(v, v.pos.x, v.pos.z, 'launch', { hw: 0 });
+        // a launch is long: anywhere alongside it will do
+        if (v.type === 'launch' && v.route && v.canBoard(p)) consider(v, p.x, p.z, 'launch', { hw: 0 });
         continue;
       }
       if (HIRE.has(v.type) || v.type === 'bus') consider(v, v.pos.x, v.pos.z, v.type, v.def);
@@ -85,7 +86,10 @@ export class Rides {
     if (!best) return null;
     const { o, type } = best;
     if (type === 'launch') return { text: `Board the ferry · ₹${TICKETS.launch}`, act: () => this.boardLaunch(o) };
-    if (type === 'bus') return { text: `Board the bus · ₹${TICKETS.bus}`, act: () => this.hire(o, 'bus') };
+    if (type === 'bus') {
+      const route = o.busRoute;
+      return { text: route ? `Board bus ${route.no} to ${route.short} · ₹${TICKETS.bus}` : `Board the bus · ₹${TICKETS.bus}`, act: () => this.hire(o, 'bus') };
+    }
     const name = { taxi: 'taxi', auto: 'auto', rickshaw: 'rickshaw' }[type];
     return { text: `Hire the ${name} · ₹${FARES[type].base}+`, act: () => this.hire(o, type) };
   }
@@ -130,8 +134,19 @@ export class Rides {
     if (type === 'bus') {
       this.pay(TICKETS.bus, 'Bus fare to the conductor');
       g.hud.say(who, pick(LINES.conductor), 2.2);
-      this.wander();
-      g.hud.notify('ON THE BUS', 'F to get off at the next stop', '#38f3ff');
+      // a route bus goes where its board says; any other bus just runs along the main roads
+      const dest = v.busDest;
+      const pts = dest ? this.world.graph.route(v.pos.x, v.pos.z, dest.x, dest.z) : null;
+      if (pts && pts.length > 2) {
+        this.follow(pts);
+        this.ride.final = true;
+        this.ride.state = 'go';
+        g.setWaypointQuiet(dest);
+        g.hud.notify(`BUS ${v.busRoute.no} TO ${v.busRoute.short}`, `${(routeLength(pts) / 1000).toFixed(1)} km · F to get off at the next stop`, '#38f3ff');
+      } else {
+        this.wander();
+        g.hud.notify('ON THE BUS', 'F to get off at the next stop', '#38f3ff');
+      }
       return;
     }
     g.hud.say(this.voiceOf(v), pick(LINES.whereTo), 2.4);
@@ -537,7 +552,17 @@ export class Rides {
         g.hud.say(this.driver || g.player.ch, pick(LINES.busStop), 2);
         g.audio.beep(false);
       }
-      if (left < 2 && r.speed < 0.3) this.wander();
+      if (left < 2 && r.speed < 0.3) {
+        if (r.final) {
+          // the last stop: everybody off
+          r.state = 'arrived';
+          g.hud.notify('LAST STOP', v.busRoute ? v.busRoute.short : '', '#ffd36b');
+          g.hud.say(this.driver || g.player.ch, pick(LINES.busStop), 2);
+          setTimeout(() => {
+            if (this.ride === r) this.leave(false);
+          }, 1500);
+        } else this.wander();
+      }
       return;
     }
     if (left < 2 && r.speed < 0.3) {
