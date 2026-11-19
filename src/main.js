@@ -28,6 +28,7 @@ import { inPoly, nearestOnRing } from './geo.js';
 import * as T from './textures.js';
 import { clamp, damp, dampAngle, lerp } from './utils.js';
 
+
 /* ---------- Quality presets ---------- */
 const PRESETS = {
   ultra: { pr: 2, minPr: 1, shadow: 4096, ao: true, peds: 44, traffic: 26 },

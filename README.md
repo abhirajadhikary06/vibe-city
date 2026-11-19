@@ -6,6 +6,7 @@ No backend, no server and no downloaded assets beyond the map data. Every buildi
 
 ---
 
+
 ## Quick start
 
 You need [Node.js](https://nodejs.org/) 18 or newer.
