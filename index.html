@@ -8,6 +8,7 @@
     <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#160c28" />
+    <link rel="preload" as="image" href="/logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -152,6 +153,34 @@
           <div><b>ESC</b>Pause</div>
         </section>
       </div>
+    </div>
+
+    <div id="splash">
+      <div class="sp-stars"></div>
+      <div class="sp-stars sp-stars2"></div>
+      <div class="sp-horizon"></div>
+      <div class="sp-center">
+        <div class="sp-glow"></div>
+        <div class="sp-logo"><img src="/logo.png" alt="Vibe City Kolkata" /><i class="sp-shine"></i></div>
+        <div class="sp-road">
+          <div class="sp-track"><div class="sp-fill"></div></div>
+          <div class="sp-truss"></div>
+          <div class="sp-carpos">
+            <svg class="sp-taxi" viewBox="0 0 64 30" aria-hidden="true">
+              <path class="sp-beam" d="M62 18 L120 10 L120 28 Z" />
+              <path d="M4 22 V15 Q4 12 8 12 H16 L22 5 Q23 4 25 4 H42 Q44 4 45 5 L51 12 H57 Q61 12 61 16 V22 Z" fill="#ffd21f" />
+              <path d="M24 6 H33 V12 H19 Z M35 6 H43 L48 12 H35 Z" fill="#1b1430" />
+              <rect x="4" y="16" width="57" height="2" fill="#2f6fe0" />
+              <rect x="27" y="1.5" width="10" height="3" rx="1" fill="#ffd21f" />
+              <circle cx="59" cy="15" r="1.6" fill="#fff6c9" />
+              <g transform="translate(15 22)"><g class="sp-wheel"><circle r="5.5" fill="#15101f" /><circle r="2.6" fill="#c8c8d0" /><path d="M-2.6 0 H2.6 M0 -2.6 V2.6" stroke="#15101f" stroke-width="1" /></g></g>
+              <g transform="translate(49 22)"><g class="sp-wheel"><circle r="5.5" fill="#15101f" /><circle r="2.6" fill="#c8c8d0" /><path d="M-2.6 0 H2.6 M0 -2.6 V2.6" stroke="#15101f" stroke-width="1" /></g></g>
+            </svg>
+          </div>
+        </div>
+        <div class="sp-row"><span class="sp-text">Loading the city</span><span class="sp-pct">0%</span></div>
+      </div>
+      <div class="sp-river"><i></i><i></i><i></i></div>
     </div>
 
     <script type="module" src="/src/main.js"></script>

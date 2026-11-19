@@ -27,6 +27,7 @@ import { BusStand } from './busstand.js';
 import { inPoly, nearestOnRing } from './geo.js';
 import * as T from './textures.js';
 import { clamp, damp, dampAngle, lerp } from './utils.js';
+import { splash } from './splash.js';
 
 
 /* ---------- Quality presets ---------- */
@@ -476,6 +477,7 @@ async function boot() {
   const setLoading = (p, t) => {
     document.querySelector('#loading .fill').style.width = `${p * 100}%`;
     document.querySelector('#loading .text').textContent = t;
+    splash.progress(p, t);
   };
   setLoading(0.1, 'Paving the streets');
   await frame();
@@ -638,6 +640,7 @@ async function boot() {
   state = 'title';
   last = performance.now();
   requestAnimationFrame(loop);
+  splash.done();
 }
 
 let reflectFrame = 0;
@@ -1133,4 +1136,5 @@ function resetToRoad(v) {
 boot().catch((e) => {
   console.error(e);
   document.querySelector('#loading .text').textContent = `Error: ${e.message}`;
+  splash.error(`Error: ${e.message}`);
 });
