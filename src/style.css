@@ -356,9 +356,9 @@ html, body {
   cursor: pointer;
 }
 #quality button.on { background: var(--cyan); color: #081018; border-color: var(--cyan); box-shadow: 0 0 16px rgba(56, 243, 255, 0.5); }
-.sound { margin-top: 14px; display: flex; gap: 10px; justify-content: center; align-items: center; position: relative; z-index: 2; }
-.sound .ql { letter-spacing: 3px; font-size: 14px; opacity: 0.7; margin-right: 6px; }
-.sound button {
+.sound, .timeset { margin-top: 14px; display: flex; gap: 10px; justify-content: center; align-items: center; position: relative; z-index: 2; }
+.sound .ql, .timeset .ql { letter-spacing: 3px; font-size: 14px; opacity: 0.7; margin-right: 6px; }
+.sound button, .timeset button {
   font-family: 'Rajdhani', sans-serif;
   font-weight: 700;
   font-size: 15px;
@@ -370,7 +370,7 @@ html, body {
   border-radius: 4px;
   cursor: pointer;
 }
-.sound button.on { background: var(--cyan); color: #081018; border-color: var(--cyan); box-shadow: 0 0 16px rgba(56, 243, 255, 0.5); }
+.sound button.on, .timeset button.on { background: var(--cyan); color: #081018; border-color: var(--cyan); box-shadow: 0 0 16px rgba(56, 243, 255, 0.5); }
 #hint { flex-wrap: wrap; justify-content: center; max-width: 90vw; }
 
 /* ---------- Combat HUD ---------- */
