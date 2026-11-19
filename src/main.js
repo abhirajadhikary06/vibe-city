@@ -649,6 +649,9 @@ function hideFromReflections() {
   const water = world.water;
   const orig = water.onBeforeRender;
   water.onBeforeRender = (...args) => {
+    // Ultra's AO pass re-renders the scene with an override material: refreshing the mirror
+    // then would fill it with normals and make it flicker against the real reflection
+    if (scene.overrideMaterial) return;
     const hidden = [];
     const hide = (o) => {
       if (o.visible) {
