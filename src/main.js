@@ -89,6 +89,35 @@ document.querySelectorAll('.sound button').forEach((b) =>
   }),
 );
 refreshSoundButtons();
+
+/* ---------- Time of day: real Kolkata clock, or always day / night ---------- */
+const TIME_HOURS = { day: 12, night: 22 };
+let timeMode = 'real';
+try {
+  timeMode = localStorage.getItem('nt_time') || 'real';
+} catch {
+  /* storage unavailable */
+}
+function applyTimeMode(m) {
+  timeMode = TIME_HOURS[m] ? m : 'real';
+  try {
+    localStorage.setItem('nt_time', timeMode);
+  } catch {
+    /* storage unavailable */
+  }
+  document.querySelectorAll('.timeset button').forEach((b) => b.classList.toggle('on', b.dataset.t === timeMode));
+  if (!day) return;
+  day.fixed = timeMode !== 'real';
+  if (day.fixed) day.time = TIME_HOURS[timeMode];
+  else day.syncT = 0; // snap back to the wall clock on the next frame
+}
+document.querySelectorAll('.timeset button').forEach((b) =>
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    applyTimeMode(b.dataset.t);
+  }),
+);
+applyTimeMode(timeMode);
 const input = new Input(renderer.domElement);
 let state = 'loading';
 let elapsed = 0;
@@ -467,7 +496,7 @@ async function boot() {
   if (!Number.isNaN(startHour)) {
     day.time = startHour % 24;
     day.fixed = true;
-  }
+  } else applyTimeMode(timeMode);
   fx = new Effects(scene);
   rail.fx = fx;
   for (const c of rail.consists) c.fx = fx;
