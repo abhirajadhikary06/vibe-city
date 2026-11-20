@@ -431,6 +431,27 @@ html, body {
   cursor: pointer;
 }
 .sound button.on, .timeset button.on { background: var(--cyan); color: #081018; border-color: var(--cyan); box-shadow: 0 0 16px rgba(56, 243, 255, 0.5); }
+.gh-link {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 2;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 2px;
+  padding: 6px 16px;
+  color: #fff;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.gh-link svg { width: 18px; height: 18px; }
+.gh-link:hover { background: var(--cyan); color: #081018; border-color: var(--cyan); box-shadow: 0 0 16px rgba(56, 243, 255, 0.5); }
 #hint { flex-wrap: wrap; justify-content: center; max-width: 90vw; }
 
 /* ---------- Combat HUD ---------- */

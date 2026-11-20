@@ -746,6 +746,8 @@ renderer.domElement.addEventListener('click', () => {
   if (state === 'play') input.lock();
 });
 document.getElementById('pause').addEventListener('click', () => setPaused(false));
+// the GitHub link opens in a new tab; don't let the click also resume the game
+document.querySelectorAll('.gh-link').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
 
 /* ---------- Back button: ask before leaving the city ---------- */
 // startGame() adds a history entry (it needs the click or key press to count), so the
