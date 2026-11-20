@@ -17,6 +17,7 @@ From Howrah Station, over Howrah Bridge, to Park Street. Built from real OpenStr
 ![OpenStreetMap](https://img.shields.io/badge/map-OpenStreetMap-7ebc6f?style=flat-square&logo=openstreetmap&logoColor=white)
 
 <sub>
+<a href="#-all-the-features-at-a-glance">At a glance</a> ·
 <a href="#-quick-start">Quick start</a> ·
 <a href="#%EF%B8%8F-the-map">The map</a> ·
 <a href="#-controls">Controls</a> ·
@@ -29,10 +30,10 @@ From Howrah Station, over Howrah Bridge, to Park Street. Built from real OpenStr
 
 <br />
 
-Walk, drive, ride and fight your way from **Howrah Station** across **Howrah Bridge** to B.B.D. Bagh, Esplanade, the Maidan, Victoria Memorial and Park Street, through the lanes of north Kolkata and out to Sealdah. Take a yellow taxi, a tram, an EMU local or the Rajdhani, go underground on the Metro's Blue and Green lines (under the Hooghly), or cross the river on a ferry launch.
+Walk, drive, ride and fight your way from **Howrah Station** across **Howrah Bridge** to B.B.D. Bagh, Esplanade, the Maidan, Victoria Memorial and Park Street, through the lanes of north Kolkata and out to Sealdah. Take a yellow taxi, a tram, an EMU local or the Rajdhani, go underground on the Metro's Blue and Green lines (under the Hooghly), or cross the river on a ferry launch. The clock and the weather are Kolkata's own, live: if it's night and pouring in Kolkata, it's night and pouring in the game.
 
 > [!NOTE]
-> No backend and no server. Apart from the map data and the logo, every building, vehicle, person, texture and sound is generated in code when the game loads.
+> No backend and no server. Apart from the map data, the logo and the recorded Bengali voice lines, every building, vehicle, person, texture and sound is generated in code when the game loads. The only network call is for Kolkata's live weather (Open-Meteo, no API key).
 
 <table>
 <tr>
@@ -50,8 +51,8 @@ Ambassador taxis, autos, hand-pulled rickshaws, buses, trams, EMU locals, the Ra
 </td>
 <td width="33%" valign="top">
 
-**🌗 Kolkata time**<br />
-Runs on the real IST clock. At night, Howrah Bridge and Vidyasagar Setu light up.
+**🌦️ Kolkata time and weather**<br />
+Runs on the real IST clock and Kolkata's live weather: monsoon rain, wet roads, thunderstorms. At night, Howrah Bridge and Vidyasagar Setu light up.
 
 </td>
 </tr>
@@ -65,7 +66,7 @@ Locals chat out loud in Bengali: <i>"Ki khobor, dada?"</i>
 <td valign="top">
 
 **🎫 Station life**<br />
-Ticket windows, cha and phuchka stalls, departure boards, and a TTE who fines you ₹250.
+Ticket windows, cha and phuchka stalls, real platform numbers, live departure boards, Metro fare gates, and a TTE who fines you ₹250.
 
 </td>
 <td valign="top">
@@ -76,6 +77,50 @@ Drifts, nitro, damage, seven weapons, and a GPS that keeps to one-way streets.
 </td>
 </tr>
 </table>
+
+---
+
+## 🌟 All the features at a glance
+
+The short version of everything in the game. Details are in [Features](#-features) below.
+
+**The city**
+- 🗺️ **Real Kolkata from OpenStreetMap** at true scale (1 unit = 1 metre): ~25,000 buildings, every street, the Hooghly, ponds, parks and ~600 named places, from Howrah to Park Street and Sealdah.
+- 🏛️ **Landmarks modelled in code:** Howrah Bridge, Vidyasagar Setu, Howrah Station, Victoria Memorial, Shaheed Minar, Eden Gardens, St Paul's, Nakhoda Masjid, Writers' Building and more.
+- 🎨 **Kolkata's look:** ochre and pink walls with green shutters, black water tanks on the roofs, black-and-yellow kerbs, hawkers' stalls under coloured tarps.
+
+**Live, like the real city**
+- 🕰️ **Real Kolkata time:** day in Kolkata is day in the game, and at night the bridges light up.
+- 🌧️ **Real Kolkata weather:** live from Open-Meteo. Monsoon rain, wet roads that dry slowly, lightning and thunder, with the temperature under the clock.
+- 🚉 **Live departure boards:** arrival times worked out from where each train really is.
+
+**Getting around**
+- 🚕 **Kolkata's own vehicles:** the yellow Ambassador taxi, autos, hand-pulled rickshaws, WBTC and private buses, plus cars, bikes and trucks. Traffic keeps left and obeys one-way streets.
+- 🚋 **Trams, EMU locals and the Rajdhani** on the real lines, stopping at real stations with real platform numbers.
+- 🚇 **Metro Blue and Green lines**, including the tunnel **under the Hooghly**, with twin tracks, sliding doors, platform screen doors, fare gates and next-train countdowns.
+- ⛴️ **Ferries** between the real ghats, plus country boats, a speedboat and a jet ski.
+- 🎟️ **Ride or drive anything:** F to drive, V to ride as a passenger. Hire a taxi, auto or rickshaw to any place on the map and pay the meter; take a bus with route boards, a train, tram, Metro or ferry and pay the fare. You can even drive the trains, trams and Metro yourself.
+- 🧭 **GPS and search:** search any place, station or ghat, and the route follows one-way streets.
+
+**Station life**
+- 🫖 **Howrah Station:** buy a ticket, eat cha, jhalmuri, phuchka and mishti, and dodge the TTE who fines you ₹250 for riding without a ticket.
+- 🚌 **Dharmatala bus stand** with real routes to Howrah, Sealdah, Shobhabazar, Park Circus and more.
+
+**People**
+- 🗣️ **Locals speak Bengali out loud** ("Ki khobor, dada?") with recorded voices, and give real directions ("Esplanade kon dike?").
+- 💃 **Gestures:** wave, point, cheer, and start a **dance party** that the crowd joins.
+
+**Gameplay**
+- 💼 **Taxi duty:** pick up fares, beat the clock, earn tips and a star rating, and build streaks.
+- 🏆 **Progress that's saved:** places discovered, 14 achievements, earnings and your best streak.
+- 🏎️ **Driving:** drifts, nitro, weight transfer, damage, fire and explosions.
+- 🔫 **Combat:** seven weapons, a punch and kick combo, headshots, and a weapon wheel in slow motion.
+- ❤️ **Health, ₹ money, ammo crates** and a hospital bill when you go down.
+
+**Under the hood**
+- 🧱 **Almost everything is generated in code:** every model, texture and sound effect. No backend.
+- ✨ **Graphics:** bloom, ambient occlusion, a reflective river, soft shadows and procedural clouds, with Ultra/High/Medium/Low presets and auto-Low on weak GPUs.
+- 🎮 **Keyboard, mouse and gamepad.**
 
 ---
 
@@ -95,7 +140,7 @@ npm run dev      # start the dev server, then open the printed URL
 | `npm run preview` | Serves the built `dist/` folder locally |
 | `npm run build:map` | Rebuilds `src/data/kolkata.json` from the OpenStreetMap files in `map-data/` |
 | `npm run build:voices` | Records every Bengali line in `src/lines.js` into `public/voices/` (macOS, Bengali voice "Piya") |
-| `node tools/fetch-region.mjs` | Downloads Kolkata-wide railway lines and places for the map and search |
+| `node tools/fetch-region.mjs` | Downloads Kolkata-wide railway lines and places for the map and search (then run `npm run build:map`) |
 
 The `dist/` folder is plain static files, so you can host it on any static host (GitHub Pages, Netlify, Vercel, itch.io and so on).
 
@@ -204,7 +249,7 @@ Modelled in code and placed on their real footprints:
 <summary><b>Vehicles</b></summary>
 
 - **Cars:** Convertible, Sports Coupe, Sedan, Taxi and Van; **heavy and two-wheeled:** Motorbike, Pickup, Box Truck, School Bus and City Bus. Each has its own handling, mass, engine note and camera distance. West Bengal number plates.
-- **Physics and damage:** mass-based collisions, weight transfer, drifts, nitro, smoke, fire and explosions, as before. Collisions use the real building outlines.
+- **Physics and damage:** mass-based collisions, weight transfer, drifts, nitro, smoke, fire and explosions: a badly damaged vehicle smokes, catches fire and blows up into a burnt-out wreck. Collisions use the real building outlines.
 
 </details>
 
@@ -213,13 +258,15 @@ Modelled in code and placed on their real footprints:
 
 - **Full-screen map (M):** the real streets, buildings, river, parks, railways, tram lines and both Metro lines, with neighbourhood, landmark, station and ghat names by zoom level.
 - **Waypoints:** click anywhere and the GPS finds a route along Kolkata's streets, obeying one-way rules, shown on the map and minimap.
+- **Search** box (top of the full map): type a place, station, ghat, tram stop or landmark and pick a result to fly there and set a waypoint.
+- Metro stations (M) and tram stops (T) are marked and named on the map.
 
 </details>
 
 <details>
 <summary><b>People</b></summary>
 
-- **Locals** walk the pavements and footpaths of the real streets, in Kolkata looks, and talk in English and Bengali ("Ki khobor, dada?"). Talk to them, wave, start a dance, or start a fight: combat works as before.
+- **Locals** walk the pavements and footpaths of the real streets, in Kolkata looks, and talk in English and Bengali ("Ki khobor, dada?"). Talk to them, wave, start a dance, or start a fight. Gunfire sends people running and nearby traffic speeding away.
 
 </details>
 
@@ -227,6 +274,8 @@ Modelled in code and placed on their real footprints:
 <summary><b>Gameplay</b></summary>
 
 - **Money in ₹:** cash pickups on the pavements; spend it on fares, tickets and street food.
+- **Ammo crates** (under glowing beams) top up every gun.
+- **Health:** a health bar that refills slowly once you've stayed out of trouble for a few seconds; street food restores it too. Go down and you wake up on the nearest pavement, minus a hospital bill (₹100 plus 5% of your cash).
 - **Taxi duty:** in a yellow Ambassador or an auto, press **B**. Someone waves you down on a pavement nearby (yellow marker on the minimap); pull up beside them and they get in and name a place across town. Beat the clock without knocking them about: the fare is paid by distance, plus a tip for a smooth, quick ride (rated out of five stars) and a bonus for fares in a row. Leave the cab mid-ride and the fare is lost.
 - **Progress that carries over:** taxi jobs, earnings, your rating and best streak, the places you've discovered (landmarks, stations, ghats, markets: a note pops up as you pass each one) and 14 achievements, from *Mind the Gap* to *City of Joy*. See them in the pause menu. Saved in the browser.
 
@@ -238,7 +287,7 @@ Modelled in code and placed on their real footprints:
 Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a passenger.
 - **Taxi, auto-rickshaw, hand-pulled rickshaw:** the driver asks "Kothay jaben, dada?" and the map opens; search or click a destination. He quotes a fare, drives you there along the streets (keeping left, waiting in traffic, honking), and you pay on arrival: taxi ₹30 for the first 2 km then ₹15/km, auto ₹20 then ₹10/km, rickshaw ₹30 then ₹25/km (up to 2.5 km). Press F to get off early and pay the meter.
 - **Bus:** ₹10 to the conductor; it runs a route along the main roads and stops every few hundred metres. F gets you off at the next stop.
-- **Trains, trams, Metro:** board any car of a stopped train (₹10 local, ₹7 tram, ₹20 Metro, ₹120 Rajdhani). The next station is announced at each stop; F gets you off there. A train ticket also satisfies the TTE.
+- **Trains, trams, Metro:** board any car of a stopped train (₹10 local, ₹7 tram, ₹120 Rajdhani). For the Metro, pay ₹20 at the fare gate at the foot of the stairs; once you've tapped in, boarding is free. The next station is announced at each stop; F gets you off there. A train ticket also satisfies the TTE.
 - **Ferry launch:** ₹6, get off when it docks at a ghat.
 
 </details>
@@ -247,6 +296,7 @@ Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a
 <summary><b>Stations and timetables</b></summary>
 
 - **Departure boards** at Howrah (the big concourse board), every railway platform, every Metro platform and every tram stop: train number, destination (Bandel, Bardhaman, Krishnanagar, Canning, Dum Dum…), platform, and minutes to arrival, worked out from where each train really is, on the real Kolkata clock.
+- **Real platform numbers** from OpenStreetMap: Howrah 1–23, Sealdah 1–21. Hanging PF signs over each platform show the next train's destination and time, and Howrah's big board lists the real platforms.
 - **Trains and trams** run more often: seven out of Howrah, four out of Sealdah, two on the Circular Railway, two trams a line. Every train stops properly at every station.
 
 </details>
@@ -293,7 +343,7 @@ Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a
 
 - **Auto-rickshaw:** the green-and-yellow three-wheeler with a black canvas hood and a two-stroke putter.
 - **Hindustan Ambassador:** the yellow taxi (with its blue side stripe) and the white or black private car, with the round nose, chrome bumpers and round headlamps.
-- **Buses** in four liveries: W.B.T.C. (white and blue), SBSTC (white, blue and green), and two private-bus paint jobs, each with a route board in Bengali and English.
+- **Buses** in four liveries: W.B.T.C. (white and blue), SBSTC (white, blue and green), and two private-bus paint jobs, each with real route boards: the front board shows the route number, the destination in Bengali and English and a VIA strip, with more boards above the side windows and the route on the windscreen and rear window. The boarding prompt and trip notice list the via stops. About a quarter of traffic is buses, and a bus you take out of traffic is replaced by another.
 - **Hand-pulled rickshaw:** big wooden wheels, a hooded seat and the puller walking between the shafts. It's slow, and you can ring its bell (H).
 - **Trams** in WBTC white and blue with red roofs and route boards; **EMU locals** with yellow cab fronts; **Metro** rakes in each line's colour.
 
@@ -320,7 +370,8 @@ Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a
 - **Sliding doors:** trains draw up on the mark at every station, open their doors on the platform side, chime, shut them and leave. Board (**V**) or get off only while the doors are open.
 - **Drive it yourself (F at either cab):** stop at a platform and the doors open by themselves; press **W** and they chime shut before the train moves.
 - **Platform screen doors** on the Green Line, lined up with the train's doors and opening with them.
-- **Station details:** smart-card fare gates at the foot of the stairs, a ticket counter, green WAY OUT (বাহির) signs pointing to the stairs, lit posters and safety notices on the walls, ad panels across the tracks.
+- **Fare gates that work:** at the foot of each stairway. Pay ₹20 at the gate (**V**) to go through, or decline (**E**) and it stays shut. Exit is free, and boarding any train is free once you've tapped in.
+- **Station details:** a ticket counter, green WAY OUT (বাহির) signs pointing to the stairs, lit posters and safety notices on the walls, ad panels across the tracks.
 
 </details>
 
@@ -334,17 +385,12 @@ Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a
 </details>
 
 <details>
-<summary><b>Map</b></summary>
-
-- **Search** box (top of the full map): type a place, station, ghat, tram stop or landmark and pick a result to fly there and set a waypoint.
-- Metro stations (M) and tram stops (T) are marked and named on the map.
-
-</details>
-
-<details>
 <summary><b>Day and night, combat and HUD</b></summary>
 
-Unchanged: the full day/night cycle, seven weapons and the HUD all carry over.
+- **Day and night:** the sun and moon follow the real Kolkata clock, with stars and clouds; the bridges and Victoria Memorial light up after dark. **TIME** in the title screen and pause menu switches between **REAL TIME**, always **DAY** and always **NIGHT**.
+- **Seven weapons:** fists (a four-hit punch and kick combo, plus a guard), a baseball bat, pistol, SMG, shotgun, assault rifle and a scoped sniper rifle. Headshots do extra damage, guns have recoil and reloads, and holding **Tab** opens a weapon wheel in slow motion.
+- **HUD:** minimap with route and markers, speedometer, health bar, weapon and ammo readout, crosshair, the clock with Kolkata's current weather and temperature, and notifications for places, jobs and achievements.
+- **Opening splash:** the logo and a yellow taxi crossing the bridge while the city loads.
 
 </details>
 
@@ -366,8 +412,9 @@ Unchanged: the full day/night cycle, seven weapons and the HUD all carry over.
 | **3D engine** | [Three.js](https://threejs.org/) r170 (WebGL 2) |
 | **Build tool** | [Vite](https://vitejs.dev/) 5 |
 | **Language** | Plain modern JavaScript (ES modules), HTML and CSS. No UI framework. |
+| **Weather** | [Open-Meteo](https://open-meteo.com/) current conditions for Kolkata (free, no key) |
 | **Fonts** | Google Fonts: *Bebas Neue* and *Rajdhani* |
-| **Audio** | Web Audio API (no audio files) |
+| **Audio** | Web Audio API: every sound synthesised in code, apart from the recorded Bengali voice lines |
 
 #### Three.js add-ons used
 - `Sky`: physically based sky dome
@@ -418,6 +465,8 @@ public/             Served as-is: logo, favicons, recorded voices/
 map-data/           OpenStreetMap exports (*.osm, not committed) and reference images
 tools/
   build-map.mjs     Turns map-data/*.osm into src/data/kolkata.json
+  fetch-region.mjs  Downloads Kolkata-wide rail lines and places (Overpass API)
+  gen-voices.mjs    Records the Bengali lines into public/voices/ (macOS)
 src/
   data/kolkata.json Kolkata map data (generated)
   geo.js            Map data access, polygons, polylines, spatial grid, road graph,
@@ -454,6 +503,7 @@ src/
   weather.js        Live Kolkata weather (Open-Meteo), rain, lightning
   effects.js        Particles (smoke, sparks, nitro flame) and skid marks
   post.js           Post-processing chain and colour-grade shader
+  splash.js         Loading splash: logo and a taxi crossing the bridge
   hud.js            Minimap, speedometer, notifications, bubbles, gesture wheel
   audio.js          Synthesised engine, sound effects and radio
   input.js          Keyboard, mouse (pointer lock), gamepad, gesture wheel
