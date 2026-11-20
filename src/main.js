@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { setAniso } from './textures.js';
 import { World, BOUNDS, inTiles, lightConeMaterial } from './world.js';
 import { DayCycle } from './sky.js';
-import { Vehicle, setTrafficLights, collideVehicles, setCarLOD, hooks } from './car.js';
+import { Vehicle, setTrafficLights, collideVehicles, setCarLOD, carLOD, hooks } from './car.js';
 import { Traffic } from './traffic.js';
 import { Peds } from './peds.js';
 import { LINES } from './lines.js';
@@ -28,21 +28,39 @@ import { inPoly, nearestOnRing } from './geo.js';
 import * as T from './textures.js';
 import { clamp, damp, dampAngle, lerp } from './utils.js';
 import { splash } from './splash.js';
+import { Progress } from './progress.js';
+import { TaxiJobs } from './jobs.js';
+import { Weather } from './weather.js';
 
 
 /* ---------- Quality presets ---------- */
 const PRESETS = {
-  ultra: { pr: 2, minPr: 1, shadow: 4096, ao: true, peds: 44, traffic: 26 },
-  high: { pr: 1.25, minPr: 0.75, shadow: 2048, ao: false, peds: 38, traffic: 24 },
-  medium: { pr: 1, minPr: 0.6, shadow: 1024, ao: false, peds: 26, traffic: 18 },
+  ultra: { pr: 2, minPr: 1, shadow: 4096, ao: true, peds: 44, traffic: 26, rain: 1 },
+  high: { pr: 1.25, minPr: 0.75, shadow: 2048, ao: false, peds: 38, traffic: 24, rain: 0.8 },
+  medium: { pr: 1, minPr: 0.6, shadow: 1024, ao: false, peds: 26, traffic: 18, rain: 0.55 },
+  // Low: for older laptops and integrated graphics. No post-processing or sun shadows,
+  // a shorter view into thicker haze, a river mirror that refreshes rarely, fewer people
+  low: { pr: 0.75, minPr: 0.5, shadow: 512, noShadow: true, ao: false, noPost: true, far: 1500, fog: 1.6, reflectEvery: 10, peds: 16, traffic: 12, carNear: 28, treeNear: 120, treeFar: 1300, rain: 0.3 },
 };
-let quality = 'high';
+let quality = null;
 try {
-  quality = localStorage.getItem('nt_quality') || 'high';
+  quality = localStorage.getItem('nt_quality');
 } catch {
   /* storage unavailable */
 }
-if (!PRESETS[quality]) quality = 'high';
+if (!PRESETS[quality]) quality = guessQuality();
+/** First visit: integrated and mobile GPUs (or software rendering) start on Low. */
+function guessQuality() {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+    const name = gl ? String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER)) : '';
+    if (!gl || /swiftshader|llvmpipe|software|intel.*(hd|uhd)|mali|adreno|powervr/i.test(name)) return 'low';
+  } catch {
+    /* no WebGL info */
+  }
+  return 'high';
+}
 let preset = PRESETS[quality];
 
 /* ---------- Renderer ---------- */
@@ -63,7 +81,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 3200);
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, rides, boards;
+let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, rides, boards, progress, jobs, weather;
 const vehicles = [];
 const audio = new AudioEngine();
 const voices = new Voices(audio);
@@ -91,6 +109,31 @@ document.querySelectorAll('.sound button').forEach((b) =>
   }),
 );
 refreshSoundButtons();
+
+/* ---------- Weather: live from Kolkata, or fixed ---------- */
+function refreshWeatherButtons() {
+  let mode = 'live';
+  try {
+    mode = (weather && weather.mode) || localStorage.getItem('kol_wxmode') || 'live';
+  } catch {
+    /* storage unavailable */
+  }
+  document.querySelectorAll('button[data-w]').forEach((b) => b.classList.toggle('on', b.dataset.w === mode));
+}
+document.querySelectorAll('button[data-w]').forEach((b) =>
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (weather) weather.applyMode(b.dataset.w);
+    else
+      try {
+        localStorage.setItem('kol_wxmode', b.dataset.w);
+      } catch {
+        /* storage unavailable */
+      }
+    refreshWeatherButtons();
+  }),
+);
+refreshWeatherButtons();
 
 /* ---------- Time of day: real Kolkata clock, or always day / night ---------- */
 const TIME_HOURS = { day: 12, night: 22 };
@@ -166,6 +209,9 @@ const game = {
   get metro() {
     return metro;
   },
+  get progress() {
+    return progress;
+  },
   /** Ask the player for a destination on the map; cb(point | null). */
   pickDestination(text, cb) {
     pickCb = cb;
@@ -194,6 +240,7 @@ const game = {
     }
     attachHeadlights(v);
     if (v.rail) cam.mode = v.kind === 'metro' ? 2 : 0;
+    if (v.rail && v.kind === 'metro') progress.event('driveMetro');
     hud.notify(v.label.toUpperCase(), v.rail ? 'W / S to drive along the line' : '', '#38f3ff');
   },
   onExitVehicle() {
@@ -424,7 +471,7 @@ function applyQuality(q) {
   } catch {
     /* storage unavailable */
   }
-  document.querySelectorAll('#quality button').forEach((b) => b.classList.toggle('on', b.dataset.q === q));
+  document.querySelectorAll('button[data-q]').forEach((b) => b.classList.toggle('on', b.dataset.q === q));
   pixelRatio = Math.min(window.devicePixelRatio, preset.pr);
   if (day) {
     const sh = day.sun.shadow;
@@ -433,11 +480,26 @@ function applyQuality(q) {
       sh.map.dispose();
       sh.map = null;
     }
+    day.sun.castShadow = !preset.noShadow;
+    day.fogScale = preset.fog || 1;
+  }
+  camera.far = preset.far || 3200;
+  camera.updateProjectionMatrix();
+  carLOD.near = preset.carNear || 70;
+  if (world) {
+    world.treeNear = preset.treeNear || 230;
+    world.treeFar = preset.treeFar || 1900;
+    if (world.flora) world.updateFlora(camera.position.x, camera.position.z, true);
   }
   if (post) post.gtao.enabled = preset.ao;
   resize();
 }
-document.querySelectorAll('#quality button').forEach((b) => b.addEventListener('click', () => applyQuality(b.dataset.q)));
+document.querySelectorAll('button[data-q]').forEach((b) =>
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    applyQuality(b.dataset.q);
+  }),
+);
 
 let perfT = 0;
 let perfFrames = 0;
@@ -494,6 +556,8 @@ async function boot() {
   setLoading(0.45, 'Painting the sky');
   await frame();
   day = new DayCycle(scene, renderer);
+  weather = new Weather(scene, 8000);
+  refreshWeatherButtons();
   // ?t=HOUR overrides the real clock (for testing a time of day)
   const startHour = parseFloat(new URLSearchParams(location.search).get('t'));
   if (!Number.isNaN(startHour)) {
@@ -592,10 +656,12 @@ async function boot() {
   player = new Player(scene, world, game);
   // On Howrah Station's forecourt, facing the river and the bridge
   player.spawn(world.spawn.x, world.spawn.z, station.frameA !== undefined ? Math.atan2(Math.cos(station.frameA), Math.sin(station.frameA)) : 0);
-  if (import.meta.env.DEV) window.__kol = { get boards() { return boards; }, THREE, voices, hud, get post() { return post; }, get peds() { return peds; }, get gameplay() { return gameplay; }, get mapViewRef() { return mapView; }, get rides() { return rides; }, get mapView() { return mapView; }, renderer, scene, camera, world, rail, metro, station, vehicles, game, cam, day, get player() { return player; }, get traffic() { return traffic; } };
+  if (import.meta.env.DEV) window.__kol = { get weather() { return weather; }, get jobs() { return jobs; }, get progress() { return progress; }, get boards() { return boards; }, THREE, voices, hud, get post() { return post; }, get peds() { return peds; }, get gameplay() { return gameplay; }, get mapViewRef() { return mapView; }, get rides() { return rides; }, get mapView() { return mapView; }, renderer, scene, camera, world, rail, metro, station, vehicles, game, cam, day, get player() { return player; }, get traffic() { return traffic; } };
   peds = new Peds(scene, world, hud, audio, preset.peds);
   peds.spawnAll(player.pos);
   gameplay = new Gameplay(scene, world, hud, audio);
+  progress = new Progress(hud, audio);
+  jobs = new TaxiJobs(game, scene, world, progress);
   combat = new Combat(scene, world, fx, audio, game);
   hooks.explode = (x, y, z, size, v) => combat.explode(x, y, z, size, v);
   hooks.burning = (v) => {
@@ -643,6 +709,12 @@ async function boot() {
   splash.done();
 }
 
+/** Low quality draws straight to the screen (the renderer still tone-maps); the rest go through the post chain. */
+function render(dt) {
+  if (preset.noPost) renderer.render(scene, camera);
+  else post.composer.render(dt);
+}
+
 let reflectFrame = 0;
 /** Characters, traffic and particles are skipped in the ocean's reflection pass for speed. */
 function hideFromReflections() {
@@ -665,9 +737,10 @@ function hideFromReflections() {
     hide(combat.tracers.lines);
     hide(day.flareAnchor);
     hide(fx.smokeP.points);
+    hide(weather.rain);
     hide(headlights);
     // The river mirror re-renders the scene: only near the river, above ground, and every third frame
-    reflectFrame = (reflectFrame + 1) % 3;
+    reflectFrame = (reflectFrame + 1) % (preset.reflectEvery || 3);
     const c = camera.position;
     const nearRiver = c.y > -2 && riverDist < 500;
     if (reflectFrame !== 0 || !nearRiver) {
@@ -739,7 +812,8 @@ function updateRoute(dt) {
     return;
   }
   const f = player.focus;
-  if (Math.hypot(f.x - waypoint.x, f.z - waypoint.z) < 12) {
+  // a taxi job's waypoint stays until the job moves on
+  if (!waypoint.job && Math.hypot(f.x - waypoint.x, f.z - waypoint.z) < 12) {
     hud.notify('ARRIVED', 'Waypoint reached', '#ff3fa4');
     setWaypoint(null);
     hud.route = null;
@@ -782,6 +856,7 @@ function setPaused(p) {
   if (p && state !== 'play') return;
   if (!p && state !== 'pause') return;
   state = p ? 'pause' : 'play';
+  if (p) document.querySelector('#pause .progress-panel').innerHTML = progress.html();
   hud.setPaused(p);
   if (audio.ctx) p ? audio.ctx.suspend() : audio.ctx.resume();
   if (!p) input.lock();
@@ -831,6 +906,7 @@ function aimHelp(dt) {
 let last = 0;
 const blipsFn = () => {
   const b = gameplay.blips();
+  b.push(...jobs.blips());
   if (waypoint) b.push({ x: waypoint.x, z: waypoint.z, color: '#ff3fa4', r: 9, always: true, label: '★' });
   return b;
 };
@@ -843,6 +919,9 @@ let underRiver = false;
 let riverNear = 0;
 let riverDist = 0;
 let metroShown = true;
+let metroInfoT = 0;
+let wetness = 0;
+let wxHudT = 0;
 let greetT = 3;
 let hornT = 6;
 const vehicleSoundKind = (v) => (v.rail ? v.kind : v.boat ? 'boat' : v.type);
@@ -907,6 +986,8 @@ function loop() {
     const wasDriving = player.driving;
     game.camYaw = cam.yaw;
     player.update(dt, elapsed, inp, input, cam.yaw);
+    jobs.update(dt, elapsed, input);
+    progress.update(dt, player.focus);
     aimHelp(dt);
     if (player.driving && !wasDriving && cam.mode > 2) cam.mode = 0;
     if (!player.driving && cam.mode > 1) cam.mode = 0;
@@ -1005,6 +1086,19 @@ function loop() {
   if (state === 'play') updateRoute(dt);
   beacon.material.opacity = 0.5 + Math.sin(elapsed * 3) * 0.15;
   fx.smokeP.mat.uniforms.uColor.value.setScalar(lerp(0.85, 0.12, day.night));
+  // Kolkata's weather right now: rain, cloud, haze, thunder; roads stay wet a while after
+  day.flash = weather.update(dt, elapsed, camera, { underground: camera.position.y < -2, quality: preset.rain || 0.8, audio });
+  day.wx = weather.now;
+  wetness += ((weather.now.rain > 0.12 ? 1 : 0) - wetness) * (1 - Math.exp(-dt / (weather.now.rain > 0.12 ? 40 : 300)));
+  world.setWet(wetness);
+  wxHudT -= dt;
+  if (wxHudT <= 0) {
+    wxHudT = 1;
+    const w = weather.summary;
+    const el = document.getElementById('wx');
+    const txt = `${w.icon} ${w.text}${weather.mode === 'live' ? (w.live ? ' · LIVE' : '') : ''}`;
+    if (el.textContent !== txt) el.textContent = txt;
+  }
   day.update(dt, focus, camera.position);
   world.update(dt, elapsed, day.night, day.sunDir, camera.position);
   metro.update(day.night);
@@ -1024,11 +1118,31 @@ function loop() {
     }
     for (const v of vehicles) if (v !== player.vehicle && !v.boat) v.car.root.visible = Math.hypot(v.pos.x - c.x, v.pos.z - c.z) < 450;
   }
+  // Standing on a Metro platform: when the next trains come in
+  metroInfoT -= dt;
+  if (metroInfoT <= 0) {
+    metroInfoT = 0.5;
+    const el = document.getElementById('metroinfo');
+    const pf = state === 'play' && player.mode === 'foot' && player.underground ? metro.platformAt(player.pos.x, player.pos.y, player.pos.z) : null;
+    el.classList.toggle('hidden', !pf);
+    if (pf) {
+      const L = pf.lineRef;
+      const fmt = (r) => (r.here ? '<span class="soon">ON PLATFORM</span>' : r.t < 45 ? '<span class="soon">ARRIVING</span>' : `${Math.floor(r.t / 60)}:${String(Math.round(r.t) % 60).padStart(2, '0')}`);
+      const next = pf.terminus ? [] : metro.nextTrains(pf);
+      el.style.setProperty('--line', pf.color);
+      el.innerHTML = pf.terminus
+        ? `<b>${pf.o.name.toUpperCase()} · PLATFORM ${pf.no}</b> · Terminus: trains leave from platform ${pf.no === 1 ? 2 : 1}`
+        : `<b>PLATFORM ${pf.no} · TOWARDS ${(L.dest && L.dest[pf.bound]) || ''}</b> · Next ${next[0] ? fmt(next[0]) : '—'} · then ${next[1] ? fmt(next[1]) : '—'}`;
+    }
+  }
   // India's first underwater metro: tell the player when they pass beneath the Hooghly
   {
     const f = player.focus;
     const under = f.y < -5 && metro.underRiver(f.x, f.z);
-    if (under && !underRiver && state === 'play') hud.notify('UNDER THE HOOGHLY', "India's first underwater metro · 30 m below the river", '#2fbf5a');
+    if (under && !underRiver && state === 'play') {
+      hud.notify('UNDER THE HOOGHLY', "India's first underwater metro · 30 m below the river", '#2fbf5a');
+      if (player.mode !== 'foot') progress.event('underRiver');
+    }
     underRiver = under;
   }
   riverTraffic.update(dt, elapsed);
@@ -1107,7 +1221,7 @@ function loop() {
 
   // Shadows follow at half rate: nobody notices, the GPU does
   if (frameNo % 2 === 0) renderer.shadowMap.needsUpdate = true;
-  post.composer.render(dt);
+  render(dt);
   input.endFrame();
   adaptQuality(dt);
 }

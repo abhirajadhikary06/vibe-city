@@ -135,6 +135,7 @@ Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributor
 | Hold **Tab** | Weapon wheel (time slows while it's open) | — |
 | Hold **G** | Gestures: Wave, Dance, Point, Thumbs Up, Cheer, Shrug, Flex, Laugh | — |
 | **H** | — | Horn or bell (startles nearby people) |
+| **B** | — | In a yellow taxi or an auto: go on / off taxi duty |
 | **R** | Reload | Reset the vehicle onto the nearest road |
 | **C** | Change camera distance | Cycle chase / far / hood camera |
 | **Q** | Background music on/off | Background music on/off |
@@ -225,7 +226,9 @@ Modelled in code and placed on their real footprints:
 <details>
 <summary><b>Gameplay</b></summary>
 
-- **Money in ₹:** cash pickups on the pavements; spend it on fares, tickets and street food. No missions or timers: just the city.
+- **Money in ₹:** cash pickups on the pavements; spend it on fares, tickets and street food.
+- **Taxi duty:** in a yellow Ambassador or an auto, press **B**. Someone waves you down on a pavement nearby (yellow marker on the minimap); pull up beside them and they get in and name a place across town. Beat the clock without knocking them about: the fare is paid by distance, plus a tip for a smooth, quick ride (rated out of five stars) and a bonus for fares in a row. Leave the cab mid-ride and the fare is lost.
+- **Progress that carries over:** taxi jobs, earnings, your rating and best streak, the places you've discovered (landmarks, stations, ghats, markets: a note pops up as you pass each one) and 14 achievements, from *Mind the Gap* to *City of Joy*. See them in the pause menu. Saved in the browser.
 
 </details>
 
@@ -279,7 +282,8 @@ Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a
 <details>
 <summary><b>Railways</b></summary>
 
-- Inside the playable city: seven trains out of Howrah, three out of Sealdah plus a **Sealdah South** local via Park Circus, and the **Circular Railway** along the river, each stopping at its real stations and waiting at the terminus so there's usually one at the platform.
+- Inside the playable city: seven trains out of Howrah, two out of Sealdah plus a **Sealdah South** local via Park Circus, and the **Circular Railway** along the river, each stopping at its real stations and waiting at the terminus so there's usually one at the platform.
+- **Every stop has a platform:** each stop is lined up so the whole train stands beside a mapped platform; where OpenStreetMap has none, a platform is built beside the track on the clear side (a narrow island if the next track is close), with a canopy, benches and name boards. A stop with no room for one is skipped. The Circular Railway turns round at its last stations instead of out on the line.
 - On the map: the whole suburban network (Sealdah–Dankuni, Bangaon, Hasnabad, Canning, Budge Budge, Namkhana; the Howrah main lines and chord) and every Metro line in its colour, plus ~1,700 named places across the region for the search.
 
 </details>
@@ -310,6 +314,22 @@ Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a
 
 - Street entrances are grey portals with red Bengali and English station signs; blue boards over the platforms list the stations ahead, in Bengali and English.
 - **Under the Hooghly:** between Howrah and Mahakaran the Green Line runs through a round bored tunnel 26 m down, with a message when you cross under the river.
+- **Two tracks, Up and Down:** every station has a platform for each direction (Platform 1 and 2), each with its own stairway from the street. Past the end stations a crossover joins the tracks; trains run into a short siding, reverse out of sight and come back on the other track.
+- **Frequent service:** six trains on the Blue Line (one every ~3½ minutes each way) and four on the Green Line (one every ~4 minutes), evenly spaced and kept apart on the same track.
+- **Next train:** countdown displays over every platform ("NEXT TRAIN 2 MIN 15 S · THEN …", ARRIVING, ON PLATFORM), timed from where each train really is; stand on a platform and the same appears at the top of the screen.
+- **Sliding doors:** trains draw up on the mark at every station, open their doors on the platform side, chime, shut them and leave. Board (**V**) or get off only while the doors are open.
+- **Drive it yourself (F at either cab):** stop at a platform and the doors open by themselves; press **W** and they chime shut before the train moves.
+- **Platform screen doors** on the Green Line, lined up with the train's doors and opening with them.
+- **Station details:** smart-card fare gates at the foot of the stairs, a ticket counter, green WAY OUT (বাহির) signs pointing to the stairs, lit posters and safety notices on the walls, ad panels across the tracks.
+
+</details>
+
+<details>
+<summary><b>Live weather</b></summary>
+
+- **Kolkata's real weather, near enough live:** the current conditions come from [Open-Meteo](https://open-meteo.com/) (free, no API key), which updates every 15 minutes. If it's raining in Kolkata, it's raining in the game: grey monsoon sky, rain, thicker haze, soft light without shadows, wet dark roads that take a few minutes to dry, and lightning with rolling thunder in a storm. The temperature and conditions show under the clock.
+- **Light on resources:** fetched once on load and then every 10 minutes, only while the tab is visible, and cached so a reload doesn't fetch again. The rain is one draw call animated entirely on the GPU, drawn only as heavily as it's raining (and less on Low), and not at all underground or when it's dry. Offline, the weather just stays as it was.
+- **WEATHER** on the title screen and pause menu: **LIVE KOLKATA** (default), or fixed **CLEAR**, **RAIN** or **STORM**.
 
 </details>
 
@@ -381,10 +401,11 @@ Unchanged: the full day/night cycle, seven weapons and the HUD all carry over.
   | Preset | Max pixel ratio | Shadow map | Ambient occlusion | People / traffic |
   |---|---|---|---|---|
   | Ultra | 2.0 | 4096 | On | 44 / 26 |
-  | High (default) | 1.5 | 2048 | Off | 38 / 24 |
+  | High (default) | 1.25 | 2048 | Off | 38 / 24 |
   | Medium | 1.0 | 1024 | Off | 26 / 18 |
+  | Low | 0.75 | No sun shadows | Off | 16 / 12 |
 
-  People and traffic counts apply on the next page load.
+  **Low** is for older laptops and integrated graphics: no post-processing (bloom, colour grade, anti-aliasing), no sun shadows, a 1.5 km view into thicker haze, a river reflection that refreshes less often, and closer level-of-detail for cars and trees. On a first visit the game picks Low by itself on Intel HD/UHD, mobile or software-rendered GPUs. Switch presets on the title screen or in the pause menu. People and traffic counts apply on the next page load.
 
 ---
 
@@ -428,6 +449,9 @@ src/
   weapons.js        Weapon stats, gun models and the player's arsenal
   combat.js         Bullets, tracers, decals, explosions and area damage
   gameplay.js       Cash and ammo pickups
+  jobs.js           Taxi duty: fares to pick up, destinations, the clock, stars, tips and streaks
+  progress.js       Saved progress: jobs, places discovered, rides and achievements
+  weather.js        Live Kolkata weather (Open-Meteo), rain, lightning
   effects.js        Particles (smoke, sparks, nitro flame) and skid marks
   post.js           Post-processing chain and colour-grade shader
   hud.js            Minimap, speedometer, notifications, bubbles, gesture wheel

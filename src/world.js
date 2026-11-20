@@ -452,6 +452,16 @@ export class World {
     return null;
   }
 
+  /** 0 = dry, 1 = soaked. */
+  setWet(w) {
+    if (Math.abs(w - this.wet) < 0.01) return;
+    this.wet = w;
+    for (const { m, rough, color } of this.wetMats) {
+      m.roughness = rough * (1 - 0.62 * w);
+      m.color.copy(color).multiplyScalar(1 - 0.32 * w);
+    }
+  }
+
   height(x, z) {
     const r = this.rampAt(x, z);
     if (r !== null) return r;
@@ -503,6 +513,9 @@ export class World {
     const neonMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: true });
     const redMat = new THREE.MeshBasicMaterial({ color: 0xff2020 });
     this.mats = { roadMat, interMat: roadMat, neonMat, redMat, propsMat };
+    // roads and pavements darken and shine when wet
+    this.wetMats = [roadMat, sidewalkMat].map((m) => ({ m, rough: m.roughness, color: m.color.clone() }));
+    this.wet = 0;
 
     const facadeDefs = {
       calcuttaG: ['calcutta', { wall: '#f4f1ea', shutter: '#2f6b4a', lit: 0.45 }],
@@ -1229,8 +1242,8 @@ export class World {
     if (!force && Math.hypot(cx - F.lastX, cz - F.lastZ) < 30) return;
     F.lastX = cx;
     F.lastZ = cz;
-    const NEAR = 230 * 230;
-    const FAR = 1900 * 1900;
+    const NEAR = (this.treeNear || 230) ** 2;
+    const FAR = (this.treeFar || 1900) ** 2;
     const N = F.near;
     const L = F.far;
     let nt = 0;

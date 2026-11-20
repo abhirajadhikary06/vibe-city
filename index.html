@@ -21,6 +21,7 @@
       <div id="topright">
         <div id="money">$0</div>
         <div id="clock">18:00</div>
+        <div id="wx"></div>
         <div id="weapon"><img class="wicon" alt="" /><div class="wname">FISTS</div><div class="wammo"></div></div>
       </div>
       <div id="crosshair" class="hidden"><i></i><i></i><i></i><i></i></div>
@@ -29,6 +30,7 @@
       <div id="dmg"></div>
       <div id="dmgdir"></div>
       <div id="mission" class="hidden"></div>
+      <div id="metroinfo" class="hidden"></div>
       <div id="notify"></div>
       <div id="countdown"></div>
       <div id="drift" class="hidden">
@@ -64,7 +66,7 @@
         <button id="play" class="hidden">PRESS ENTER TO PLAY</button>
         <div id="quality">
           <span class="ql">GRAPHICS</span>
-          <button data-q="ultra">ULTRA</button><button data-q="high">HIGH</button><button data-q="medium">MEDIUM</button>
+          <button data-q="ultra">ULTRA</button><button data-q="high">HIGH</button><button data-q="medium">MEDIUM</button><button data-q="low">LOW</button>
         </div>
         <div class="sound">
           <span class="ql">SOUND</span>
@@ -73,6 +75,10 @@
         <div class="timeset">
           <span class="ql">TIME</span>
           <button data-t="real">REAL TIME</button><button data-t="day">DAY</button><button data-t="night">NIGHT</button>
+        </div>
+        <div class="timeset">
+          <span class="ql">WEATHER</span>
+          <button data-w="live">LIVE KOLKATA</button><button data-w="clear">CLEAR</button><button data-w="rain">RAIN</button><button data-w="storm">STORM</button>
         </div>
         <div class="controls">
           <div><b>WASD</b> Walk / Drive</div><div><b>MOUSE</b> Look around (click to lock)</div>
@@ -109,6 +115,15 @@
         <span class="ql">TIME</span>
         <button data-t="real">REAL TIME</button><button data-t="day">DAY</button><button data-t="night">NIGHT</button>
       </div>
+      <div class="timeset">
+        <span class="ql">WEATHER</span>
+        <button data-w="live">LIVE KOLKATA</button><button data-w="clear">CLEAR</button><button data-w="rain">RAIN</button><button data-w="storm">STORM</button>
+      </div>
+      <div class="timeset">
+        <span class="ql">GRAPHICS</span>
+        <button data-q="ultra">ULTRA</button><button data-q="high">HIGH</button><button data-q="medium">MEDIUM</button><button data-q="low">LOW</button>
+      </div>
+      <div class="progress-panel"></div>
       <div class="keys">
         <section>
           <h3>On foot</h3>
@@ -138,10 +153,12 @@
           <div><b>H</b>Horn</div>
           <div><b>R</b>Reset onto the road</div>
           <div><b>C</b>Cycle camera</div>
+          <div><b>B</b>Taxi or auto: go on / off duty</div>
         </section>
         <section>
           <h3>Trams, trains, metro &amp; boats</h3>
           <div><b>F</b>At either cab of a stopped tram, train or metro</div>
+          <div><b>V</b>Board when it stops (Metro: once the doors open)</div>
           <div><b>W / S</b>Drive along the line · brake / back up</div>
           <div><b>F</b>Boats: board from a ghat jetty or the bank</div>
           <div>Step off a boat slowly beside a jetty or the bank</div>

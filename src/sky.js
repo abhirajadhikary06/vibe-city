@@ -2,12 +2,15 @@ import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Lensflare, LensflareElement } from 'three/addons/objects/Lensflare.js';
 import * as TX from './textures.js';
-import { lerp, smoothstep } from './utils.js';
+import { clamp, lerp, smoothstep } from './utils.js';
 
 const C = (h) => new THREE.Color(h);
 const FOG_DAY = C('#9db8d6');
 const FOG_SUNSET = C('#e7a179');
 const FOG_NIGHT = C('#0b1224');
+const FOG_RAIN = C('#8d969e'); // grey monsoon murk
+const GREY = C('#b9c0c8');
+const NO_WX = { cloud: 0.3, rain: 0, fog: 0, storm: 0 };
 const HEMI_DAY = C('#cfe0ff');
 const HEMI_SUNSET = C('#ffb489');
 const HEMI_NIGHT = C('#2a3560');
@@ -90,6 +93,7 @@ export function kolkataHours() {
 const _r = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _f = new THREE.Vector3();
+const _g = new THREE.Color();
 
 export class DayCycle {
   constructor(scene, renderer) {
@@ -229,23 +233,28 @@ export class DayCycle {
     this.night = night;
     this.day = day;
 
+    // Weather (weather.js): how overcast, rainy and foggy, and any lightning
+    const W = this.wx || NO_WX;
+    const over = clamp(Math.max((W.cloud - 0.35) / 0.65, W.rain), 0, 1);
+    const flash = this.flash || 0;
     const u = this.sky.material.uniforms;
     u.sunPosition.value.copy(this.sunDir);
-    u.rayleigh.value = lerp(3.2, 2.6, high);
-    u.mieCoefficient.value = lerp(0.004, 0.0018, high);
-    u.turbidity.value = lerp(8, 1.6, high);
+    u.rayleigh.value = lerp(lerp(3.2, 2.6, high), 0.15, over);
+    u.mieCoefficient.value = lerp(lerp(0.004, 0.0018, high), 0.03, over);
+    u.turbidity.value = lerp(lerp(8, 1.6, high), 20, over);
     this.sky.position.copy(camPos);
     this.stars.position.copy(camPos);
     this.stars.material.opacity = night * 0.9;
     this.clouds.position.copy(camPos);
     const cu = this.clouds.material.uniforms;
     cu.uTime.value += dt * (this.warp > 1 ? 12 : 1);
-    cu.uCover.value = lerp(lerp(0.66, 0.5, dusk), 0.55, night);
-    cu.uLit.value.copy(LIT_DAY).lerp(LIT_DUSK, dusk).lerp(LIT_NIGHT, night);
-    cu.uShade.value.copy(SHADE_DAY).lerp(SHADE_DUSK, dusk).lerp(SHADE_NIGHT, night);
+    // uCover is the noise threshold for cloud: lower means more of the sky covered
+    cu.uCover.value = lerp(0.9, 0.08, W.cloud);
+    cu.uLit.value.copy(LIT_DAY).lerp(LIT_DUSK, dusk).lerp(LIT_NIGHT, night).multiplyScalar(lerp(1, 0.6, W.rain) + flash);
+    cu.uShade.value.copy(SHADE_DAY).lerp(SHADE_DUSK, dusk).lerp(SHADE_NIGHT, night).multiplyScalar(lerp(1, 0.55, W.rain) + flash);
     cu.uGlow.value.copy(this.sun.color).multiplyScalar(lerp(0.4, 2.2, dusk) * day);
     this.flareAnchor.position.copy(camPos).addScaledVector(this.sunDir, 2000);
-    this.flare.visible = sE > -0.01 && this.flareEnabled !== false;
+    this.flare.visible = sE > -0.01 && this.flareEnabled !== false && over < 0.5;
     this.stars.rotation.y = this.time * 0.02;
 
     // Sun / moon light
@@ -259,6 +268,8 @@ export class DayCycle {
       sun.color.copy(MOON);
       sun.intensity = smoothstep(0.02, 0.2, -sE) * 0.35;
     }
+    // behind cloud the sun goes soft and grey
+    sun.intensity *= lerp(1, 0.2, over);
     // Keep the shadow lightmap near the player, snapped to whole shadow texels in light
     // space so shadow edges don't shimmer as the player moves
     const L = this.lightDir;
@@ -281,20 +292,21 @@ export class DayCycle {
     // Ambient
     const hc = this.hemi.color.copy(HEMI_DAY).lerp(HEMI_SUNSET, dusk).lerp(HEMI_NIGHT, night);
     this.hemi.groundColor.setRGB(0.23, 0.2, 0.17).lerp(GROUND_NIGHT, night);
-    this.hemi.intensity = lerp(lerp(1.0, 0.75, dusk), 0.5, night);
-    void hc;
+    this.hemi.intensity = lerp(lerp(1.0, 0.75, dusk), 0.5, night) * lerp(1, 0.8, over) + flash * 2.5;
+    hc.lerp(GREY, over * 0.5);
 
     // Fog
     this.fog.color.copy(FOG_DAY).lerp(FOG_SUNSET, dusk).lerp(FOG_NIGHT, night);
-    // Kolkata haze: everything past ~2.5 km fades out (and isn't drawn)
-    this.fog.density = lerp(lerp(0.0008, 0.0012, dusk), 0.0011, night);
+    this.fog.color.lerp(_g.copy(FOG_RAIN).multiplyScalar(lerp(1, 0.25, night)), Math.max(over * 0.7, W.fog));
+    // Kolkata haze: everything past ~2.5 km fades out (and isn't drawn); thicker in rain and fog
+    this.fog.density = lerp(lerp(0.0008, 0.0012, dusk), 0.0011, night) * (this.fogScale || 1) * (1 + W.rain * 1.4 + W.fog * 3);
 
-    this.renderer.toneMappingExposure = lerp(lerp(0.4, 0.55, dusk), 0.75, night);
+    this.renderer.toneMappingExposure = lerp(lerp(0.4, 0.55, dusk), 0.75, night) * lerp(1, 0.92, W.rain) + flash * 0.8;
 
     // Environment map refresh
     this.envTimer -= dt;
     if (Math.abs(sE - this.lastEnvY) > 0.03 && this.envTimer <= 0) this.bakeEnv(sE);
-    this.scene.environmentIntensity = lerp(1, 0.55, night);
+    this.scene.environmentIntensity = lerp(1, 0.55, night) * lerp(1, 0.65, over);
   }
 
   bakeEnv(sE) {

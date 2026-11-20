@@ -29,7 +29,7 @@ export const fareFor = (type, metres) => {
 };
 
 /** Where the passenger sits, in the vehicle's local frame [x, z, seatY]. */
-function passengerSeat(v) {
+export function passengerSeat(v) {
   const d = v.def;
   if (d.pass) return d.pass;
   if (v.type === 'rickshaw') return [0, -0.3, 0.32];
@@ -96,7 +96,8 @@ export class Rides {
 
   nearConsist(p, r) {
     for (const cs of this.game.rail.consists) {
-      if (cs.speed > 0.6 || cs.driven || Math.abs(cs.pos.y - p.y) > 4) continue;
+      // the Metro only while its doors are open
+      if (!cs.boardable || cs.driven || Math.abs(cs.pos.y - p.y) > 4) continue;
       for (const c of cs.cars) {
         const dx = p.x - c.x;
         const dz = p.z - c.z;
@@ -275,6 +276,7 @@ export class Rides {
     });
     const along = clamp((pl.pos.x - cs.cars[ci].x) * Math.sin(cs.cars[ci].yaw) + (pl.pos.z - cs.cars[ci].z) * Math.cos(cs.cars[ci].yaw), -cs.K.L / 2 + 2, cs.K.L / 2 - 2);
     this.pay(TICKETS[cs.kind], `${cs.label} ticket`);
+    if (g.progress) g.progress.event(cs.kind);
     if (cs.kind === 'train' || cs.kind === 'express') g.station.ticketT = Math.max(g.station.ticketT, 600);
     this.ride = { kind: 'rail', cs, ci, along, wasState: cs.state, lastStop: null };
     pl.board(cs, null);
@@ -284,6 +286,7 @@ export class Rides {
   boardLaunch(b) {
     const g = this.game;
     this.pay(TICKETS.launch, 'Ferry ticket');
+    if (g.progress) g.progress.event('ferry');
     this.ride = { kind: 'launch', v: b };
     g.player.board(b, passengerSeat(b));
     g.hud.notify('ON THE FERRY', 'F to get off when it docks', '#38f3ff');
@@ -295,8 +298,9 @@ export class Rides {
     const g = this.game;
     if (!r) return;
     if (r.kind === 'rail') {
-      if (r.cs.speed > 0.6) {
-        g.hud.notify('WAIT FOR THE NEXT STOP', 'Get off when the train stops', '#ffd36b');
+      if (!r.cs.boardable) {
+        if (r.cs.speed < 0.6 && r.cs.doors) g.hud.notify('WAIT FOR THE DOORS', 'They open at the platform', '#ffd36b');
+        else g.hud.notify('WAIT FOR THE NEXT STOP', 'Get off when the train stops', '#ffd36b');
         return;
       }
       this.leaveRail();
@@ -385,7 +389,8 @@ export class Rides {
       const fz = Math.cos(c.yaw);
       pl.seatAt(c.x + fx * r.along + fz * 0.7, cs.K.y + cs.K.floor + 0.45, c.z + fz * r.along - fx * 0.7, c.yaw + Math.PI / 2, T, dt);
       // announce the stop
-      if (cs.state === 'dwell' && r.wasState !== 'dwell') {
+      // (a Metro reversing in its siding beyond the last station isn't a stop)
+      if (cs.state === 'dwell' && r.wasState !== 'dwell' && (!cs.sideAt || cs.sideAt(cs.s) !== null)) {
         const name = this.stationName(cs);
         if (name) g.hud.notify(name.toUpperCase(), 'F to get off here', cs.kind === 'metro' ? '#2f6fe0' : '#f4c51c');
       }

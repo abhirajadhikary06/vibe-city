@@ -66,6 +66,8 @@ function describe(rail, metro) {
     const firstIsNorthWest = blue ? a.z < b.z : a.x < b.x;
     const dest = firstIsNorthWest ? ends : [ends[1], ends[0]];
     for (const cs of metro.trains) if (cs.track === L.track) cs.svc = { no: blue ? 'BLUE LINE' : 'GREEN LINE', dest, label: 'METRO' };
+    // Up trains run towards the far end of the track, Down trains back
+    L.dest = { up: dest[1], down: dest[0] };
   }
 }
 
@@ -83,7 +85,7 @@ function eta(cs, sT) {
     return { t, dir: cs.dir };
   }
   // going away: out to the end, turn round, and back
-  const end = cs.dir > 0 ? cs.sMax : cs.sMin;
+  const end = cs.dir > 0 ? cs.endB : cs.endA;
   t += Math.abs(end - cs.s) / v + stopsBetween(cs.s, end) * dwellOf + (cs.termDwell || dwellOf) + Math.abs(end - sT) / v + stopsBetween(end, sT) * dwellOf;
   return { t, dir: -cs.dir };
 }
@@ -129,13 +131,11 @@ export class Boards {
       const q = p.spine.at(p.len * 0.5, {});
       this.add({ kind: 'station', title: p.name, x: q.x, y: 3.8, z: q.z, yaw: Math.atan2(q.tx, q.tz) + Math.PI / 2, w: 3.2, h: 1.7, svc, rows: 3, twoSided: true, post: true });
     }
-    // Metro platforms
-    for (const ms of metro.stations) {
-      const F = ms.frame;
-      const svc = pick(metro.trains, F.cx, F.cz, 30);
-      if (!svc.length) continue;
-      const v = 5.6 * ms.side;
-      this.add({ kind: 'metro', title: `${ms.name.toUpperCase()} · ${ms.line.toUpperCase()}`, x: F.cx + F.ux * 6 - F.uz * v, y: ms.D + 5.0, z: F.cz + F.uz * 6 + F.ux * v, yaw: Math.atan2(F.ux, F.uz) + Math.PI / 2, w: 3.6, h: 1.4, svc, rows: 2, twoSided: true, under: true, color: ms.color });
+    // Metro platforms: the next two trains from this platform, counting down
+    this.metro = metro;
+    for (const pf of metro.platforms) {
+      const towards = pf.lineRef && pf.lineRef.dest ? pf.lineRef.dest[pf.bound] : '';
+      for (const d of pf.displays) this.add({ kind: 'metro', pf, towards, title: `PLATFORM ${pf.no} · ${pf.o.name.toUpperCase()}`, x: d.x, y: d.y, z: d.z, yaw: d.yaw, w: 4.2, h: 1.5, svc: [], rows: 2, twoSided: true, under: true, color: pf.color });
     }
     // Tram stops
     for (const ts of rail.tramStops) {
@@ -155,10 +155,16 @@ export class Boards {
     b.g = c.getContext('2d');
     b.tex = new THREE.CanvasTexture(c);
     b.tex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.MeshBasicMaterial({ map: b.tex, side: b.twoSided ? THREE.DoubleSide : THREE.FrontSide, toneMapped: false });
+    const mat = new THREE.MeshBasicMaterial({ map: b.tex, toneMapped: false });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(b.w, b.h), mat);
     mesh.position.set(b.x, b.y, b.z);
     mesh.rotation.y = b.yaw;
+    // two-sided: a second face on the back, so the writing reads the right way round from both sides
+    if (b.twoSided) {
+      const back = new THREE.Mesh(mesh.geometry, mat);
+      back.rotation.y = Math.PI;
+      mesh.add(back);
+    }
     this.scene.add(mesh);
     b.mesh = mesh;
     if (b.post) {
@@ -184,7 +190,51 @@ export class Boards {
     }
   }
 
+  /** A Metro platform display: where the trains go, and when the next two come in. */
+  drawMetro(b, hours) {
+    const g = b.g;
+    const W = b.canvas.width;
+    const H = b.canvas.height;
+    g.fillStyle = '#05070a';
+    g.fillRect(0, 0, W, H);
+    const head = Math.round(H * 0.24);
+    g.fillStyle = b.color || '#2f6fe0';
+    g.fillRect(0, 0, W, head);
+    g.fillStyle = '#ffffff';
+    g.textBaseline = 'middle';
+    g.font = `bold ${Math.round(head * 0.46)}px Arial, sans-serif`;
+    g.textAlign = 'left';
+    g.fillText(b.pf.terminus ? b.title : `TOWARDS ${b.towards}`, W * 0.025, head / 2, W * 0.72);
+    g.textAlign = 'right';
+    g.fillText(fmtClock(hours), W * 0.975, head / 2);
+    const amber = '#ffb02e';
+    const rh = (H - head) / 2;
+    if (b.pf.terminus) {
+      g.fillStyle = amber;
+      g.textAlign = 'center';
+      g.font = `bold ${Math.round(rh * 0.42)}px "Courier New", monospace`;
+      g.fillText('TERMINUS · TRAINS FROM', W / 2, head + rh * 0.55);
+      g.fillText('THE OTHER PLATFORM', W / 2, head + rh * 1.35);
+    } else {
+      const next = this.metro.nextTrains(b.pf).slice(0, 2);
+      next.forEach((r, i) => {
+        const y = head + rh * (i + 0.5);
+        const secs = Math.round(r.t);
+        const soon = r.here || secs < 45;
+        g.font = `bold ${Math.round(rh * 0.5)}px "Courier New", monospace`;
+        g.fillStyle = amber;
+        g.textAlign = 'left';
+        g.fillText(i ? 'THEN' : 'NEXT TRAIN', W * 0.03, y);
+        g.textAlign = 'right';
+        g.fillStyle = soon ? '#5dff9e' : amber;
+        g.fillText(r.here ? 'ON PLATFORM' : soon ? 'ARRIVING' : `${Math.floor(secs / 60)} MIN ${String(secs % 60).padStart(2, '0')} S`, W * 0.97, y);
+      });
+    }
+    b.tex.needsUpdate = true;
+  }
+
   draw(b, hours) {
+    if (b.kind === 'metro') return this.drawMetro(b, hours);
     const g = b.g;
     const W = b.canvas.width;
     const H = b.canvas.height;
