@@ -593,6 +593,8 @@ async function boot() {
     vehicles.push(v);
     return v;
   });
+  // every station's lights, collected from the platforms, stalls and shelters above
+  world.buildStationLamps();
   // On the Hooghly: launches working the ferry routes, country boats at the ghats
   const docks = buildGhats(world, scene);
   const launchCols = [0x1f4f8a, 0x2f8a4a, 0xc8382c, 0xd99a22];
@@ -734,6 +736,7 @@ function startGame() {
   state = 'play';
   hud.start();
   input.lock();
+  guardHistory();
   cam.yaw = player.yaw;
   setTimeout(() => hud.notify('WELCOME TO VIBE CITY KOLKATA', 'Howrah Station · walk up to any vehicle and press F', '#ff3fa4'), 900);
   setTimeout(() => hud.notify('CITY OF JOY', 'Buy a ticket (E) before the platforms · M for the map', '#ffd36b'), 4600);
@@ -743,6 +746,55 @@ renderer.domElement.addEventListener('click', () => {
   if (state === 'play') input.lock();
 });
 document.getElementById('pause').addEventListener('click', () => setPaused(false));
+
+/* ---------- Back button: ask before leaving the city ---------- */
+// startGame() adds a history entry (it needs the click or key press to count), so the
+// browser's Back first lands back on this page and we ask; only LEAVE really goes back.
+const leaveEl = document.getElementById('leave');
+let leaveOpen = false;
+let leaving = false;
+let leaveFrom = 'play';
+function guardHistory() {
+  if (!history.state || !history.state.kol) history.pushState({ kol: true }, '');
+}
+function showLeave(open) {
+  leaveOpen = open;
+  leaveEl.classList.toggle('hidden', !open);
+}
+window.addEventListener('popstate', () => {
+  if (leaving || leaveOpen || state === 'loading' || state === 'title') return;
+  leaveFrom = state;
+  if (document.pointerLockElement) document.exitPointerLock();
+  setPaused(true);
+  showLeave(true);
+  document.getElementById('leave-stay').focus();
+});
+function stay() {
+  showLeave(false);
+  guardHistory();
+  // back to how it was: playing again, or still paused / on the map
+  if (leaveFrom === 'play') setPaused(false);
+}
+document.getElementById('leave-stay').addEventListener('click', stay);
+document.getElementById('leave-go').addEventListener('click', () => {
+  leaving = true;
+  history.back();
+  // nothing to go back to (the game was the first page in this tab): stay, paused
+  setTimeout(() => {
+    leaving = false;
+    showLeave(false);
+    guardHistory();
+  }, 700);
+});
+window.addEventListener('keydown', (e) => {
+  if (leaveOpen && e.code === 'Escape') stay();
+});
+// Reload or close mid-game: the browser's own "Leave site?" prompt
+window.addEventListener('beforeunload', (e) => {
+  if (leaving || state === 'loading' || state === 'title') return;
+  e.preventDefault();
+  e.returnValue = '';
+});
 let wasLocked = false;
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === renderer.domElement;
@@ -925,7 +977,7 @@ function loop() {
   }
 
   if (state === 'title' && input.hit('Enter')) startGame();
-  if ((state === 'play' || state === 'pause') && (input.hit('Escape') || input.hit('KeyP'))) {
+  if (!leaveOpen && (state === 'play' || state === 'pause') && (input.hit('Escape') || input.hit('KeyP'))) {
     if (!input.locked || state === 'pause') setPaused(state === 'play');
   }
   if ((state === 'play' && input.hit('KeyM')) || (state === 'map' && (input.hit('KeyM') || input.hit('Escape')))) setMap(state === 'play');

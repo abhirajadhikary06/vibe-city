@@ -158,6 +158,7 @@ export class World {
     this.time = { value: 0 };
     this.decks = [];
     this.reflectSkip = [];
+    this.stationLamps = []; // tube lights at platforms, stalls and shelters: see addStationLamp()
     this.waterGrid = new Grid(80);
     this.openings = [];
     this.graph = new RoadGraph(MAP.roads);
@@ -1344,6 +1345,44 @@ export class World {
     this.reflectSkip.push(pools, cones);
     this.lampHeadMat = headMat;
     this.poolMat = poolMat;
+  }
+
+  /**
+   * A tube light under a station roof (along its local z after `yaw`), with a pool of
+   * light on the floor below. Collected here and built once by buildStationLamps().
+   */
+  addStationLamp(x, y, z, yaw, len, floorY, pool) {
+    this.stationLamps.push({ x, y, z, yaw, len, floorY, pool });
+  }
+
+  /** Platforms, stalls and shelters light up after dark: bright tubes, cool white pools. */
+  buildStationLamps() {
+    const L = this.stationLamps;
+    if (!L.length) return;
+    const tubes = [];
+    const pools = [];
+    for (const { x, y, z, yaw, len, floorY, pool } of L) {
+      tubes.push(new THREE.BoxGeometry(0.14, 0.07, len).rotateY(yaw).translate(x, y, z));
+      pools.push(new THREE.PlaneGeometry(pool, pool * 1.4).rotateX(-Math.PI / 2).rotateY(yaw).translate(x, floorY + 0.03, z));
+    }
+    const tubeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const poolMat = new THREE.MeshBasicMaterial({ map: T.glow(), color: 0xe4eeff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    const tubeMesh = new THREE.Mesh(merge(tubes), tubeMat);
+    const poolMesh = new THREE.Mesh(merge(pools), poolMat);
+    poolMesh.renderOrder = 2;
+    for (const m of [tubeMesh, poolMesh]) {
+      this.scene.add(m);
+      m.updateMatrixWorld(true);
+      m.matrixAutoUpdate = false;
+    }
+    this.reflectSkip.push(poolMesh);
+    // dim grey tubes by day, bloom-bright at night
+    this.updaters.push((dt, t, night) => {
+      tubeMat.color.setRGB(lerp(0.8, 2.6, night), lerp(0.82, 2.75, night), lerp(0.85, 3, night));
+      poolMat.opacity = night * 0.5;
+      poolMesh.visible = night > 0.02;
+    });
+    L.length = 0;
   }
 
   /** Hawkers' stalls under tarpaulins along the main-road pavements: thick round Esplanade, New Market and the stations. */

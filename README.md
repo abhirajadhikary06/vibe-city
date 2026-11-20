@@ -279,6 +279,7 @@ Modelled in code and placed on their real footprints:
 - **Health:** a health bar that refills slowly once you've stayed out of trouble for a few seconds; street food restores it too. Go down and you wake up on the nearest pavement, minus a hospital bill (₹100 plus 5% of your cash).
 - **Taxi duty:** in a yellow Ambassador or an auto, press **B**. Someone waves you down on a pavement nearby (yellow marker on the minimap); pull up beside them and they get in and name a place across town. Beat the clock without knocking them about: the fare is paid by distance, plus a tip for a smooth, quick ride (rated out of five stars) and a bonus for fares in a row. Leave the cab mid-ride and the fare is lost.
 - **Progress that carries over:** taxi jobs, earnings, your rating and best streak, the places you've discovered (landmarks, stations, ghats, markets: a note pops up as you pass each one) and 14 achievements, from *Mind the Gap* to *City of Joy*. See them in the pause menu. Saved in the browser.
+- **No accidental exits:** pressing the browser's Back button (or swiping back) mid-game pauses and asks *Leave Kolkata?*; only **LEAVE** actually goes back. Reloading or closing the tab gets the browser's own "Leave site?" prompt.
 
 </details>
 
@@ -298,6 +299,7 @@ Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a
 
 - **Departure boards** at Howrah (the big concourse board), every railway platform, every Metro platform and every tram stop: train number, destination (Bandel, Bardhaman, Krishnanagar, Canning, Dum Dum…), platform, and minutes to arrival, worked out from where each train really is, on the real Kolkata clock.
 - **Real platform numbers** from OpenStreetMap: Howrah 1–23, Sealdah 1–21. Hanging PF signs over each platform show the next train's destination and time, and Howrah's big board lists the real platforms.
+- **Lit at night:** tube lights under every platform canopy, Howrah's sheds and concourse roof, the station stalls, the Dharmatala bus shelters and the tram stops, each throwing a pool of light on the floor below.
 - **Trains and trams** run more often: seven out of Howrah, four out of Sealdah, two on the Circular Railway, two trams a line. Every train stops properly at every station.
 
 </details>

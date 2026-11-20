@@ -266,6 +266,44 @@ html, body {
 .pause-title { font-family: 'Bebas Neue', sans-serif; font-size: 120px; letter-spacing: 14px; color: var(--pink); text-shadow: 0 0 30px rgba(255, 63, 164, 0.6); }
 .pause-sub { letter-spacing: 4px; opacity: 0.8; }
 
+/* "Leave Kolkata?" when the browser's back button is pressed mid-game */
+#leave {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 4, 16, 0.7);
+  backdrop-filter: blur(8px);
+  padding: 16px;
+}
+.leave-box {
+  max-width: 520px;
+  text-align: center;
+  padding: 32px 28px;
+  border: 2px solid var(--pink);
+  border-radius: 6px;
+  background: rgba(11, 13, 20, 0.85);
+  box-shadow: 0 0 40px rgba(255, 63, 164, 0.4);
+}
+.leave-title { font-family: 'Bebas Neue', sans-serif; font-size: 56px; letter-spacing: 6px; color: var(--pink); text-shadow: 0 0 24px rgba(255, 63, 164, 0.6); }
+.leave-sub { margin-top: 8px; font-size: 16px; line-height: 1.45; letter-spacing: 1px; color: rgba(255, 255, 255, 0.85); }
+.leave-btns { margin-top: 26px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.leave-btns button {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 26px;
+  letter-spacing: 4px;
+  color: #fff;
+  padding: 10px 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+}
+.leave-btns #leave-stay { background: rgba(56, 243, 255, 0.14); border-color: var(--cyan); box-shadow: 0 0 20px rgba(56, 243, 255, 0.35); }
+.leave-btns button:hover { background: rgba(255, 63, 164, 0.3); }
+
 @media (max-width: 720px) {
   #minimap-wrap { width: 140px; height: 140px; left: 16px; bottom: 16px; }
   #speedo { width: 150px; height: 150px; right: 10px; bottom: 10px; }

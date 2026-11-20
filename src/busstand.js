@@ -98,6 +98,11 @@ export class BusStand {
         const [px, pz] = W(u, v);
         parts.push(box(0.12, 3.4, 0.12, px, 1.7, pz, '#3a3b3e'));
         world.addCircle(px, pz, 0.12);
+        // tube lights under the roof, one per bay
+        if (u + 2 <= len / 2 - 1) {
+          const [lx, lz] = W(u + 2, v);
+          world.addStationLamp(lx, 3.27, lz, Math.PI / 2 - a, 2.6, 0, 5);
+        }
         if (Math.abs(u) % 8 < 4) {
           const b = new THREE.BoxGeometry(2.4, 0.08, 0.5).rotateY(-a).translate(px + ux * 2, 0.5, pz + uz * 2);
           b.deleteAttribute('uv');

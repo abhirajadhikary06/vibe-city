@@ -716,6 +716,8 @@ function howrahStation(world, K, scene) {
       if (!inPoly(fp, x, z) || inPoly(hcPoly, x, z) || world.collideCircle(x, z, 2)) continue;
       K.cyl('steel', 0.35, 0.4, 13, x, 6.5, z, '#4a4f55', 8);
       world.addCircle(x, z, 0.4);
+      // lights hung from the roof beside each column
+      for (const o of [-5.5, 5.5]) world.addStationLamp(x + Math.cos(a) * o, 12.9, z + Math.sin(a) * o, Math.PI / 2 - a, 7, 0, 13);
     }
   }
 }
