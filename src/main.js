@@ -110,31 +110,6 @@ document.querySelectorAll('.sound button').forEach((b) =>
 );
 refreshSoundButtons();
 
-/* ---------- Weather: live from Kolkata, or fixed ---------- */
-function refreshWeatherButtons() {
-  let mode = 'live';
-  try {
-    mode = (weather && weather.mode) || localStorage.getItem('kol_wxmode') || 'live';
-  } catch {
-    /* storage unavailable */
-  }
-  document.querySelectorAll('button[data-w]').forEach((b) => b.classList.toggle('on', b.dataset.w === mode));
-}
-document.querySelectorAll('button[data-w]').forEach((b) =>
-  b.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (weather) weather.applyMode(b.dataset.w);
-    else
-      try {
-        localStorage.setItem('kol_wxmode', b.dataset.w);
-      } catch {
-        /* storage unavailable */
-      }
-    refreshWeatherButtons();
-  }),
-);
-refreshWeatherButtons();
-
 /* ---------- Time of day: real Kolkata clock, or always day / night ---------- */
 const TIME_HOURS = { day: 12, night: 22 };
 let timeMode = 'real';
@@ -556,8 +531,8 @@ async function boot() {
   setLoading(0.45, 'Painting the sky');
   await frame();
   day = new DayCycle(scene, renderer);
-  weather = new Weather(scene, 8000);
-  refreshWeatherButtons();
+  // always Kolkata's live weather; DAY / NIGHT only change the time of day
+  weather = new Weather(scene, 8000, 'live');
   // ?t=HOUR overrides the real clock (for testing a time of day)
   const startHour = parseFloat(new URLSearchParams(location.search).get('t'));
   if (!Number.isNaN(startHour)) {
@@ -1096,7 +1071,7 @@ function loop() {
     wxHudT = 1;
     const w = weather.summary;
     const el = document.getElementById('wx');
-    const txt = `${w.icon} ${w.text}${weather.mode === 'live' ? (w.live ? ' · LIVE' : '') : ''}`;
+    const txt = weather.mode === 'live' && w.text ? `${w.icon} ${w.text}` : '';
     if (el.textContent !== txt) el.textContent = txt;
   }
   day.update(dt, focus, camera.position);

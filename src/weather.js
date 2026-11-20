@@ -14,7 +14,6 @@ import { clamp } from './utils.js';
 
 const URL = 'https://api.open-meteo.com/v1/forecast?latitude=22.5726&longitude=88.3639&current=temperature_2m,precipitation,rain,showers,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m&timezone=Asia%2FKolkata';
 const CACHE = 'kol_weather';
-const MODE = 'kol_wxmode';
 const REFRESH = 10 * 60 * 1000;
 
 /** WMO weather code -> how cloudy, rainy, foggy and stormy, and what to call it. */
@@ -65,14 +64,9 @@ const RAIN_FRAG = /* glsl */ `
   }`;
 
 export class Weather {
-  constructor(scene, maxDrops = 6000) {
+  constructor(scene, maxDrops = 6000, mode = 'live') {
     this.scene = scene;
-    this.mode = 'live';
-    try {
-      this.mode = localStorage.getItem(MODE) || 'live';
-    } catch {
-      /* storage unavailable */
-    }
+    this.mode = mode;
     // what the weather is (target), and what's shown (eases towards it)
     this.target = { ...MANUAL.clear, label: '', icon: '' };
     this.now = { cloud: 0, rain: 0, fog: 0, storm: 0 };
@@ -122,7 +116,7 @@ export class Weather {
     this.rain.visible = false;
     scene.add(this.rain);
 
-    this.applyMode(this.mode, false);
+    this.applyMode(this.mode);
     // pick the fetching back up when the tab comes back
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && this.mode === 'live') this.refresh();
@@ -130,15 +124,8 @@ export class Weather {
   }
 
   /** 'live' (Kolkata now), or a fixed 'clear' / 'rain' / 'storm'. */
-  applyMode(mode, save = true) {
+  applyMode(mode) {
     this.mode = MANUAL[mode] ? mode : 'live';
-    if (save) {
-      try {
-        localStorage.setItem(MODE, this.mode);
-      } catch {
-        /* storage unavailable */
-      }
-    }
     if (this.mode === 'live') this.refresh();
     else this.target = { ...MANUAL[this.mode] };
   }
