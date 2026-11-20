@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { MAP } from './geo.js';
+import { merge } from './utils.js';
+
+const bnDigits = (n) => String(n).replace(/\d/g, (d) => '০১২৩৪৫৬৭৮৯'[d]);
 
 /*
  * Departure boards: next trains at the railway stations (a big one on Howrah's
@@ -114,13 +117,22 @@ export class Boards {
       return out;
     };
     const trains = rail.consists.filter((c) => c.kind === 'train' || c.kind === 'express');
+    // the platform number a train uses at a station: the face whose track it runs on
+    const faces = rail.platformFaces || new Map();
+    const pfOf = (cs, list) => {
+      for (const f of list || []) {
+        const q = cs.track.at(cs.track.nearest(f.x, f.z), {});
+        if (Math.hypot(q.x - f.x, q.z - f.z) < 1.6) return f.no;
+      }
+      return null;
+    };
     // Howrah: the big concourse board
     const st = world.station;
     if (st) {
       const { headCentre: hc, ux, uz, depth: D } = st;
       const x = hc.x - ux * (D / 2 + 0.6);
       const z = hc.z - uz * (D / 2 + 0.6);
-      const svc = trains.filter((c) => c.origin === 'howrah').map((cs, i) => ({ cs, s: cs.sMin, pf: i + 1 }));
+      const svc = trains.filter((c) => c.origin === 'howrah').map((cs, i) => ({ cs, s: cs.sMin, pf: pfOf(cs, faces.get('HOWRAH')) || i + 1 }));
       this.add({ kind: 'big', title: 'হাওড়া · HOWRAH · DEPARTURES', x, y: 9, z, yaw: Math.atan2(-ux, -uz), w: 10, h: 4.4, svc, rows: 8 });
     }
     // other stations: one board per platform
@@ -128,8 +140,25 @@ export class Boards {
       if (p.covered) continue;
       const svc = pick(trains, p.cx, p.cz, 60);
       if (!svc.length) continue;
+      for (const r of svc) r.pf = pfOf(r.cs, faces.get(p.name));
       const q = p.spine.at(p.len * 0.5, {});
       this.add({ kind: 'station', title: p.name, x: q.x, y: 3.8, z: q.z, yaw: Math.atan2(q.tx, q.tz) + Math.PI / 2, w: 3.2, h: 1.7, svc, rows: 3, twoSided: true, post: true });
+    }
+    // Platform numbers hanging over each face, with the next train from that face and where it's going
+    for (const p of rail.platforms) {
+      for (const f of p.faces || []) {
+        const svc = pick(trains, f.x, f.z, 1.6);
+        const q = {};
+        // across the platform, kept clear of the train beside it
+        const off = Math.max(0.8, f.w - 0.9);
+        const y = (p.covered ? 6.8 : 4.4) - 0.7;
+        for (const k of [0.12, 0.5, 0.88]) {
+          p.spine.at(p.len * k, q);
+          const x = q.x + f.nx * off;
+          const z = q.z + f.nz * off;
+          this.add({ kind: 'pf', no: f.no, station: p.name, x, y, z, yaw: Math.atan2(q.tx, q.tz), w: 1.6, h: 0.5, svc: svc.map((r) => ({ ...r, s: r.cs.track.nearest(x, z) })), rows: 1, twoSided: true, hang: true });
+        }
+      }
     }
     // Metro platforms: the next two trains from this platform, counting down
     this.metro = metro;
@@ -167,6 +196,13 @@ export class Boards {
     }
     this.scene.add(mesh);
     b.mesh = mesh;
+    if (b.hang) {
+      const rods = new THREE.Mesh(
+        merge([-1, 1].map((o) => new THREE.CylinderGeometry(0.025, 0.025, 0.6, 5).translate(o * b.w * 0.4, b.h / 2 + 0.3, 0))),
+        new THREE.MeshStandardMaterial({ color: 0x2a2b2e }),
+      );
+      mesh.add(rods);
+    }
     if (b.post) {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, b.y - b.h / 2, 6), new THREE.MeshStandardMaterial({ color: 0x2a2b2e }));
       post.position.set(b.x, (b.y - b.h / 2) / 2, b.z);
@@ -233,8 +269,56 @@ export class Boards {
     b.tex.needsUpdate = true;
   }
 
+  /** A platform's hanging sign: the number, then the next train from here and where it's going. */
+  drawPlatform(b, hours) {
+    const g = b.g;
+    const W = b.canvas.width;
+    const H = b.canvas.height;
+    g.fillStyle = '#05070a';
+    g.fillRect(0, 0, W, H);
+    // the number on Indian Railways yellow
+    g.fillStyle = '#f4c51c';
+    g.fillRect(0, 0, H, H);
+    g.fillStyle = '#111';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `bold ${Math.round(H * 0.17)}px Arial, sans-serif`;
+    g.fillText('PF', H / 2, H * 0.15);
+    g.font = `bold ${Math.round(H * 0.62)}px Arial, sans-serif`;
+    g.fillText(String(b.no), H / 2, H * 0.6, H * 0.9);
+    const x0 = H + W * 0.03;
+    const amber = '#ffb02e';
+    g.textAlign = 'left';
+    const next = b.svc
+      .map(({ cs, s }) => {
+        const e = eta(cs, s);
+        return { cs, t: e.t, here: e.here, to: cs.svc.dest[e.dir > 0 ? 1 : 0] };
+      })
+      .filter((r) => r.to && r.to !== b.station)
+      .sort((a, z) => a.t - z.t)[0];
+    if (!next) {
+      g.fillStyle = amber;
+      g.font = `bold ${Math.round(H * 0.3)}px Arial, "Kohinoor Bangla", sans-serif`;
+      g.fillText(`PLATFORM ${b.no}`, x0, H * 0.32, W - x0 - 8);
+      g.font = `bold ${Math.round(H * 0.26)}px "Kohinoor Bangla", "Bangla MN", "Noto Sans Bengali", Arial`;
+      g.fillText(`প্ল্যাটফর্ম ${bnDigits(b.no)}`, x0, H * 0.74, W - x0 - 8);
+    } else {
+      const mins = Math.round(next.t / 60);
+      g.fillStyle = amber;
+      g.font = `bold ${Math.round(H * 0.3)}px Arial, sans-serif`;
+      g.fillText(next.to, x0, H * 0.3, W - x0 - 8);
+      g.font = `bold ${Math.round(H * 0.24)}px "Courier New", monospace`;
+      g.fillText(next.cs.svc.no, x0, H * 0.73, W * 0.3);
+      g.textAlign = 'right';
+      g.fillStyle = next.here || mins < 1 ? '#5dff9e' : amber;
+      g.fillText(next.here ? 'ON PF' : mins < 1 ? 'DUE' : `${fmtClock(hours + next.t / 3600)} ${mins}m`, W - 8, H * 0.73);
+    }
+    b.tex.needsUpdate = true;
+  }
+
   draw(b, hours) {
     if (b.kind === 'metro') return this.drawMetro(b, hours);
+    if (b.kind === 'pf') return this.drawPlatform(b, hours);
     const g = b.g;
     const W = b.canvas.width;
     const H = b.canvas.height;
@@ -275,7 +359,7 @@ export class Boards {
       } else {
         g.fillText(fmtClock(hours + r.t / 3600), W * 0.02, y);
         g.fillText(`${r.cs.svc.no}`, W * (b.kind === 'big' ? 0.13 : 0.2), y, W * 0.22);
-        g.fillText(`${r.to}${r.cs.kind === 'express' ? '' : ' LOCAL'}`, W * (b.kind === 'big' ? 0.33 : 0.42), y, W * (b.kind === 'big' ? 0.4 : 0.35));
+        g.fillText(`${r.to}${r.cs.kind === 'express' ? '' : ' LOCAL'}`, W * (b.kind === 'big' ? 0.33 : 0.42), y, W * (b.kind === 'big' ? 0.4 : r.pf ? 0.27 : 0.35));
         if (r.pf) {
           g.textAlign = 'right';
           g.fillText(`PF ${r.pf}`, W * 0.84, y);

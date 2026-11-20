@@ -358,6 +358,7 @@ export class Metro {
     const posters = [];
     const nameSigns = [];
     this.psd = [];
+    this.gates = []; // fare gates at the foot of each stairway
     this.platforms = []; // one per direction per station, for the next-train displays
 
     for (const L of LINES) {
@@ -630,6 +631,22 @@ export class Metro {
             pl(darkG, sU0 - 1.72, sU0 - 0.48, pf + 1.0, pf + 1.05, v - 0.15, v + 0.15);
             pl(gateLamps, sU0 - 0.62, sU0 - 0.5, pf + 0.9, pf + 1.0, v - 0.08, v + 0.08);
           }
+          // The flaps between the cabinets, and low side panels: the stairway is walled in down to
+          // the gates, so the only way between the street and the platform is through them
+          {
+            const gate = { name: o.name, line: L.name, F, side, vt, sg, uG: sU0 - 1.1, uA: sU0 - 1.75, uB: sU1, wA: sV0 - 0.25, wB: sV1 + 0.25, open: 0, openT: 0, leaves: { 1: [], [-1]: [] }, meshes: [] };
+            const [ax, az] = P(0, 0);
+            const [bx, bz] = P(0, 1);
+            gate.dv = [bx - ax, bz - az];
+            for (const [g0, g1] of [[sV0 + 0.25, STAIR_V - 0.13], [STAIR_V + 0.13, sV1 - 0.25]]) {
+              const mid = (g0 + g1) / 2;
+              pl(gate.leaves[-1], gate.uG - 0.03, gate.uG + 0.03, pf + 0.4, pf + 1.0, g0, mid - 0.01);
+              pl(gate.leaves[1], gate.uG - 0.03, gate.uG + 0.03, pf + 0.4, pf + 1.0, mid + 0.01, g1);
+              gate.leafW = mid - g0;
+            }
+            for (const w of [gate.wA, gate.wB]) pl(steelG, gate.uA, sU0, pf, pf + 1.05, w - 0.04, w + 0.04);
+            this.gates.push(gate);
+          }
           // Ticket counter against the back wall beside the gates
           const cu0 = sU0 - 6.4;
           const cu1 = sU0 - 2.2;
@@ -861,6 +878,18 @@ export class Metro {
       }
       delete p.leaves;
     }
+    // Fare gate flaps: one mesh per stairway and sliding direction
+    const flapMat = new THREE.MeshStandardMaterial({ color: 0xd8323a, transparent: true, opacity: 0.85, roughness: 0.3 });
+    for (const g of this.gates) {
+      for (const dir of [1, -1]) {
+        const mesh = new THREE.Mesh(merge(g.leaves[dir]), flapMat);
+        mesh.userData.moving = true;
+        scene.add(mesh);
+        this.statics.push(mesh);
+        g.meshes.push({ mesh, dir });
+      }
+      delete g.leaves;
+    }
     for (const m of this.statics) {
       m.updateMatrixWorld(true);
       if (!m.userData.moving) m.matrixAutoUpdate = false;
@@ -956,6 +985,23 @@ export class Metro {
   collideCircle(x, z, r) {
     const room = this.collideRooms(x, z, r);
     if (room) return room;
+    for (const g of this.gates) {
+      const q = this.gateLocal(g, x, z);
+      if (!q) continue;
+      const { u, lv } = q;
+      // the stairway's side walls, from the gates up to the street
+      if (u > g.uA - r && u < g.uB) {
+        for (const w of [g.wA, g.wB]) {
+          const d = lv - w;
+          if (Math.abs(d) < r) return this.gatePush(g, 0, (d >= 0 ? 1 : -1) * (r - Math.abs(d)));
+        }
+      }
+      // the gate itself, unless its flaps are open
+      if (g.open < 0.8 && lv > g.wA && lv < g.wB && Math.abs(u - g.uG) < r) {
+        const d = u - g.uG;
+        return this.gatePush(g, (d >= 0 ? 1 : -1) * (r - Math.abs(d)), 0);
+      }
+    }
     for (const p of this.psd) {
       const dx = x - p.F.cx;
       const dz = z - p.F.cz;
@@ -973,6 +1019,36 @@ export class Metro {
     }
     return null;
   }
+  /** A point in a gate's stairway coordinates: u along the hall, lv out from the track. */
+  gateLocal(g, x, z) {
+    const dx = x - g.F.cx;
+    const dz = z - g.F.cz;
+    if (Math.abs(dx) > HALL_HL + 12 || Math.abs(dz) > HALL_HL + 12) return null;
+    const u = dx * g.F.ux + dz * g.F.uz;
+    const lv = ((-dx * g.F.uz + dz * g.F.ux) * g.side - g.vt) * g.sg;
+    if (u < g.uA - 1 || u > g.uB + 1 || lv < g.wA - 1 || lv > g.wB + 1) return null;
+    return { u, lv };
+  }
+  gatePush(g, du, dlv) {
+    const px = g.F.ux * du + g.dv[0] * dlv;
+    const pz = g.F.uz * du + g.dv[1] * dlv;
+    const l = Math.hypot(px, pz) || 1;
+    return { px, pz, nx: px / l, nz: pz / l };
+  }
+  /** The fare gate in front of the player: 'in' on the stairs side (pay to go through), 'out' on the platform side. */
+  gateNear(x, z) {
+    for (const g of this.gates) {
+      const q = this.gateLocal(g, x, z);
+      if (!q || q.lv <= g.wA || q.lv >= g.wB) continue;
+      if (q.u > g.uG && q.u < g.uG + 2.2) return { g, way: 'in' };
+      if (q.u < g.uG && q.u > g.uG - 1.6) return { g, way: 'out' };
+    }
+    return null;
+  }
+  openGate(g, t = 2) {
+    g.openT = Math.max(g.openT, t);
+  }
+
   collideRooms(x, z, r) {
     let best = null;
     for (const room of this.rooms) {
@@ -1012,8 +1088,16 @@ export class Metro {
     return { t, nx: -(bx - ax) / l, nz: -(bz - az) / l };
   }
 
-  update(night) {
+  update(night, dt = 1 / 60) {
     this.lampMat.color.setScalar(2.2 + night * 0.6);
+    // Fare gate flaps fold back into the cabinets while a gate is open
+    for (const g of this.gates) {
+      g.openT = Math.max(0, g.openT - dt);
+      const want = g.openT > 0 ? 1 : 0;
+      if (want === g.open) continue;
+      g.open = want > g.open ? Math.min(1, g.open + dt * 4) : Math.max(0, g.open - dt * 4);
+      for (const { mesh, dir } of g.meshes) mesh.position.set(g.dv[0] * dir * g.leafW * g.open, 0, g.dv[1] * dir * g.leafW * g.open);
+    }
     // Screen doors follow the train's doors while it stands at the platform
     for (const p of this.psd) {
       let open = 0;

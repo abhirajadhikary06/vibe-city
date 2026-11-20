@@ -9,14 +9,14 @@ import { merge, paint } from './utils.js';
  * route board. Board one (V) and it takes you to where the board says.
  */
 
-/** Routes out of Esplanade to places inside the map: number, where to, Bengali, map name, livery. */
+/** Routes out of Esplanade to places inside the map: number, where to, via, Bengali, map name, livery. */
 export const ROUTES = [
-  { no: '12C/1', en: 'ESPLANADE - HOWRAH STN', bn: 'ধর্মতলা – হাওড়া স্টেশন', to: 'Howrah Bus Station', short: 'HOWRAH STN', livery: 0xd99a22 },
-  { no: 'S-163', en: 'ESPLANADE - SHOBHABAZAR', bn: 'ধর্মতলা – শোভাবাজার', to: 'Shobhabazar Sutanuti', short: 'SHOBHABAZAR', livery: 0x2f5fb3 },
-  { no: '24B', en: 'ESPLANADE - SEALDAH', bn: 'ধর্মতলা – শিয়ালদহ', to: 'Sealdah', short: 'SEALDAH', livery: 0xc8382c },
-  { no: 'S-101', en: 'ESPLANADE - B.B.D. BAG', bn: 'ধর্মতলা – বি.বা.দী. বাগ', to: 'BBD Bagh', short: 'B.B.D. BAG', livery: 0x2f5fb3 },
-  { no: 'RT-27', en: 'ESPLANADE - PARK CIRCUS', bn: 'ধর্মতলা – পার্ক সার্কাস', to: 'Park Circus', short: 'PARK CIRCUS', livery: 0x2f8a4a },
-  { no: '213', en: 'ESPLANADE - BABUGHAT', bn: 'ধর্মতলা – বাবুঘাট', to: 'Babughat bus stand', short: 'BABUGHAT', livery: 0xd99a22 },
+  { no: '12C/1', en: 'ESPLANADE - HOWRAH STN', via: 'B.B.D. BAG · HOWRAH BRIDGE', bn: 'ধর্মতলা – হাওড়া স্টেশন', to: 'Howrah Bus Station', short: 'HOWRAH STN', livery: 0xd99a22 },
+  { no: 'S-163', en: 'ESPLANADE - SHOBHABAZAR', via: 'C.R. AVENUE · GIRISH PARK', bn: 'ধর্মতলা – শোভাবাজার', to: 'Shobhabazar Sutanuti', short: 'SHOBHABAZAR', livery: 0x2f5fb3 },
+  { no: '24B', en: 'ESPLANADE - SEALDAH', via: 'S.N. BANERJEE RD · MOULALI', bn: 'ধর্মতলা – শিয়ালদহ', to: 'Sealdah', short: 'SEALDAH', livery: 0xc8382c },
+  { no: 'S-101', en: 'ESPLANADE - B.B.D. BAG', via: 'RAJ BHAVAN · LALDIGHI', bn: 'ধর্মতলা – বি.বা.দী. বাগ', to: 'BBD Bagh', short: 'B.B.D. BAG', livery: 0x2f5fb3 },
+  { no: 'RT-27', en: 'ESPLANADE - PARK CIRCUS', via: 'PARK STREET · MULLICK BAZAR', bn: 'ধর্মতলা – পার্ক সার্কাস', to: 'Park Circus', short: 'PARK CIRCUS', livery: 0x2f8a4a },
+  { no: '213', en: 'ESPLANADE - BABUGHAT', via: 'EDEN GARDENS · STRAND RD', bn: 'ধর্মতলা – বাবুঘাট', to: 'Babughat bus stand', short: 'BABUGHAT', livery: 0xd99a22 },
 ];
 
 const box = (w, h, d, x, y, z, hex) => {
@@ -135,10 +135,13 @@ export class BusStand {
       v.busRoute = b.route;
       const dest = MAP.pois.find((p) => p.n === b.route.to) || MAP.stations.find((p) => p.n === b.route.to);
       v.busDest = dest ? { x: dest.x, z: dest.z } : null;
-      // its own route board
-      const board = busRouteBoard(b.route.livery, { no: b.route.no, en: b.route.en, bn: b.route.bn });
+      // its own route boards: front, sides and the lettering on the glass
+      const { board, side, glass } = busRouteBoard(b.route.livery, { no: b.route.no, en: b.route.en, bn: b.route.bn, via: b.route.via });
       v.car.body.traverse((o) => {
-        if (o.isMesh && o.material.userData && o.material.userData.dest) o.material = board;
+        const u = o.isMesh && o.material.userData;
+        if (u && u.dest) o.material = board;
+        else if (u && u.destSide) o.material = side;
+        else if (u && u.destGlass) o.material = glass;
       });
     }
   }

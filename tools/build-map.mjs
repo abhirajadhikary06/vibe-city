@@ -283,7 +283,10 @@ for (const w of ways.values()) {
   }
   if (t.railway === 'platform' || t.public_transport === 'platform') {
     if (t.railway !== 'platform' && !(t.train === 'yes' || t.subway === 'yes' || t.railway)) continue;
-    platforms.push(closed ? { p: flat(simplify(closeRing(ps))) } : { l: flat(ps), name: t.ref || undefined });
+    // the platform numbers: ref "6;7", or from a name like "Platform No. 1 & Platform No. 2" / "Sealdah 12-13"
+    const nums = (t.ref || (/\d/.test(t.name || '') ? t.name : '')).match(/\d+/g);
+    const ref = nums ? nums.map(Number).sort((a, b) => a - b).join(';') : undefined;
+    platforms.push(closed ? { p: flat(simplify(closeRing(ps))), ref } : { l: flat(ps), ref });
     continue;
   }
   if (t.building && t.building !== 'no' && closed && !t['building:part']) {

@@ -538,7 +538,13 @@ export class Player {
     const spot = !this.underground && g.station ? g.station.near(this.pos) : null;
     // V: ride as a passenger (hire a taxi, auto or rickshaw; board a bus, train, tram, metro or ferry)
     const ride = !this.aiming && g.rides ? g.rides.offer(this) : null;
-    if (nearCar && !this.aiming) {
+    // Metro fare gate: ride (pay and go through) or don't (it stays shut)
+    const fare = !this.aiming && g.rides ? g.rides.gateOffer(this) : null;
+    if (fare) {
+      this.prompt = { key: 'V', text: fare.text, key2: 'E', text2: fare.text2 };
+      if (input.hit('KeyV')) fare.ride();
+      else if (input.hit('KeyE')) fare.skip();
+    } else if (nearCar && !this.aiming) {
       let text;
       if (nearCar.v && nearCar.v.rail) text = `Drive ${nearCar.v.label}`;
       else if (nearCar.v) text = `Drive ${nearCar.v.label}`;
@@ -551,7 +557,9 @@ export class Player {
     } else if (nearPed && !gun) {
       this.prompt = { key: 'E', text: 'Talk', key2: 'G', text2: 'Gesture' };
     }
-    if (input.hit('KeyV') && ride) {
+    if (fare) {
+      // the gate's choice has the keys
+    } else if (input.hit('KeyV') && ride) {
       ride.act();
       return;
     }
