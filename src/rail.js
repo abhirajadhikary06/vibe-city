@@ -1122,6 +1122,8 @@ export class Rail {
         posts.push(new THREE.CylinderGeometry(0.18, 0.22, ch - PH, 8).translate(q.x, PH + (ch - PH) / 2, q.z));
         world.addCircle(q.x, q.z, 0.25);
         canopy.push(new THREE.BoxGeometry(covered ? 9 : 4.2, 0.14, covered ? 12.4 : 10.4).rotateY(yaw).translate(q.x, ch + 0.05, q.z));
+        // tube lights under the roof, either side of the column under Howrah's wide sheds
+        for (const o of covered ? [-2.4, 2.4] : [0]) world.addStationLamp(q.x + q.tz * o, ch - 0.06, q.z - q.tx * o, yaw, covered ? 8 : 6, PH, covered ? 7 : 6.5);
         // a bench back to back with the column, every other bay
         if (!covered && Math.round(s / 10) % 2 === 0 && s + 5 < len - 6) {
           sp.at(s + 5, q);
@@ -1645,7 +1647,8 @@ export class Rail {
       const poles = [];
       for (const sp of stopPosts) {
         if (world.collideCircle(sp.x, sp.z, 0.3)) continue;
-        poles.push(new THREE.CylinderGeometry(0.05, 0.05, 2.8, 6).translate(sp.x, 1.4, sp.z));
+        poles.push(new THREE.CylinderGeometry(0.05, 0.05, 3.3, 6).translate(sp.x, 1.65, sp.z));
+        world.addStationLamp(sp.x, 3.32, sp.z, sp.yaw, 1.2, 0, 5);
         const b = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.45), signMat);
         b.position.set(sp.x, 2.5, sp.z);
         b.rotation.y = sp.yaw + Math.PI / 2;

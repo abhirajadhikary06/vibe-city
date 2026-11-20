@@ -106,6 +106,8 @@ export class Station {
       sign.rotation.y = yaw;
       signs.push(sign);
       world.addCircle(x, z, 1.7);
+      // a tube light under the awning, over the counter
+      world.addStationLamp(x + Math.sin(yaw) * 0.5, 2.53, z + Math.cos(yaw) * 0.5, yaw + Math.PI / 2, 2.8, 0, 5);
       // the vendor
       const vendor = new Character(scene, { female: def.id === 'mishti', skin: '#9a6948', shirt: def.id === 'tickets' ? '#e8e4d8' : ['#ffffff', '#e8d9a8', '#cfe3f2'][Math.floor(Math.random() * 3)], pants: '#3d3b39', shoes: '#2a2018', hair: '#120d0a', longHair: def.id === 'mishti', skirt: def.id === 'mishti', longSleeve: true, scale: 0.98 });
       vendor.mesh.position.set(x - Math.sin(yaw) * 0.3, 0, z - Math.cos(yaw) * 0.3);
