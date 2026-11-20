@@ -9,6 +9,7 @@ From Howrah Station, over Howrah Bridge, to Park Street. Built from real OpenStr
 <br />
 
 [![Play now](https://img.shields.io/badge/▶_PLAY_NOW-vibecityy.vercel.app-ff3fa4?style=for-the-badge)](https://vibecityy.vercel.app)
+[![Watch gameplay](https://img.shields.io/badge/▶_WATCH_GAMEPLAY-YouTube-ff0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/INbQ_OAFwJQ)
 
 ![Three.js](https://img.shields.io/badge/Three.js-r170-8b3bff?style=flat-square&logo=threedotjs&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5-ff7a3d?style=flat-square&logo=vite&logoColor=white)
