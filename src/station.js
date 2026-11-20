@@ -261,6 +261,7 @@ export class Station {
       } else if (dist < 1.8) {
         const fine = Math.min(250, this.game.gameplay.money);
         this.game.gameplay.addMoney(-fine);
+        if (this.game.progress) this.game.progress.event('fined');
         this.ticketT = 300;
         this.hud.say(T.ch, pick(fine ? LINES.fined : LINES.noFine), 3);
         this.hud.notify('CAUGHT WITHOUT A TICKET', fine ? `Fined ₹${fine} by the TTE` : 'Let off with a warning', '#ff5f6d');

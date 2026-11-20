@@ -140,6 +140,9 @@ export class AudioEngine {
     this.trafficBed = this.loopNoise('lowpass', 180, 0.5);
     this.crowd = this.loopNoise('bandpass', 650, 0.7);
     this.river = this.loopNoise('lowpass', 420, 0.5);
+    // rain: a hiss on the roofs and road, and a softer patter underneath
+    this.rainHiss = this.loopNoise('highpass', 1600, 0.4);
+    this.rainPatter = this.loopNoise('bandpass', 520, 0.6);
 
     this.initRadio();
   }
@@ -231,6 +234,24 @@ export class AudioEngine {
         const caws = 2 + Math.floor(Math.random() * 3);
         for (let k = 0; k < caws; k++) this.caw(k * 0.42, pan, 0.02 + Math.random() * 0.02);
       }
+    }
+  }
+
+  /** Rain at 0..1 (already lowered underground by the caller). */
+  rain(level) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.rainHiss.g.gain.setTargetAtTime(level * 0.07, t, 1.2);
+    this.rainPatter.g.gain.setTargetAtTime(level * 0.05, t, 1.2);
+  }
+  /** Thunder after `delay` seconds: a crack, then a long low roll. */
+  thunder(delay, vol = 1) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + delay;
+    this.burst(t, { type: 'lowpass', freq: 1800, endFreq: 300, q: 0.7, vol: 0.12 * vol, dur: 0.35 });
+    for (let k = 0; k < 9; k++) {
+      const at = t + 0.15 + k * 0.28 + Math.random() * 0.12;
+      this.burst(at, { type: 'lowpass', freq: 220 - k * 12, endFreq: 60, q: 0.9, vol: (0.2 - k * 0.018) * vol, dur: 0.45 });
     }
   }
 

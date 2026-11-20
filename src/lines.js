@@ -142,6 +142,27 @@ const L = {
     ['Pechhone egiye jaan!', 'পেছনে এগিয়ে যান!'],
   ],
   busStop: [['Stop esechhe, namun!', 'স্টপ এসেছে, নামুন!']],
+  // Taxi jobs: fares the player picks up
+  hail: [
+    ['Taxi! Ei taxi!', 'ট্যাক্সি! এই ট্যাক্সি!'],
+    ['Dada, jaben?', 'দাদা, যাবেন?'],
+  ],
+  fareIn: [
+    ['Taratari cholun, deri hoye gechhe!', 'তাড়াতাড়ি চলুন, দেরি হয়ে গেছে!'],
+    ['Aste chalaben, dada. Kono tara nei.', 'আস্তে চালাবেন, দাদা। কোনো তাড়া নেই।'],
+    ['Meter-ta chaliye din.', 'মিটারটা চালিয়ে দিন।'],
+  ],
+  hurry: [
+    ['Ektu taratari, dada!', 'একটু তাড়াতাড়ি, দাদা!'],
+    ['Aar koto dur?', 'আর কত দূর?'],
+  ],
+  bump: [
+    ['Arre, dekhe chalan!', 'আরে, দেখে চালান!'],
+    ['Baba re! Aste!', 'বাবা রে! আস্তে!'],
+  ],
+  happy: [['Darun chalalen! Ei nin, rakhun.', 'দারুণ চালালেন! এই নিন, রাখুন।']],
+  late: [['Eto deri? Thik achhe…', 'এত দেরি? ঠিক আছে…']],
+  quit: [['Thak, ami nemey jachchhi!', 'থাক, আমি নেমে যাচ্ছি!']],
 };
 
 /*

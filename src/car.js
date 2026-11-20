@@ -429,9 +429,11 @@ export function buildCarMesh(type, color) {
 }
 
 /** Distance LOD: far cars drop wheel/brake/trim detail meshes to save draw calls. */
+/** Distance (m) inside which cars get their full wheels and trim; the Low preset pulls it in. */
+export const carLOD = { near: 70 };
 export function setCarLOD(car, dist) {
   if (car.noLod) return;
-  const near = dist < 70;
+  const near = dist < carLOD.near;
   if (near === car.near) return;
   car.near = near;
   for (const w of car.wheels) w.pivot.visible = near;
