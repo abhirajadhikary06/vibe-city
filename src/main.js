@@ -1076,7 +1076,7 @@ function loop() {
   }
   day.update(dt, focus, camera.position);
   world.update(dt, elapsed, day.night, day.sunDir, camera.position);
-  metro.update(day.night);
+  metro.update(day.night, dt);
   boards.update(dt, camera, day.time);
   // Distance culling: rail cars and parked vehicles past the haze aren't drawn;
   // the underground metro only when you're down there or at an entrance

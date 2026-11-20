@@ -4,7 +4,9 @@ import { clamp, dampAngle } from './utils.js';
 
 // Kolkata traffic: yellow taxis everywhere, buses in WBTC blue, private-bus colours and CTC green
 const COLORS = [0xf5f5f5, 0xf5f5f5, 0x1d1f24, 0x8a8f96, 0x2a4fa8, 0xb8262e, 0xc9c2b0, 0x14324d, 0xd9d4c5, 0x6b6f75];
-const TYPE_POOL = ['taxi', 'taxi', 'taxi', 'taxi', 'taxi', 'ambassador', 'ambassador', 'sedan', 'sedan', 'van', 'bus', 'bus', 'bus', 'pickup', 'truck', 'rickshaw', 'rickshaw', 'bike', 'auto', 'auto', 'auto'];
+const TYPE_POOL = ['taxi', 'taxi', 'taxi', 'taxi', 'taxi', 'ambassador', 'ambassador', 'sedan', 'sedan', 'van', 'pickup', 'truck', 'rickshaw', 'rickshaw', 'bike', 'auto', 'auto', 'auto'];
+// A fixed share of the traffic is buses, so there are always some about
+const BUS_SHARE = 0.25;
 const FIXED_COLOR = { taxi: 0xf2c21b, ambassador: [0xf4f4f0, 0xf4f4f0, 0x1d1f24, 0xe8e2d0], rickshaw: [0x2b4a8a, 0xffffff], schoolbus: 0xf2b705, truck: [0xd8682a, 0x2f6b46, 0x1b4f9a], bus: [0x2f5fb3, 0xd99a22, 0x2f8a4a, 0xc8382c, 0x2f5fb3, 0xd99a22] };
 
 function evalSeg(seg, t, out) {
@@ -57,11 +59,11 @@ export class Traffic {
     this.onRelease = null;
     this.honk = null;
     const start = world.spawn || { x: 0, z: 0 };
-    for (let n = 0; n < count; n++) this.cars.push(this.makeCar(start, 0));
+    const buses = Math.max(2, Math.round(count * BUS_SHARE));
+    for (let n = 0; n < count; n++) this.cars.push(this.makeCar(start, 0, n < buses ? 'bus' : undefined));
   }
 
-  makeCar(near, minD = 120) {
-    const type = TYPE_POOL[Math.floor(Math.random() * TYPE_POOL.length)];
+  makeCar(near, minD = 120, type = TYPE_POOL[Math.floor(Math.random() * TYPE_POOL.length)]) {
     const fixed = FIXED_COLOR[type];
     const color = fixed === undefined ? COLORS[Math.floor(Math.random() * COLORS.length)] : Array.isArray(fixed) ? fixed[Math.floor(Math.random() * fixed.length)] : fixed;
     const mesh = buildCarMesh(type, color);
@@ -172,7 +174,7 @@ export class Traffic {
     const i = this.cars.indexOf(car);
     if (i < 0) return null;
     this.cars.splice(i, 1);
-    this.cars.push(this.makeCar(focus));
+    this.cars.push(this.makeCar(focus, 120, car.type === 'bus' ? 'bus' : undefined));
     return car;
   }
 

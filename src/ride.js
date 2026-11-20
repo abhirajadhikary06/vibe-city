@@ -58,7 +58,10 @@ export class Rides {
     const p = player.pos;
     if (player.underground) {
       const cs = this.nearConsist(p, 3.4);
-      return cs ? { text: `Board ${cs.label} · ₹${TICKETS[cs.kind]}`, act: () => this.boardRail(cs) } : null;
+      if (!cs) return null;
+      // the fare was paid at the gate on the way in
+      const paid = cs.kind === 'metro' && this.metroPass;
+      return { text: paid ? `Board ${cs.label}` : `Board ${cs.label} · ₹${TICKETS[cs.kind]}`, act: () => this.boardRail(cs) };
     }
     // Rail: any car of a stopped train or tram
     const cs = this.nearConsist(p, 3.4);
@@ -88,10 +91,55 @@ export class Rides {
     if (type === 'launch') return { text: `Board the ferry · ₹${TICKETS.launch}`, act: () => this.boardLaunch(o) };
     if (type === 'bus') {
       const route = o.busRoute;
-      return { text: route ? `Board bus ${route.no} to ${route.short} · ₹${TICKETS.bus}` : `Board the bus · ₹${TICKETS.bus}`, act: () => this.hire(o, 'bus') };
+      return { text: route ? `Board bus ${route.no} to ${route.short}${route.via ? ` via ${route.via}` : ''} · ₹${TICKETS.bus}` : `Board the bus · ₹${TICKETS.bus}`, act: () => this.hire(o, 'bus') };
     }
     const name = { taxi: 'taxi', auto: 'auto', rickshaw: 'rickshaw' }[type];
     return { text: `Hire the ${name} · ₹${FARES[type].base}+`, act: () => this.hire(o, type) };
+  }
+
+  /**
+   * Metro fare gates at the foot of the stairs. Going in, the player chooses: tap the card
+   * (the fare comes off now) and the flaps open, or don't ride and they stay shut.
+   * Coming out from the platform, they open by themselves.
+   */
+  gateOffer(player) {
+    const g = this.game;
+    if (!player.underground || !g.metro) {
+      // back up in the street: the card's tap has run out
+      this.metroPass = false;
+      this.declined = null;
+      return null;
+    }
+    const near = g.metro.gateNear(player.pos.x, player.pos.z);
+    if (!near) {
+      this.declined = null;
+      return null;
+    }
+    const gate = near.g;
+    if (near.way === 'out' || this.metroPass) {
+      g.metro.openGate(gate, 1.5);
+      return null;
+    }
+    if (this.declined === gate) return null;
+    const fare = TICKETS.metro;
+    return {
+      text: `Ride the Metro · ₹${fare}`,
+      text2: "Don't ride",
+      ride: () => {
+        if (g.gameplay.money < fare) {
+          g.hud.notify('NOT ENOUGH MONEY', `The fare is ₹${fare} · the gate stays shut`, '#ff5f6d');
+          this.declined = gate;
+          return;
+        }
+        this.pay(fare, 'Metro fare · card tapped at the gate');
+        this.metroPass = true;
+        g.metro.openGate(gate, 2.5);
+      },
+      skip: () => {
+        this.declined = gate;
+        g.hud.notify('GATE STAYS SHUT', 'Head back up the stairs to the street', '#ffd36b');
+      },
+    };
   }
 
   nearConsist(p, r) {
@@ -143,7 +191,7 @@ export class Rides {
         this.ride.final = true;
         this.ride.state = 'go';
         g.setWaypointQuiet(dest);
-        g.hud.notify(`BUS ${v.busRoute.no} TO ${v.busRoute.short}`, `${(routeLength(pts) / 1000).toFixed(1)} km · F to get off at the next stop`, '#38f3ff');
+        g.hud.notify(`BUS ${v.busRoute.no} TO ${v.busRoute.short}`, `${v.busRoute.via ? `Via ${v.busRoute.via} · ` : ''}${(routeLength(pts) / 1000).toFixed(1)} km · F to get off at the next stop`, '#38f3ff');
       } else {
         this.wander();
         g.hud.notify('ON THE BUS', 'F to get off at the next stop', '#38f3ff');
@@ -275,7 +323,9 @@ export class Rides {
       }
     });
     const along = clamp((pl.pos.x - cs.cars[ci].x) * Math.sin(cs.cars[ci].yaw) + (pl.pos.z - cs.cars[ci].z) * Math.cos(cs.cars[ci].yaw), -cs.K.L / 2 + 2, cs.K.L / 2 - 2);
-    this.pay(TICKETS[cs.kind], `${cs.label} ticket`);
+    // the Metro is paid for at the gate: the card's tap covers one trip
+    if (cs.kind === 'metro' && this.metroPass) this.metroPass = false;
+    else this.pay(TICKETS[cs.kind], `${cs.label} ticket`);
     if (g.progress) g.progress.event(cs.kind);
     if (cs.kind === 'train' || cs.kind === 'express') g.station.ticketT = Math.max(g.station.ticketT, 600);
     this.ride = { kind: 'rail', cs, ci, along, wasState: cs.state, lastStop: null };

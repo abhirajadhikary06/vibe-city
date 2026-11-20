@@ -1049,7 +1049,7 @@ export class Rail {
     const railStations = MAP.stations.filter((st) => st.k === 'rail');
     const boards = new Map();
     const benches = [];
-    const addPlatform = (ring) => {
+    const addPlatform = (ring, ref = null) => {
       const poly = polygon(ring);
       if (!inTiles((poly.x0 + poly.x1) / 2, (poly.z0 + poly.z1) / 2, 50)) return;
       world.addPad(ring, PH);
@@ -1111,7 +1111,7 @@ export class Rail {
       const covered = !!hcs && Math.hypot(cx - hcs.x, cz - hcs.z) < 650;
       const st = railStations.reduce((a, b) => (Math.hypot(b.x - cx, b.z - cz) < Math.hypot(a.x - cx, a.z - cz) ? b : a), railStations[0]);
       const name = st ? boardName(st.n) : 'KOLKATA';
-      this.platforms.push({ poly, cx, cz, ux, uz, len, name, covered, spine: sp });
+      this.platforms.push({ poly, cx, cz, ux, uz, len, name, covered, spine: sp, ref: ref ? ref.split(';').map(Number) : null });
       // Columns (tall sheds at Howrah, a simple canopy elsewhere) and name boards, all along the centre line
       const ch = covered ? 6.8 : 4.4;
       const q = {};
@@ -1154,7 +1154,7 @@ export class Rail {
         ring = [...L];
         for (let i = R.length - 2; i >= 0; i -= 2) ring.push(R[i], R[i + 1]);
       }
-      addPlatform(ring);
+      addPlatform(ring, pl.ref);
     }
     this.stations = railStations.filter((st) => inTiles(st.x, st.z)).map((st) => [boardName(st.n), st.x, st.z]);
 
@@ -1395,6 +1395,145 @@ export class Rail {
         for (const c of cs.cars) scene.remove(c.root);
         this.consists.splice(this.consists.indexOf(cs), 1);
       }
+    }
+    /* ---- Platform numbers: every face with a track beside it, counted across each station ---- */
+    {
+      const railAt = (x, z) => {
+        let d = Infinity;
+        segGrid.query(x - 3, x + 3, z - 3, z + 3, (sg) => {
+          const dx = sg.bx - sg.ax;
+          const dz = sg.bz - sg.az;
+          const t = clamp(((x - sg.ax) * dx + (z - sg.az) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+          d = Math.min(d, Math.hypot(x - sg.ax - dx * t, z - sg.az - dz * t));
+        });
+        return d;
+      };
+      const q = {};
+      const byStation = new Map();
+      for (const p of this.platforms) {
+        p.faces = [];
+        p.hw = 0;
+        // look along the platform (a long or curving one may only have a track beside part of it)
+        for (const side of [1, -1]) {
+          for (const k of [0.5, 0.35, 0.65, 0.2, 0.8]) {
+            p.spine.at(p.len * k, q);
+            const l = Math.hypot(q.tx, q.tz) || 1;
+            const nx = (q.tz / l) * side;
+            const nz = (-q.tx / l) * side;
+            // out to the platform edge, then look for the track beyond it
+            let w = 0.5;
+            while (w < 15 && inPoly(p.poly, q.x + nx * w, q.z + nz * w)) w += 0.25;
+            p.hw = Math.max(p.hw, w);
+            let found = null;
+            for (let o = 1; o <= 2.6 && !found; o += 0.4) {
+              const x = q.x + nx * (w + o);
+              const z = q.z + nz * (w + o);
+              if (railAt(x, z) < 0.8) found = { side, w, x, z, nx, nz, p, k };
+            }
+            if (found) {
+              p.faces.push(found);
+              break;
+            }
+          }
+        }
+        if (!byStation.has(p.name)) byStation.set(p.name, []);
+        byStation.get(p.name).push(...p.faces);
+      }
+      // Across each station. The map gives the real numbers for most platforms (Howrah 1-23,
+      // Sealdah 1-21; an island is tagged "6;7"). Faces on the same track share its number, which
+      // settles which side of an island is which; anything left is filled in between its
+      // neighbours or counted on, platform 1 nearest the station building.
+      for (const [name, faces] of byStation) {
+        if (!faces.length) continue;
+        const r = faces[0];
+        const dOf = (x, z) => (x - r.x) * r.nx + (z - r.z) * r.nz;
+        for (const f of faces) f.d = dOf(f.x, f.z);
+        // the same track: within a metre or so across, and alongside each other
+        const twins = (f) => faces.filter((o) => o !== f && o.p !== f.p && Math.hypot(o.x - f.x, o.z - f.z) < f.p.len / 2 + o.p.len / 2 && railAt((o.x + f.x) / 2, (o.z + f.z) / 2) < 3 && Math.abs(o.d - f.d) < 1.5);
+        const plats = [...new Set(faces.map((f) => f.p))];
+        const refd = plats.filter((p) => p.ref);
+        // islands: a face takes the number its track shares with the platform across it
+        for (const p of refd) {
+          const mine = faces.filter((f) => f.p === p);
+          for (const f of mine) {
+            for (const o of twins(f)) {
+              const common = o.p.ref && p.ref.find((n) => o.p.ref.includes(n));
+              if (common) f.no = common;
+            }
+          }
+          if (p.ref.length > 1 && mine.length === 2) {
+            const [a, b] = mine;
+            if (a.no && !b.no) b.no = p.ref.find((n) => n !== a.no);
+            if (b.no && !a.no) a.no = p.ref.find((n) => n !== b.no);
+          }
+        }
+        // still open: the side towards the nearest lower-numbered platform takes the lower number
+        for (const p of refd) {
+          const mine = faces.filter((f) => f.p === p && !f.no);
+          if (!mine.length) continue;
+          const pd = dOf(p.cx, p.cz);
+          const nb = refd.filter((o) => o !== p).sort((a, b) => Math.abs(dOf(a.cx, a.cz) - pd) - Math.abs(dOf(b.cx, b.cz) - pd))[0];
+          const lowSide = nb ? Math.sign(dOf(nb.cx, nb.cz) - pd) * (nb.ref[0] < p.ref[0] ? 1 : -1) : 1;
+          if (p.ref.length === 1) {
+            const n = p.ref[0];
+            const both = faces.filter((f) => f.p === p);
+            if (mine.length === 2 && Math.abs(mine[0].d - mine[1].d) >= 1.5) {
+              // tracks both sides but one number: the map left out its neighbour (Howrah 22 beside 23)
+              const free = (k) => k > 0 && !plats.some((o) => o.ref && o.ref.includes(k)) && !faces.some((f) => f.no === k);
+              const [lo, hi] = free(n - 1) ? [n - 1, n] : free(n + 1) ? [n, n + 1] : [n, n];
+              for (const f of mine) f.no = (f.d - pd) * lowSide > 0 ? lo : hi;
+            } else for (const f of mine) f.no = both.find((f) => f.no)?.no || n;
+            continue;
+          }
+          const taken = faces.filter((f) => f.p === p && f.no).map((f) => f.no);
+          for (const f of mine) {
+            const want = (f.d - pd) * lowSide > 0 ? p.ref[0] : p.ref[p.ref.length - 1];
+            f.no = taken.includes(want) ? p.ref.find((n) => !taken.includes(n)) || want : want;
+          }
+        }
+        for (const f of faces) if (!f.no) for (const o of twins(f)) if (o.no) f.no = o.no;
+        // which way the numbers run across the station
+        let dir = 1;
+        const numbered = faces.filter((f) => f.no);
+        if (numbered.length > 1) {
+          const md = numbered.reduce((a, f) => a + f.d, 0) / numbered.length;
+          const mn = numbered.reduce((a, f) => a + f.no, 0) / numbered.length;
+          dir = numbered.reduce((a, f) => a + (f.d - md) * (f.no - mn), 0) >= 0 ? 1 : -1;
+        } else {
+          const st = railStations.filter((o) => boardName(o.n) === name).reduce((a, o) => (!a || Math.hypot(o.x - r.x, o.z - r.z) < Math.hypot(a.x - r.x, a.z - r.z) ? o : a), null);
+          const ds = faces.map((f) => f.d);
+          if (st) dir = Math.abs(dOf(st.x, st.z) - Math.min(...ds)) <= Math.abs(dOf(st.x, st.z) - Math.max(...ds)) ? 1 : -1;
+        }
+        const ordered = [...faces].sort((a, b) => (a.d - b.d) * dir);
+        // a gap in the numbers (a platform the map left unnumbered) is filled in order
+        const used = new Set(faces.map((f) => f.no).filter(Boolean));
+        let next = Math.max(0, ...used);
+        let last = null;
+        ordered.forEach((f, i) => {
+          if (f.no) return;
+          if (last && Math.abs(f.d - last.d) < 1.5) {
+            f.no = last.no;
+            return;
+          }
+          const prev = ordered.slice(0, i).reverse().find((o) => o.no);
+          const after = ordered.slice(i + 1).find((o) => o.no);
+          const lo = prev ? prev.no : 0;
+          const hi = after ? after.no : Infinity;
+          let n = lo + 1;
+          while (used.has(n) && n < hi) n++;
+          if (n >= hi || used.has(n)) {
+            // no number free between its neighbours: the far side of a platform that already has
+            // one is a siding, left without a sign; otherwise count on past the highest
+            if (faces.some((o) => o.p === f.p && o.no)) return;
+            n = ++next;
+          }
+          f.no = n;
+          used.add(n);
+          last = f;
+        });
+        for (const p of plats) p.faces = p.faces.filter((f) => f.no);
+      }
+      this.platformFaces = byStation;
     }
     const platMat = new THREE.MeshStandardMaterial({ color: 0xe2dacb, map: T.sidewalk(), roughness: 0.9 });
     for (const [b, m] of [[platTop, platMat], [platSide, platMat], [edge, M.yellow]]) {

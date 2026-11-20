@@ -346,10 +346,10 @@ function schoolbus(color, kit) {
    Kolkata buses: the bus "colour" picks a livery
    ========================================================= */
 export const LIVERIES = {
-  0x2f5fb3: { body: '#f2f1ea', lower: '#1f5fbf', roof: '#1f5fbf', stripe: null, name: 'W.B.T.C.', no: '28', bn: 'হাওড়া – শিয়ালদহ', en: 'HOWRAH - SEALDAH', board: '#0a0a0a', ink: '#ffb02e' },
-  0x2f8a4a: { body: '#f4f3ee', lower: '#2147a8', roof: '#2147a8', stripe: '#2fa35a', name: 'SBSTC', no: 'S-9', bn: 'ধর্মতলা – দীঘা', en: 'ESPLANADE - DIGHA', board: '#0a0a0a', ink: '#ffb02e' },
-  0xd99a22: { body: '#f0a42a', lower: '#2d6fd0', roof: '#2d6fd0', stripe: '#d42a2a', name: 'TATA', no: '12C/1', bn: 'হাওড়া – পৈলান', en: 'HOWRAH - PAILAN', board: '#f4f1e6', ink: '#c0161c', painted: true },
-  0xc8382c: { body: '#efbe2e', lower: '#1f5fbf', roof: '#c8382c', stripe: '#1f5fbf', name: 'TATA', no: '240', bn: 'বাগবাজার – গল্ফগ্রিন', en: 'BAGBAZAR - GOLF GREEN', board: '#f4f1e6', ink: '#1f3f9a', painted: true },
+  0x2f5fb3: { body: '#f2f1ea', lower: '#1f5fbf', roof: '#1f5fbf', stripe: null, name: 'W.B.T.C.', no: '28', bn: 'হাওড়া – শিয়ালদহ', en: 'HOWRAH - SEALDAH', via: 'B.B.D. BAG · M.G. ROAD', board: '#0a0a0a', ink: '#ffb02e' },
+  0x2f8a4a: { body: '#f4f3ee', lower: '#2147a8', roof: '#2147a8', stripe: '#2fa35a', name: 'SBSTC', no: 'S-9', bn: 'ধর্মতলা – দীঘা', en: 'ESPLANADE - DIGHA', via: 'KOLAGHAT · CONTAI', board: '#0a0a0a', ink: '#ffb02e' },
+  0xd99a22: { body: '#f0a42a', lower: '#2d6fd0', roof: '#2d6fd0', stripe: '#d42a2a', name: 'TATA', no: '12C/1', bn: 'হাওড়া – পৈলান', en: 'HOWRAH - PAILAN', via: 'ESPLANADE · BEHALA', board: '#f4f1e6', ink: '#c0161c', painted: true },
+  0xc8382c: { body: '#efbe2e', lower: '#1f5fbf', roof: '#c8382c', stripe: '#1f5fbf', name: 'TATA', no: '240', bn: 'বাগবাজার – গল্ফগ্রিন', en: 'BAGBAZAR - GOLF GREEN', via: 'ESPLANADE · PARK CIRCUS', board: '#f4f1e6', ink: '#1f3f9a', painted: true },
 };
 const LMAT = new Map();
 function lmat(hex, emissive = false) {
@@ -358,25 +358,68 @@ function lmat(hex, emissive = false) {
   return LMAT.get(k);
 }
 const BOARDS = new Map();
-/** A bus's route board for a particular route: { no, bn, en } on the livery's board colours. */
+/** A bus's route boards for a particular route: { no, bn, en, via } on the livery's board colours. */
 export function busRouteBoard(color, route) {
   const L = { ...(LIVERIES[color] || LIVERIES[0x2f5fb3]), ...route };
-  return routeBoard(L, `${color}:${route.no}`).board;
+  const m = routeBoard(L, `${color}:${route.no}`);
+  return { board: m.board, side: m.side, glass: m.glass };
 }
+const BN_FONT = '"Kohinoor Bangla", "Bangla MN", "Noto Sans Bengali", Arial';
 function routeBoard(L, key = L) {
   if (BOARDS.has(key)) return BOARDS.get(key);
-  const tex = canvasTex(512, 96, (g, w, h) => {
+  // Front: the number, where it runs (Bengali and English) and a VIA strip
+  const tex = canvasTex(512, 128, (g, w, h) => {
     g.fillStyle = L.board;
     g.fillRect(0, 0, w, h);
     g.fillStyle = L.ink;
-    g.font = 'bold 50px Arial';
-    g.textBaseline = 'middle';
-    g.fillText(L.no, 14, h / 2 + 2);
+    g.fillRect(128, 8, 3, h - 16);
     g.textAlign = 'center';
-    g.font = 'bold 34px "Kohinoor Bangla", "Bangla MN", "Noto Sans Bengali", Arial';
-    g.fillText(L.bn, w / 2 + 70, 30, 330);
-    g.font = 'bold 24px Arial';
-    g.fillText(L.en, w / 2 + 70, 72, 330);
+    g.textBaseline = 'middle';
+    g.font = 'bold 50px Arial';
+    g.fillText(L.no, 66, h / 2 + 2, 116);
+    const cx = (131 + w) / 2;
+    g.font = `bold 32px ${BN_FONT}`;
+    g.fillText(L.bn, cx, 26, 360);
+    g.font = 'bold 26px Arial';
+    g.fillText(L.en, cx, 60, 360);
+    if (L.via) {
+      g.fillRect(140, 82, w - 150, 38);
+      g.fillStyle = L.board;
+      g.font = 'bold 22px Arial';
+      g.fillText(`VIA ${L.via}`, cx, 102, 344);
+    }
+  });
+  // Sides: one long board above the windows
+  const side = canvasTex(1024, 96, (g, w, h) => {
+    g.fillStyle = L.board;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = L.ink;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = 'bold 60px Arial';
+    g.fillText(L.no, 90, h / 2 + 2, 160);
+    g.fillRect(178, 10, 3, h - 20);
+    const cx = (181 + w) / 2;
+    g.font = `bold 36px ${BN_FONT}`;
+    g.fillText(L.bn, cx, 28, 820);
+    g.font = 'bold 28px Arial';
+    g.fillText(L.via ? `${L.en}  ·  VIA ${L.via}` : L.en, cx, 70, 820);
+  });
+  // Glass: the route painted on the windscreen and rear window, letters only
+  const glass = canvasTex(1024, 140, (g, w, h) => {
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineJoin = 'round';
+    g.lineWidth = 8;
+    g.strokeStyle = '#111';
+    g.fillStyle = L.painted ? '#ffd23a' : '#ffffff';
+    g.font = `bold 62px ${BN_FONT}`;
+    g.strokeText(L.bn, w / 2, 42, 980);
+    g.fillText(L.bn, w / 2, 42, 980);
+    g.font = 'bold 44px Arial';
+    const en = L.via ? `${L.en} · VIA ${L.via}` : L.en;
+    g.strokeText(en, w / 2, 108, 980);
+    g.fillText(en, w / 2, 108, 980);
   });
   const name = canvasTex(512, 64, (g, w, h) => {
     g.fillStyle = L.painted ? L.body : '#f2f1ea';
@@ -389,9 +432,13 @@ function routeBoard(L, key = L) {
   });
   const m = {
     board: new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.9 }),
+    side: new THREE.MeshStandardMaterial({ map: side, emissiveMap: side, emissive: 0xffffff, emissiveIntensity: 0.5, roughness: 0.6 }),
+    glass: new THREE.MeshStandardMaterial({ map: glass, emissiveMap: glass, emissive: 0xffffff, emissiveIntensity: 0.25, alphaTest: 0.4, roughness: 0.5 }),
     name: new THREE.MeshStandardMaterial({ map: name, roughness: 0.5 }),
   };
   m.board.userData.dest = true;
+  m.side.userData.destSide = true;
+  m.glass.userData.destGlass = true;
   BOARDS.set(key, m);
   return m;
 }
@@ -409,8 +456,8 @@ function bus(color, kit) {
     box(0.03, 2.25, 1.15, -1.272, 1.58, 4.95),
     box(0.03, 2.25, 1.2, -1.272, 1.58, 0.85),
     box(0.03, 1.15, 1.2, 1.272, 2.2, 4.95),
-    pane(2.36, 0, 6.08, 1.55, 6.06, 2.62),
-    box(1.9, 0.75, 0.03, 0, 2.35, -6.06),
+    pane(2.36, 0, 6.18, 1.55, 6.165, 2.62),
+    box(1.9, 0.75, 0.03, 0, 2.35, -6.17),
   ]);
   const bars = [];
   for (const s of [1, -1]) for (const y of [1.95, 2.3]) bars.push(box(0.03, 0.03, 8.6, s * 1.29, y, -1.05));
@@ -421,23 +468,28 @@ function bus(color, kit) {
     box(0.035, 2.25, 0.05, -1.274, 1.58, 0.85),
     box(2.5, 0.3, 0.2, 0, 0.5, 6.1),
     box(2.5, 0.3, 0.2, 0, 0.5, -6.07),
-    box(1.0, 0.45, 0.04, 0, 1.1, 6.1),
+    box(1.0, 0.45, 0.04, 0, 1.1, 6.19),
     box(0.05, 0.05, 0.6, 1.35, 2.75, 5.85),
     box(0.05, 0.05, 0.6, -1.35, 2.75, 5.85),
     box(0.1, 0.45, 0.2, 1.48, 2.55, 6.15),
     box(0.1, 0.45, 0.2, -1.48, 2.55, 6.15),
   ]);
-  // Livery: the lower band, the roof edge, a stripe
-  const lower = merge([box(0.02, 0.85, 11.9, 1.276, 0.95, 0), box(0.02, 0.85, 11.9, -1.276, 0.95, 0), box(2.4, 0.55, 0.02, 0, 0.82, 6.09)]);
-  const roof = merge([box(2.56, 0.28, 11.8, 0, 3.08, 0), box(0.02, 0.3, 11.8, 1.276, 2.88, 0), box(0.02, 0.3, 11.8, -1.276, 2.88, 0)]);
-  const stripe = L.stripe ? merge([box(0.02, 0.12, 11.9, 1.278, 1.47, 0), box(0.02, 0.12, 11.9, -1.278, 1.47, 0), box(2.3, 0.12, 0.02, 0, 1.47, 6.1)]) : null;
-  const head = merge([box(0.38, 0.22, 0.05, 0.85, 0.95, 6.1), box(0.38, 0.22, 0.05, -0.85, 0.95, 6.1)]);
-  const tail = merge([box(0.14, 0.5, 0.05, 1.05, 1.25, -6.07), box(0.14, 0.5, 0.05, -1.05, 1.25, -6.07)]);
-  const dest = box(1.9, 0.36, 0.03, 0, 2.86, 6.07);
-  const name = box(1.4, 0.18, 0.03, 0, 1.4, 6.1);
-  const plate = merge([box(0.52, 0.12, 0.015, 0, 0.62, 6.21), new THREE.BoxGeometry(0.52, 0.12, 0.015).rotateY(Math.PI).translate(0, 0.75, -6.08)]);
+  // Livery: the lower band, the roof edge, a stripe. The shell's bevel pushes its front,
+  // back and roof out ~9cm past the outline, so everything on them sits clear of that,
+  // and each layer on the flat sides stands a little proud of the one beneath.
+  const lower = merge([box(0.02, 0.85, 11.9, 1.29, 0.95, 0), box(0.02, 0.85, 11.9, -1.29, 0.95, 0), box(2.4, 0.55, 0.02, 0, 0.82, 6.18)]);
+  const roof = merge([box(2.56, 0.24, 11.8, 0, 3.21, 0), box(0.02, 0.3, 11.8, 1.29, 2.88, 0), box(0.02, 0.3, 11.8, -1.29, 2.88, 0)]);
+  const stripe = L.stripe ? merge([box(0.02, 0.12, 11.9, 1.3, 1.47, 0), box(0.02, 0.12, 11.9, -1.3, 1.47, 0), box(2.3, 0.12, 0.02, 0, 1.47, 6.19)]) : null;
+  const head = merge([box(0.38, 0.22, 0.05, 0.85, 0.95, 6.21), box(0.38, 0.22, 0.05, -0.85, 0.95, 6.21)]);
+  const tail = merge([box(0.14, 0.5, 0.05, 1.05, 1.25, -6.17), box(0.14, 0.5, 0.05, -1.05, 1.25, -6.17)]);
+  const dest = box(1.9, 0.46, 0.03, 0, 2.88, 6.18);
+  const sides = merge([box(0.02, 0.34, 3.6, 1.32, 2.88, -1.6), box(0.02, 0.34, 3.6, -1.32, 2.88, -1.6)]);
+  const name = box(1.4, 0.18, 0.03, 0, 1.4, 6.2);
+  const plate = merge([box(0.52, 0.12, 0.015, 0, 0.62, 6.21), new THREE.BoxGeometry(0.52, 0.12, 0.015).rotateY(Math.PI).translate(0, 0.75, -6.18)]);
+  // Where it runs, painted across the top of the windscreen and the rear window
+  const screens = merge([new THREE.PlaneGeometry(2.2, 0.3).translate(0, 2.42, 6.215), new THREE.PlaneGeometry(1.8, 0.26).rotateY(Math.PI).translate(0, 2.55, -6.195)]);
   const bm = routeBoard(L);
-  const parts = [[shell, 'paint'], [glass, 'glass'], [trim, 'trim'], [lower, lmat(L.lower)], [roof, lmat(L.roof)], [head, 'head'], [tail, 'tail'], [dest, bm.board], [name, bm.name], [plate, 'plate', true]];
+  const parts = [[shell, 'paint'], [glass, 'glass'], [trim, 'trim'], [lower, lmat(L.lower)], [roof, lmat(L.roof)], [head, 'head'], [tail, 'tail'], [dest, bm.board], [sides, bm.side], [screens, bm.glass], [name, bm.name], [plate, 'plate', true]];
   if (stripe) parts.push([stripe, lmat(L.stripe)]);
   return assemble('bus', L.body, kit, parts, axleWheels(d));
 }
