@@ -329,7 +329,7 @@ Every vehicle offers two choices: **F** to drive it yourself, **V** to ride as a
 
 - **Kolkata's real weather, near enough live:** the current conditions come from [Open-Meteo](https://open-meteo.com/) (free, no API key), which updates every 15 minutes. If it's raining in Kolkata, it's raining in the game: grey monsoon sky, rain, thicker haze, soft light without shadows, wet dark roads that take a few minutes to dry, and lightning with rolling thunder in a storm. The temperature and conditions show under the clock.
 - **Light on resources:** fetched once on load and then every 10 minutes, only while the tab is visible, and cached so a reload doesn't fetch again. The rain is one draw call animated entirely on the GPU, drawn only as heavily as it's raining (and less on Low), and not at all underground or when it's dry. Offline, the weather just stays as it was.
-- **WEATHER** on the title screen and pause menu: **LIVE KOLKATA** (default), or fixed **CLEAR**, **RAIN** or **STORM**.
+- The weather is always Kolkata's live weather. **TIME** (title screen and pause menu) only sets the clock: **REAL TIME** (Kolkata's), or always **DAY** or **NIGHT**.
 
 </details>
 
