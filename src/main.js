@@ -691,6 +691,18 @@ async function boot() {
   setLoading(1, 'Ready');
   hud.ready();
   hud.setWeaponIcons(weaponIcons());
+  const ferryGhats = [
+    { name: 'Prinsep Ghat', x: -2797, z: 1062 },
+    { name: 'Babu Ghat', x: -1940, z: 120 },
+    { name: 'Fairlie Ghat', x: -1368, z: -1020 },
+    { name: 'Howrah Ghat', x: -1481, z: -1840 },
+    { name: 'Armenian Ghat', x: -1073, z: -1805 },
+    { name: 'Ahiritola Ghat', x: -547, z: -3339 },
+    { name: 'Nimtala Ghat', x: -710, z: -3025 },
+    { name: 'Outram Ghat', x: -2100, z: 215 },
+    { name: 'Jagannath Ghat', x: -912, z: -2384 },
+  ];
+
   // Railways, trams and metro lines on the map
   {
     const r = rail.mapLayers();
@@ -698,17 +710,6 @@ async function boot() {
     for (const l of metro.lines) r.lines.push({ pts: pts(l.track), color: l.color, width: 4, dash: [7, 5] });
     for (const st of metro.stations) r.stations.push({ x: st.x, z: st.z, color: st.color, label: 'M', name: st.name });
     for (const t of rail.tramStops) r.stations.push({ x: t.x, z: t.z, color: '#3f86d8', label: 'T', name: t.name, small: true });
-    const ferryGhats = [
-      { name: 'Prinsep Ghat', x: -2797, z: 1062 },
-      { name: 'Babu Ghat', x: -1940, z: 120 },
-      { name: 'Fairlie Ghat', x: -1368, z: -1020 },
-      { name: 'Howrah Ghat', x: -1481, z: -1840 },
-      { name: 'Armenian Ghat', x: -1073, z: -1805 },
-      { name: 'Ahiritola Ghat', x: -547, z: -3339 },
-      { name: 'Nimtala Ghat', x: -710, z: -3025 },
-      { name: 'Outram Ghat', x: -2100, z: 215 },
-      { name: 'Jagannath Ghat', x: -912, z: -2384 },
-    ];
     for (const gh of ferryGhats) r.stations.push({ x: gh.x, z: gh.z, color: '#00c4ff', label: 'F', name: gh.name });
     hud.drawTransit(r.lines, r.stations);
   }
