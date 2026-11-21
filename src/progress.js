@@ -24,6 +24,9 @@ export const ACHIEVEMENTS = [
   { id: 'fined', name: 'Without Ticket', desc: 'Get fined by the TTE' },
   { id: 'explorer', name: 'Explorer', desc: 'Discover 15 places' },
   { id: 'cityOfJoy', name: 'City of Joy', desc: 'Discover every landmark' },
+  { id: 'firstDelivery', name: 'Express Delivery', desc: 'Deliver an urgent parcel or food order on time' },
+  { id: 'courierPro', name: 'Speedy Dada', desc: 'Complete 5 courier deliveries' },
+  { id: 'chronicler', name: 'Calcutta Chronicler', desc: 'Capture a photo in Heritage Photo Mode (P)' },
 ];
 
 const load = () => {
@@ -70,6 +73,8 @@ export class Progress {
       stars: s.stars || 0, // sum, for the average rating
       bestStreak: s.bestStreak || 0,
       km: s.km || 0,
+      deliveries: s.deliveries || 0,
+      photos: s.photos || 0,
       rides: s.rides || {},
       visited: s.visited || [],
       ach: s.ach || [],
@@ -129,6 +134,29 @@ export class Progress {
     this.save();
   }
 
+  /** A courier parcel or food delivery. */
+  delivery({ paid, speedTip, km, streak, onTime, lost = false }) {
+    if (lost) {
+      this.d.lost++;
+    } else {
+      this.d.deliveries = (this.d.deliveries || 0) + 1;
+      this.d.earned += paid;
+      this.d.tips += speedTip || 0;
+      this.d.km += km;
+      this.d.bestStreak = Math.max(this.d.bestStreak, streak);
+      if (onTime) this.unlock('firstDelivery');
+      if (this.d.deliveries >= 5) this.unlock('courierPro');
+    }
+    this.save();
+  }
+
+  /** Photo Mode snapshot captured. */
+  photoTaken() {
+    this.d.photos = (this.d.photos || 0) + 1;
+    this.unlock('chronicler');
+    this.save();
+  }
+
   get rating() {
     return this.d.fares ? this.d.stars / this.d.fares : 0;
   }
@@ -167,13 +195,15 @@ export class Progress {
     return `<h3>Your Kolkata</h3>
       <div class="pg-stats">
         ${stat(d.fares, 'taxi jobs')}
-        ${stat(`₹${d.earned.toLocaleString('en-IN')}`, 'fares earned')}
+        ${stat(d.deliveries || 0, 'deliveries')}
+        ${stat(d.photos || 0, 'photos taken')}
+        ${stat(`₹${d.earned.toLocaleString('en-IN')}`, 'earned')}
         ${stat(r ? `★ ${r.toFixed(1)}` : '—', 'rating')}
         ${stat(d.bestStreak, 'best streak')}
         ${stat(`${this.visited.size}/${this.places.length}`, 'places found')}
         ${stat(`${d.ach.length}/${ACHIEVEMENTS.length}`, 'achievements')}
       </div>
       <div class="pg-achs">${ach}</div>
-      <div class="pg-hint">In a yellow taxi or an auto, press <b>B</b> to go on duty and pick up fares.</div>`;
+      <div class="pg-hint">In a taxi, auto, bike or rickshaw, press <b>B</b> to go on duty (fares or deliveries). Press <b>P</b> for Photo Mode.</div>`;
   }
 }

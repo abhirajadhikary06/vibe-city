@@ -921,6 +921,202 @@ function setPaused(p) {
   if (!p) input.lock();
 }
 
+/* ---------- Photo Mode ---------- */
+const photoCam = {
+  yaw: 0,
+  pitch: 0.15,
+  dist: 5,
+  height: 1.4,
+  fov: 60,
+  filter: 'none',
+  grid: false,
+  dragging: false,
+  lastX: 0,
+  lastY: 0,
+};
+
+function setPhoto(open) {
+  if (open && state !== 'play') return;
+  if (!open && state !== 'photo') return;
+  state = open ? 'photo' : 'play';
+  if (open) {
+    if (document.pointerLockElement) document.exitPointerLock();
+    photoCam.yaw = cam.yaw;
+    photoCam.pitch = 0.15;
+    photoCam.dist = player.driving ? 7 : 4.5;
+    photoCam.height = 1.4;
+    photoCam.fov = 60;
+    photoCam.filter = 'none';
+    photoCam.grid = false;
+    const fovEl = document.getElementById('photo-fov');
+    if (fovEl) fovEl.value = 60;
+    const fovVal = document.getElementById('photo-fov-val');
+    if (fovVal) fovVal.textContent = '60°';
+    const hEl = document.getElementById('photo-height');
+    if (hEl) hEl.value = 1.4;
+    const hVal = document.getElementById('photo-height-val');
+    if (hVal) hVal.textContent = '1.4m';
+    const distEl = document.getElementById('photo-dist');
+    if (distEl) distEl.value = photoCam.dist;
+    const distVal = document.getElementById('photo-dist-val');
+    if (distVal) distVal.textContent = `${photoCam.dist}m`;
+    document.getElementById('photo-grid')?.classList.add('hidden');
+    document.querySelectorAll('.photo-filters button').forEach((b) => b.classList.toggle('active', b.dataset.filter === 'none'));
+    if (audio.ctx) audio.ctx.suspend();
+  } else {
+    input.keys.clear();
+    input.scroll = 0;
+    if (audio.ctx) audio.ctx.resume();
+    input.lock();
+  }
+  hud.setPhoto(open);
+}
+
+function updatePhotoCamera(dt) {
+  const p = player;
+  const focus = p.focus;
+  const cp = Math.cos(photoCam.pitch);
+  const cx = focus.x - Math.sin(photoCam.yaw) * cp * photoCam.dist;
+  const cz = focus.z - Math.cos(photoCam.yaw) * cp * photoCam.dist;
+  const cy = focus.y + photoCam.height + Math.sin(photoCam.pitch) * photoCam.dist;
+  const minGround = world.groundAt(cx, cz, focus.y) + 0.3;
+  camera.position.set(cx, Math.max(cy, minGround), cz);
+  camera.lookAt(focus.x, focus.y + photoCam.height * 0.7, focus.z);
+  camera.fov = photoCam.fov;
+  camera.updateProjectionMatrix();
+}
+
+function capturePhoto() {
+  if (state !== 'photo') return;
+  audio.shutter();
+
+  const topEl = document.querySelector('.photo-top');
+  const ctrlEl = document.querySelector('.photo-controls');
+  if (topEl) topEl.style.visibility = 'hidden';
+  if (ctrlEl) ctrlEl.style.visibility = 'hidden';
+  const grid = document.getElementById('photo-grid');
+  const wasGrid = grid && !grid.classList.contains('hidden');
+  if (grid) grid.classList.add('hidden');
+
+  renderer.shadowMap.needsUpdate = true;
+  if (post && post.composer) post.composer.render(0);
+  else renderer.render(scene, camera);
+
+  try {
+    const srcCanvas = renderer.domElement;
+    const off = document.createElement('canvas');
+    off.width = srcCanvas.width;
+    off.height = srcCanvas.height;
+    const ctx = off.getContext('2d');
+
+    if (photoCam.filter === 'vintage') {
+      ctx.filter = 'sepia(0.6) contrast(1.15) brightness(1.05) saturate(1.1)';
+    } else if (photoCam.filter === 'monsoon') {
+      ctx.filter = 'contrast(1.2) hue-rotate(165deg) saturate(0.85)';
+    } else if (photoCam.filter === 'amber') {
+      ctx.filter = 'sepia(0.3) saturate(1.7) contrast(1.12) brightness(1.04)';
+    } else if (photoCam.filter === 'noir') {
+      ctx.filter = 'grayscale(1) contrast(1.35) brightness(0.95)';
+    } else {
+      ctx.filter = 'none';
+    }
+
+    ctx.drawImage(srcCanvas, 0, 0);
+
+    ctx.filter = 'none';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+    ctx.shadowBlur = 6;
+    ctx.font = 'bold 24px "Bebas Neue", "Rajdhani", sans-serif';
+    ctx.fillText('VIBE CITY KOLKATA', 32, off.height - 32);
+
+    const link = document.createElement('a');
+    const d = new Date();
+    const ts = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+    link.download = `VibeCity_Kolkata_${ts}.png`;
+    link.href = off.toDataURL('image/png');
+    link.click();
+  } catch (err) {
+    console.error('Failed to capture photo:', err);
+  }
+
+  if (topEl) topEl.style.visibility = '';
+  if (ctrlEl) ctrlEl.style.visibility = '';
+  if (wasGrid && grid) grid.classList.remove('hidden');
+
+  const flash = document.getElementById('shutter-flash');
+  if (flash) {
+    flash.classList.add('flash');
+    setTimeout(() => flash.classList.remove('flash'), 250);
+  }
+
+  progress.photoTaken();
+  hud.notify('📸 PHOTO CAPTURED', 'Saved to your Downloads', '#5dff9e');
+}
+
+// Photo mode listeners
+document.getElementById('btn-photo')?.addEventListener('click', () => setPhoto(true));
+document.getElementById('photo-exit')?.addEventListener('click', () => setPhoto(false));
+document.getElementById('photo-fov')?.addEventListener('input', (e) => {
+  photoCam.fov = parseFloat(e.target.value);
+  const val = document.getElementById('photo-fov-val');
+  if (val) val.textContent = `${Math.round(photoCam.fov)}°`;
+});
+document.getElementById('photo-height')?.addEventListener('input', (e) => {
+  photoCam.height = parseFloat(e.target.value);
+  const val = document.getElementById('photo-height-val');
+  if (val) val.textContent = `${photoCam.height.toFixed(1)}m`;
+});
+document.getElementById('photo-dist')?.addEventListener('input', (e) => {
+  photoCam.dist = parseFloat(e.target.value);
+  const val = document.getElementById('photo-dist-val');
+  if (val) val.textContent = `${photoCam.dist.toFixed(1)}m`;
+});
+document.querySelectorAll('.photo-filters button').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.photo-filters button').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    photoCam.filter = b.dataset.filter;
+  });
+});
+document.getElementById('photo-grid-btn')?.addEventListener('click', () => {
+  photoCam.grid = !photoCam.grid;
+  document.getElementById('photo-grid')?.classList.toggle('hidden', !photoCam.grid);
+});
+document.getElementById('photo-snap')?.addEventListener('click', capturePhoto);
+
+const photoEl = document.getElementById('photo-mode');
+photoEl?.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('.photo-controls') || e.target.closest('.photo-top')) return;
+  photoCam.dragging = true;
+  photoCam.lastX = e.clientX;
+  photoCam.lastY = e.clientY;
+  try { photoEl.setPointerCapture(e.pointerId); } catch {}
+});
+photoEl?.addEventListener('pointermove', (e) => {
+  if (!photoCam.dragging) return;
+  const dx = e.clientX - photoCam.lastX;
+  const dy = e.clientY - photoCam.lastY;
+  photoCam.lastX = e.clientX;
+  photoCam.lastY = e.clientY;
+  photoCam.yaw -= dx * 0.005;
+  photoCam.pitch = clamp(photoCam.pitch + dy * 0.004, -0.6, 1.2);
+});
+photoEl?.addEventListener('pointerup', (e) => {
+  photoCam.dragging = false;
+  try { photoEl.releasePointerCapture(e.pointerId); } catch {}
+});
+photoEl?.addEventListener('wheel', (e) => {
+  if (e.target.closest('.photo-controls')) return;
+  photoCam.dist = clamp(photoCam.dist + e.deltaY * 0.015, 1.5, 30);
+  const distSlider = document.getElementById('photo-dist');
+  if (distSlider) {
+    distSlider.value = photoCam.dist;
+    const val = document.getElementById('photo-dist-val');
+    if (val) val.textContent = `${photoCam.dist.toFixed(1)}m`;
+  }
+}, { passive: true });
+
 /* ---------- Aim assist ---------- */
 const _ad = new THREE.Vector3();
 let aimTarget = false;
@@ -1009,8 +1205,16 @@ function loop() {
   }
 
   if (state === 'title' && input.hit('Enter')) startGame();
-  if (!leaveOpen && (state === 'play' || state === 'pause') && (input.hit('Escape') || input.hit('KeyP'))) {
+  if (!leaveOpen && (state === 'play' || state === 'pause') && input.hit('Escape')) {
     if (!input.locked || state === 'pause') setPaused(state === 'play');
+  }
+  if (!leaveOpen && state === 'play' && input.hit('KeyP')) {
+    setPhoto(true);
+  } else if (!leaveOpen && state === 'photo' && (input.hit('KeyP') || input.hit('Escape'))) {
+    setPhoto(false);
+  }
+  if (state === 'photo' && input.hit('Space')) {
+    capturePhoto();
   }
   if ((state === 'play' && input.hit('KeyM')) || (state === 'map' && (input.hit('KeyM') || input.hit('Escape')))) setMap(state === 'play');
   if (state === 'map') {
@@ -1020,6 +1224,14 @@ function loop() {
     return;
   }
   if (state === 'pause') {
+    input.endFrame();
+    return;
+  }
+  if (state === 'photo') {
+    updatePhotoCamera(dt);
+    renderer.shadowMap.needsUpdate = true;
+    if (post && post.composer) post.composer.render(0);
+    else renderer.render(scene, camera);
     input.endFrame();
     return;
   }

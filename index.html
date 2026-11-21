@@ -22,6 +22,7 @@
         <div id="money">$0</div>
         <div id="clock">18:00</div>
         <div id="wx"></div>
+        <button id="btn-photo" title="Heritage Photo Mode (P)" aria-label="Photo Mode">📸 PHOTO</button>
         <div id="weapon"><img class="wicon" alt="" /><div class="wname">FISTS</div><div class="wammo"></div></div>
       </div>
       <div id="crosshair" class="hidden"><i></i><i></i><i></i><i></i></div>
@@ -50,6 +51,7 @@
         <span><b>WASD</b> move</span><span><b>MOUSE</b> look</span><span><b>F</b> enter / exit vehicle</span><span><b>E</b> talk</span>
         <span><b>1-7 / WHEEL</b> weapons</span><span><b>RIGHT CLICK</b> aim</span><span><b>CLICK</b> fire / punch</span><span><b>R</b> reload</span>
         <span><b>TAB</b> weapon wheel</span><span><b>G</b> gestures</span><span><b>SHIFT</b> sprint / nitro</span><span><b>SPACE</b> jump / handbrake</span>
+        <span><b>P</b> photo mode</span>
       </div>
     </div>
 
@@ -153,7 +155,7 @@
           <div><b>H</b>Horn</div>
           <div><b>R</b>Reset onto the road</div>
           <div><b>C</b>Cycle camera</div>
-          <div><b>B</b>Taxi or auto: go on / off duty</div>
+          <div><b>B</b>Taxi, auto, bike, rickshaw: go on / off duty (fares or deliveries)</div>
         </section>
         <section>
           <h3>Trams, trains, metro &amp; boats</h3>
@@ -164,6 +166,7 @@
           <div>Step off a boat slowly beside a jetty or the bank</div>
           <div>Buy a ticket (<b>E</b>) before the platforms, or the TTE fines you</div>
           <h3>General</h3>
+          <div><b>P</b>Photo Mode (freeze, orbit, filter &amp; snap)</div>
           <div><b>M</b>Map &amp; waypoints</div>
           <div><b>T</b> (hold) Fast-forward time</div>
           <div><b>Q</b>Music on/off · <b>N</b> Mute all</div>
@@ -181,6 +184,55 @@
           <button id="leave-go">LEAVE</button>
         </div>
       </div>
+    </div>
+
+    <div id="photo-mode" class="hidden">
+      <div class="photo-top">
+        <div class="photo-title">HERITAGE PHOTO MODE</div>
+        <div class="photo-sub">DRAG to rotate · SCROLL to zoom · SPACE to snap · P to exit</div>
+      </div>
+      <div id="photo-grid" class="photo-grid hidden">
+        <div class="grid-line gh-1"></div>
+        <div class="grid-line gh-2"></div>
+        <div class="grid-line gv-1"></div>
+        <div class="grid-line gv-2"></div>
+      </div>
+      <div class="photo-controls">
+        <div class="photo-row">
+          <label>ZOOM / FOV</label>
+          <input type="range" id="photo-fov" min="20" max="90" value="60" />
+          <span id="photo-fov-val">60°</span>
+        </div>
+        <div class="photo-row">
+          <label>HEIGHT</label>
+          <input type="range" id="photo-height" min="-0.5" max="6" step="0.1" value="1.5" />
+          <span id="photo-height-val">1.5m</span>
+        </div>
+        <div class="photo-row">
+          <label>DISTANCE</label>
+          <input type="range" id="photo-dist" min="2" max="25" step="0.5" value="5" />
+          <span id="photo-dist-val">5m</span>
+        </div>
+        <div class="photo-row">
+          <label>FILTER</label>
+          <div class="photo-filters">
+            <button class="active" data-filter="none">NORMAL</button>
+            <button data-filter="vintage">VINTAGE</button>
+            <button data-filter="monsoon">MONSOON</button>
+            <button data-filter="amber">GOLDEN</button>
+            <button data-filter="noir">NOIR</button>
+          </div>
+        </div>
+        <div class="photo-row">
+          <label>COMPOSITION</label>
+          <button id="photo-grid-btn">TOGGLE 3×3 GRID</button>
+        </div>
+        <div class="photo-actions">
+          <button id="photo-snap" class="btn-snap">📸 TAKE PHOTO (SPACE)</button>
+          <button id="photo-exit" class="btn-exit">EXIT (P)</button>
+        </div>
+      </div>
+      <div id="shutter-flash"></div>
     </div>
 
     <div id="splash">
