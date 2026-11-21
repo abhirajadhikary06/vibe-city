@@ -367,6 +367,8 @@ html, body {
   text-shadow: none;
 }
 #prompt .k2 { margin-left: 22px; background: var(--cyan); }
+#prompt .k3 { margin-left: 22px; background: var(--pink); }
+#prompt .kb { background: var(--green) !important; color: #0b140b !important; font-weight: 700; box-shadow: 0 0 8px rgba(93, 255, 158, 0.4); }
 #wheel {
   position: absolute;
   left: 50%;

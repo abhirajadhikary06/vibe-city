@@ -289,7 +289,10 @@ export class HUD {
 
   /* ---------- Context prompt ---------- */
   prompt(p) {
-    const html = p ? `<span class="key">${p.key}</span>${p.text}${p.key2 ? `<span class="key k2">${p.key2}</span>${p.text2}` : ''}` : '';
+    const kClass = (k, extra) => `key ${extra || ''} ${k === 'B' ? 'kb' : ''}`.trim();
+    const html = p
+      ? `<span class="${kClass(p.key, '')}">${p.key}</span>${p.text}${p.key2 ? `<span class="${kClass(p.key2, 'k2')}">${p.key2}</span>${p.text2}` : ''}${p.key3 ? `<span class="${kClass(p.key3, 'k3')}">${p.key3}</span>${p.text3}` : ''}`
+      : '';
     if (html !== this._prompt) {
       this.promptEl.innerHTML = html;
       this.promptEl.classList.toggle('hidden', !p);
