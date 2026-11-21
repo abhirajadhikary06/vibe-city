@@ -1282,19 +1282,55 @@ html, body {
   background: rgba(255, 211, 107, 0.08);
   box-shadow: 0 0 20px rgba(255, 211, 107, 0.2);
 }
-.wc-swatch {
+.wc-preview-wrap {
+  position: relative;
   width: 100%;
-  height: 60px;
-  border-radius: 6px;
+  height: 220px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, rgba(28, 34, 46, 0.95), rgba(10, 13, 20, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
-.wc-icon {
-  font-size: 32px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+.wardrobe-card:hover .wc-preview-wrap {
+  border-color: rgba(56, 243, 255, 0.45);
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.7), 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+.wc-preview-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.wc-tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 13px;
+  letter-spacing: 1px;
+  background: rgba(14, 18, 26, 0.88);
+  border: 1px solid rgba(255, 211, 107, 0.4);
+  color: var(--gold);
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+.wc-tag.tag-owned {
+  border-color: rgba(93, 255, 158, 0.45);
+  color: #5dff9e;
+}
+.wc-tag.tag-equipped {
+  border-color: var(--gold);
+  background: rgba(255, 211, 107, 0.2);
+  color: #ffd36b;
+  box-shadow: 0 0 10px rgba(255, 211, 107, 0.4);
 }
 .wc-info {
   flex: 1;
