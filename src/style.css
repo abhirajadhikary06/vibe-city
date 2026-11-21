@@ -1133,3 +1133,241 @@ html, body {
 .mft-close:hover {
   color: #fff;
 }
+
+/* Pause Menu Wardrobe Shortcut */
+.pause-actions {
+  margin-top: 14px;
+}
+.pause-wardrobe-btn {
+  padding: 8px 26px;
+  background: linear-gradient(135deg, rgba(255, 211, 107, 0.2), rgba(255, 63, 164, 0.2));
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  color: var(--gold);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.pause-wardrobe-btn:hover {
+  background: var(--gold);
+  color: #0b0d14;
+  box-shadow: 0 0 24px rgba(255, 211, 107, 0.6);
+  transform: scale(1.04);
+}
+
+/* Wardrobe Modal & Outfit Customizer */
+#wardrobe-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 14, 0.82);
+  backdrop-filter: blur(8px);
+  z-index: 60;
+  padding: 20px;
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+.wardrobe-content {
+  max-width: 980px;
+  width: 100%;
+  max-height: 88vh;
+  background: #0e121a;
+  border: 1px solid rgba(255, 211, 107, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 32px rgba(255, 211, 107, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.wardrobe-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(20, 24, 34, 0.88);
+}
+.wardrobe-title-wrap h2 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 32px;
+  letter-spacing: 2px;
+  color: var(--gold);
+  margin: 0;
+  text-shadow: 0 0 16px rgba(255, 211, 107, 0.35);
+}
+.wardrobe-subtitle {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+.wardrobe-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.wardrobe-bal-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(93, 255, 158, 0.12);
+  border: 1px solid rgba(93, 255, 158, 0.4);
+  border-radius: 20px;
+  padding: 4px 14px;
+}
+.wbp-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #5dff9e;
+}
+.wbp-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 24px;
+  letter-spacing: 1.5px;
+  color: #5dff9e;
+}
+.wardrobe-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #94a3b8;
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.wardrobe-close:hover {
+  background: rgba(255, 63, 164, 0.3);
+  color: #fff;
+  transform: scale(1.08);
+}
+.wardrobe-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  padding: 22px;
+  overflow-y: auto;
+  max-height: calc(88vh - 85px);
+}
+.wardrobe-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: rgba(18, 23, 33, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 16px;
+  gap: 12px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.wardrobe-card:hover {
+  border-color: rgba(56, 243, 255, 0.4);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.wardrobe-card.equipped {
+  border-color: #ffd36b;
+  background: rgba(255, 211, 107, 0.08);
+  box-shadow: 0 0 20px rgba(255, 211, 107, 0.2);
+}
+.wc-swatch {
+  width: 100%;
+  height: 60px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.5);
+}
+.wc-icon {
+  font-size: 32px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+.wc-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wc-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+.wc-bengali {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 600;
+}
+.wc-desc {
+  font-size: 13px;
+  color: #8fa0b5;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+.wc-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.wc-price {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: #5dff9e;
+}
+.wc-btn {
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 16px;
+  letter-spacing: 1px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.wc-btn.btn-active {
+  background: #ffd36b;
+  color: #0b0d14;
+  cursor: default;
+}
+.wc-btn.btn-equip {
+  background: linear-gradient(135deg, #1f4f8a, #38f3ff);
+  color: #fff;
+}
+.wc-btn.btn-equip:hover {
+  filter: brightness(1.2);
+  transform: scale(1.05);
+}
+.wc-btn.btn-buy {
+  background: linear-gradient(135deg, #1f9a55, #5dff9e);
+  color: #0b120c;
+}
+.wc-btn.btn-buy:hover {
+  filter: brightness(1.15);
+  transform: scale(1.05);
+}
+.wc-btn.btn-disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: #667588;
+  cursor: not-allowed;
+}
