@@ -30,11 +30,19 @@ const SOUND = {
 };
 const KIND_SOUND = { auto: 'auto', taxi: 'amby', ambassador: 'amby', bus: 'diesel', schoolbus: 'diesel', truck: 'diesel', pickup: 'diesel', van: 'car', bike: 'bike', rickshaw: 'muscle', tram: 'electric', metro: 'electric', train: 'electric', express: 'electric', boat: 'boat' };
 
+export const RADIO_STATIONS = [
+  { id: 'synth', name: 'Synthwave 96', dial: '96.0 FM', desc: 'Neon Kolkata High-Tempo Synth', bpm: 96, color: '#ff3fa4' },
+  { id: 'air', name: 'AIR Kolkata', dial: '657 kHz AM', desc: 'Akashvani Kolkata · Morning Raga & Sitar', bpm: 72, color: '#f4c51c' },
+  { id: 'disco', name: 'Park Street Disco', dial: '104.2 FM', desc: '80s Retro Bengali & Bollywood Funk', bpm: 118, color: '#3f86d8' },
+];
+
 export class AudioEngine {
   constructor() {
     this.ctx = null;
     this.muted = false;
     this.radioOn = loadFlag('kol_music', false);
+    const savedSt = parseInt(localStorage.getItem('kol_station_idx') || '0', 10);
+    this.stationIndex = isNaN(savedSt) ? 0 : Math.max(0, Math.min(RADIO_STATIONS.length - 1, savedSt));
     this.kind = 'car';
     this.clackT = 0;
     this.stepT = 0;
@@ -531,15 +539,37 @@ export class AudioEngine {
   toggleRadio() {
     return this.setRadio(!this.radioOn);
   }
+  setStation(idx) {
+    this.stationIndex = ((idx % RADIO_STATIONS.length) + RADIO_STATIONS.length) % RADIO_STATIONS.length;
+    try { localStorage.setItem('kol_station_idx', String(this.stationIndex)); } catch {}
+    const st = RADIO_STATIONS[this.stationIndex];
+    if (this.ctx) {
+      this.stepDur = 60 / st.bpm / 4;
+      if (this.delay) this.delay.delayTime.setTargetAtTime((60 / st.bpm) * 0.75, this.ctx.currentTime, 0.1);
+    }
+    return st;
+  }
+  nextStation() {
+    if (!this.radioOn) this.setRadio(true);
+    return this.setStation(this.stationIndex + 1);
+  }
+  prevStation() {
+    if (!this.radioOn) this.setRadio(true);
+    return this.setStation(this.stationIndex - 1);
+  }
+  get currentStation() {
+    return RADIO_STATIONS[this.stationIndex] || RADIO_STATIONS[0];
+  }
 
-  /* ---------- Procedural synthwave radio ---------- */
+  /* ---------- Multi-Station Procedural Radio ---------- */
   initRadio() {
     const ctx = this.ctx;
     this.musicGain = ctx.createGain();
     this.musicGain.gain.value = this.radioOn ? 0.22 : 0;
     this.musicGain.connect(this.master);
+    const cur = this.currentStation;
     this.delay = ctx.createDelay(1);
-    this.delay.delayTime.value = (60 / 96) * 0.75;
+    this.delay.delayTime.value = (60 / cur.bpm) * 0.75;
     const fb = ctx.createGain();
     fb.gain.value = 0.35;
     const dl = ctx.createBiquadFilter();
@@ -549,13 +579,22 @@ export class AudioEngine {
     dl.connect(this.musicGain);
     this.step = 0;
     this.nextTime = ctx.currentTime + 0.2;
-    this.stepDur = 60 / 96 / 4;
-    // Am - F - C - G
+    this.stepDur = 60 / cur.bpm / 4;
+    // Synthwave progression: Am - F - C - G
     this.prog = [
       [57, 60, 64, 69],
       [53, 57, 60, 65],
       [48, 52, 55, 60],
       [55, 59, 62, 67],
+    ];
+    // AIR Kolkata Indian classical Raga scale: C, Db, E, F, G, Ab, Bb (Ahir Bhairav flavor)
+    this.raga = [60, 61, 64, 65, 67, 68, 70, 72, 73, 76];
+    // Park Street Disco: Dm7 - Gm7 - C7 - A7
+    this.discoChords = [
+      [50, 53, 57, 60], // Dm7
+      [43, 46, 50, 53], // Gm7
+      [48, 52, 55, 58], // C7
+      [45, 49, 52, 55], // A7
     ];
     setInterval(() => this.schedule(), 25);
   }
@@ -567,17 +606,25 @@ export class AudioEngine {
       return;
     }
     while (this.nextTime < ctx.currentTime + 0.12) {
-      this.playStep(this.step, this.nextTime);
+      const st = this.currentStation;
+      if (st.id === 'air') this.playAirStep(this.step, this.nextTime);
+      else if (st.id === 'disco') this.playDiscoStep(this.step, this.nextTime);
+      else this.playSynthStep(this.step, this.nextTime);
       this.nextTime += this.stepDur;
       this.step++;
     }
   }
 
-  note(midi, t, dur, type, vol, cutoff, toDelay = false) {
+  note(midi, t, dur, type, vol, cutoff, toDelay = false, bendToMidi = null) {
     const ctx = this.ctx;
     const o = ctx.createOscillator();
     o.type = type;
-    o.frequency.value = 440 * Math.pow(2, (midi - 69) / 12);
+    const baseFreq = 440 * Math.pow(2, (midi - 69) / 12);
+    o.frequency.setValueAtTime(baseFreq, t);
+    if (bendToMidi != null) {
+      const targetFreq = 440 * Math.pow(2, (bendToMidi - 69) / 12);
+      o.frequency.exponentialRampToValueAtTime(targetFreq, t + dur * 0.7);
+    }
     const f = ctx.createBiquadFilter();
     f.type = 'lowpass';
     f.frequency.setValueAtTime(cutoff, t);
@@ -621,7 +668,8 @@ export class AudioEngine {
     src.stop(t + dur + 0.02);
   }
 
-  playStep(i, t) {
+  /* Station 1: Synthwave 96 */
+  playSynthStep(i, t) {
     const s = i % 16;
     const bar = Math.floor(i / 16) % 4;
     const ch = this.prog[bar];
@@ -635,6 +683,117 @@ export class AudioEngine {
     this.note(n, t, this.stepDur * 0.9, section ? 'square' : 'triangle', 0.06, 3200, true);
     if (s === 0) {
       for (const m of ch.slice(0, 3)) this.note(m, t, this.stepDur * 15, 'sawtooth', 0.025, 1400);
+    }
+  }
+
+  /* Station 2: AIR Kolkata (All India Radio) - Sitar & Morning Raga with AM crackle */
+  playAirStep(i, t) {
+    const s = i % 16;
+    const bar = Math.floor(i / 16) % 4;
+    // Continuous Tanpura Drone: Root Sa (C3 = 48) and Pa (G3 = 55)
+    if (s === 0) {
+      this.note(48, t, this.stepDur * 15.5, 'sawtooth', 0.04, 520);
+      this.note(55, t, this.stepDur * 15.5, 'triangle', 0.045, 600);
+      this.note(60, t, this.stepDur * 15.5, 'sine', 0.03, 800);
+    }
+    // Vintage AM radio crackle burst on bar boundaries
+    if (s === 0 && Math.random() < 0.35) {
+      this.burst(t, { type: 'bandpass', freq: 1600, q: 2.2, vol: 0.025, dur: 0.15 });
+    }
+    // Tabla: Bayan (bass) on step 0, 8; Dayan (tuned ring) on step 4, 12
+    if (s === 0 || s === 8) {
+      const o = this.ctx.createOscillator();
+      o.frequency.setValueAtTime(86, t);
+      o.frequency.exponentialRampToValueAtTime(52, t + 0.25);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.28, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      o.connect(g).connect(this.musicGain);
+      o.start(t);
+      o.stop(t + 0.32);
+    }
+    if (s === 4 || s === 12) {
+      this.note(67, t, this.stepDur * 0.8, 'sine', 0.14, 1800);
+      this.burst(t, { type: 'highpass', freq: 4500, q: 1, vol: 0.05, dur: 0.04 });
+    }
+    if (s % 2 === 1 && Math.random() < 0.4) {
+      this.burst(t, { type: 'bandpass', freq: 2800, q: 1.5, vol: 0.03, dur: 0.03 });
+    }
+    // Sitar / Bansuri melodic phrases with meend (ornamented pitch bends)
+    const phrase = [
+      [0, 60, null],
+      [2, 61, 64],
+      [4, 64, null],
+      [6, 65, 67],
+      [8, 67, null],
+      [10, 68, 67],
+      [12, 65, 64],
+      [14, 61, 60],
+    ];
+    const match = phrase.find(([step]) => step === s);
+    if (match) {
+      const [, m, bend] = match;
+      const octave = bar >= 2 ? 12 : 0;
+      // Sitar twang: sawtooth with high resonance and gentle slide
+      this.note(m + octave, t, this.stepDur * 1.6, 'sawtooth', 0.09, 2800, true, bend ? bend + octave : null);
+    }
+    // Soft Bansuri (Bamboo flute) sustain on second half
+    if (s === 6 && (bar === 1 || bar === 3)) {
+      this.note(72, t, this.stepDur * 6, 'sine', 0.05, 1200);
+    }
+  }
+
+  /* Station 3: Park Street 80s Disco - Funky Slap Bass & Bollywood Groove */
+  playDiscoStep(i, t) {
+    const s = i % 16;
+    const bar = Math.floor(i / 16) % 4;
+    const chord = this.discoChords[bar];
+    const root = chord[0] - 12; // Bass register
+    // 4-on-the-floor Disco Kick
+    if (s % 4 === 0) {
+      this.drum(t, 'kick');
+    }
+    // Snappy Disco Snare + Claps on 4 & 12
+    if (s === 4 || s === 12) {
+      this.drum(t, 'snare');
+      this.burst(t, { type: 'bandpass', freq: 2200, q: 1.2, vol: 0.22, dur: 0.12 });
+    }
+    // 16th-note Hi-Hats: ticks on even steps, open sizzle on upbeat
+    if (s % 2 === 1) {
+      this.drum(t, 'hat');
+    }
+    if (s === 2 || s === 6 || s === 10 || s === 14) {
+      this.burst(t, { type: 'highpass', freq: 7500, q: 0.8, vol: 0.16, dur: 0.14 });
+    }
+    // 80s Funky Slap Bass (octave bounces & syncopation)
+    const bassRiff = [
+      root,             // 0: slap root
+      root + 12,        // 1: pop octave
+      null,             // 2: rest
+      root,             // 3: ghost
+      root + 3,         // 4: minor 3rd
+      null,             // 5: rest
+      root + 5,         // 6: 4th
+      root + 7,         // 7: 5th
+      root + 12,        // 8: pop octave
+      null,             // 9: rest
+      root + 10,        // 10: 7th
+      root + 12,        // 11: pop octave
+      root,             // 12: slap root
+      null,             // 13: rest
+      root + 5,         // 14: pass
+      root + 6,         // 15: chromatic slide
+    ];
+    const bNote = bassRiff[s];
+    if (bNote != null) {
+      const isPop = s === 1 || s === 8 || s === 11;
+      this.note(bNote, t, this.stepDur * (isPop ? 0.6 : 1.2), 'sawtooth', isPop ? 0.26 : 0.22, isPop ? 1800 : 750);
+    }
+    // Disco Brass / Synth Stabs on syncopated 16ths (steps 3, 6, 9, 14)
+    if (s === 3 || s === 6 || s === 9 || s === 14) {
+      for (const m of chord.slice(1, 4)) {
+        this.note(m + 12, t, this.stepDur * 0.75, 'sawtooth', 0.045, 2200, true);
+      }
     }
   }
 }
