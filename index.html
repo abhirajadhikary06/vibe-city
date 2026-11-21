@@ -51,7 +51,7 @@
         <span><b>WASD</b> move</span><span><b>MOUSE</b> look</span><span><b>F</b> enter / exit vehicle</span><span><b>E</b> talk</span>
         <span><b>1-7 / WHEEL</b> weapons</span><span><b>RIGHT CLICK</b> aim</span><span><b>CLICK</b> fire / punch</span><span><b>R</b> reload</span>
         <span><b>TAB</b> weapon wheel</span><span><b>G</b> gestures</span><span><b>SHIFT</b> sprint / nitro</span><span><b>SPACE</b> jump / handbrake</span>
-        <span><b>P</b> photo mode</span>
+        <span><b>O</b> wardrobe</span><span><b>P</b> photo mode</span>
       </div>
     </div>
 
@@ -88,7 +88,7 @@
           <div><b>1–7</b> / <b>WHEEL</b> Switch weapon</div><div><b>RIGHT CLICK</b> Aim · <b>CLICK</b> Fire / punch</div>
           <div><b>R</b> Reload · Reset vehicle</div><div>Hold <b>TAB</b> Weapon wheel · <b>G</b> Gestures</div>
           <div><b>SHIFT</b> Sprint · Nitro</div><div><b>SPACE</b> Jump · Handbrake</div>
-          <div><b>C</b> Camera · <b>H</b> Horn</div><div><b>T</b> Time warp · <b>Q</b> Music · <b>ESC</b> Pause</div>
+          <div><b>O</b> Wardrobe · <b>C</b> Camera · <b>H</b> Horn</div><div><b>T</b> Time warp · <b>Q</b> Music · <b>ESC</b> Pause</div>
         </div>
         <div class="tagline">Real streets from OpenStreetMap · Ride trams, local trains, the Metro and Ganga ferries · Cross Howrah Bridge</div>
       </div>
@@ -118,6 +118,9 @@
     <div id="pause" class="hidden">
       <div class="pause-title">PAUSED</div>
       <div class="pause-sub">Click or press ESC to resume</div>
+      <div class="pause-actions">
+        <button id="pause-wardrobe" class="pause-wardrobe-btn">👗 WARDROBE &amp; OUTFITS (O)</button>
+      </div>
       <div class="sound">
         <span class="ql">SOUND</span>
         <button data-s="music">MUSIC</button><button data-s="voices">VOICES</button><button data-s="mute">ALL SOUND</button>
@@ -176,6 +179,7 @@
           <div>Buy a ticket (<b>E</b>) before the platforms, or the TTE fines you</div>
           <h3>General</h3>
           <div><b>P</b>Photo Mode (freeze, orbit, filter &amp; snap)</div>
+          <div><b>O</b>Wardrobe &amp; Outfits customizer (New Market &amp; College Street)</div>
           <div><b>M</b>Map &amp; waypoints · Click discovered station for <b>Fast Travel (₹20)</b></div>
           <div><b>T</b> (hold) Fast-forward time</div>
           <div><b>Q</b>Radio on/off · <b>[ / ]</b> Switch Radio Station</div>
@@ -243,6 +247,25 @@
       </div>
       <div id="shutter-flash"></div>
     </div>
+    <div id="wardrobe-modal" class="hidden">
+      <div class="wardrobe-content">
+        <div class="wardrobe-header">
+          <div class="wardrobe-title-wrap">
+            <h2 id="wardrobe-shop-title">Kolkata Wardrobe &amp; Outfits</h2>
+            <div class="wardrobe-subtitle">Heritage Tailors &amp; Cultural Attire · New Market &amp; College Street</div>
+          </div>
+          <div class="wardrobe-header-right">
+            <div class="wardrobe-bal-pill">
+              <span class="wbp-label">BALANCE</span>
+              <span id="wardrobe-balance" class="wbp-val">₹0</span>
+            </div>
+            <button id="wardrobe-close" class="wardrobe-close" title="Close Wardrobe">✕</button>
+          </div>
+        </div>
+        <div id="wardrobe-list" class="wardrobe-list"></div>
+      </div>
+    </div>
+
     <div id="screen-fade"></div>
 
     <div id="splash">

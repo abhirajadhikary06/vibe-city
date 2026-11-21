@@ -33,6 +33,7 @@ import { splash } from './splash.js';
 import { Progress } from './progress.js';
 import { TaxiJobs } from './jobs.js';
 import { Weather } from './weather.js';
+import { WardrobeManager } from './wardrobe.js';
 
 
 /* ---------- Quality presets ---------- */
@@ -83,7 +84,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 3200);
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, adda, rides, boards, progress, jobs, weather;
+let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, adda, rides, boards, progress, jobs, weather, wardrobe;
 const vehicles = [];
 const audio = new AudioEngine();
 const voices = new Voices(audio);
@@ -194,6 +195,15 @@ const game = {
   },
   get adda() {
     return adda;
+  },
+  get wardrobe() {
+    return wardrobe;
+  },
+  setWardrobe(open) {
+    setWardrobe(open);
+  },
+  setPaused(p) {
+    setPaused(p);
   },
   get day() {
     return day;
@@ -669,10 +679,13 @@ async function boot() {
   player = new Player(scene, world, game);
   // On Howrah Station's forecourt, facing the river and the bridge
   player.spawn(world.spawn.x, world.spawn.z, station.frameA !== undefined ? Math.atan2(Math.cos(station.frameA), Math.sin(station.frameA)) : 0);
-  if (import.meta.env.DEV) window.__kol = { get weather() { return weather; }, get jobs() { return jobs; }, get progress() { return progress; }, get boards() { return boards; }, THREE, voices, hud, get post() { return post; }, get peds() { return peds; }, get gameplay() { return gameplay; }, get mapViewRef() { return mapView; }, get rides() { return rides; }, get mapView() { return mapView; }, renderer, scene, camera, world, rail, metro, station, vehicles, game, cam, day, get player() { return player; }, get traffic() { return traffic; } };
+  if (import.meta.env.DEV) window.__kol = { get wardrobe() { return wardrobe; }, get weather() { return weather; }, get jobs() { return jobs; }, get progress() { return progress; }, get boards() { return boards; }, THREE, voices, hud, get post() { return post; }, get peds() { return peds; }, get gameplay() { return gameplay; }, get mapViewRef() { return mapView; }, get rides() { return rides; }, get mapView() { return mapView; }, renderer, scene, camera, world, rail, metro, station, vehicles, game, cam, day, get player() { return player; }, get traffic() { return traffic; } };
   peds = new Peds(scene, world, hud, audio, preset.peds);
   peds.spawnAll(player.pos);
   gameplay = new Gameplay(scene, world, hud, audio);
+  wardrobe = new WardrobeManager(scene, world, hud, audio, game);
+  wardrobe.buildStalls();
+  wardrobe.initUI(player, gameplay);
   progress = new Progress(hud, audio);
   jobs = new TaxiJobs(game, scene, world, progress);
   combat = new Combat(scene, world, fx, audio, game);
@@ -746,6 +759,8 @@ async function boot() {
   mapView.addPlaces([
     ...metro.stations.map((st) => ({ n: `${st.name} Metro (${st.line})`, x: st.x, z: st.z, k: 'metro', tier: 1 })),
     ...rail.tramStops.map((t) => ({ n: `${t.name} Tram Stop`, x: t.x, z: t.z, k: 'tram', tier: 3 })),
+    { n: 'New Market Heritage Clothiers (Wardrobe)', x: -582, z: 672, k: 'shop', tier: 2 },
+    { n: 'College Street Khadi & Sports Tailors (Wardrobe)', x: 528, z: -1078, k: 'shop', tier: 2 },
   ]);
   input.onWheel = (open, vec, kind) => {
     const can = state === 'play' && player.mode === 'foot' && !player.dead;
@@ -978,6 +993,26 @@ function setPaused(p) {
   hud.setPaused(p);
   if (audio.ctx) p ? audio.ctx.suspend() : audio.ctx.resume();
   if (!p) input.lock();
+}
+
+function setWardrobe(open) {
+  if (open && state !== 'play' && state !== 'pause') return;
+  if (!open && state !== 'wardrobe') return;
+  if (open && state === 'pause') {
+    setPaused(false);
+  }
+  state = open ? 'wardrobe' : 'play';
+  if (open) {
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (audio.ctx) audio.ctx.suspend();
+    if (wardrobe && !wardrobe.active) wardrobe.open();
+  } else {
+    input.keys.clear();
+    input.scroll = 0;
+    if (audio.ctx) audio.ctx.resume();
+    if (wardrobe && wardrobe.active) wardrobe.close();
+    input.lock();
+  }
 }
 
 /* ---------- Photo Mode ---------- */
@@ -1275,10 +1310,21 @@ function loop() {
   if (state === 'photo' && input.hit('Space')) {
     capturePhoto();
   }
+  if (!leaveOpen && state === 'play' && input.hit('KeyO')) {
+    setWardrobe(true);
+  } else if (!leaveOpen && state === 'wardrobe' && (input.hit('KeyO') || input.hit('Escape'))) {
+    setWardrobe(false);
+  }
   if ((state === 'play' && input.hit('KeyM')) || (state === 'map' && (input.hit('KeyM') || input.hit('Escape')))) setMap(state === 'play');
   if (state === 'map') {
     if (waypoint && !route) route = world.graph.route(player.focus.x, player.focus.z, waypoint.x, waypoint.z);
     mapView.draw(player, gameplay.blips(), waypoint, route, player.vehicle && player.mode !== 'foot' ? vehicleHeading(player.vehicle) : player.yaw);
+    input.endFrame();
+    return;
+  }
+  if (state === 'wardrobe') {
+    if (post && post.composer) post.composer.render(0);
+    else renderer.render(scene, camera);
     input.endFrame();
     return;
   }
