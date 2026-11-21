@@ -172,7 +172,7 @@ export class MapView {
     }
   }
 
-  draw(player, blips, waypoint, route) {
+  draw(player, blips, waypoint, route, yaw) {
     const dpr = Math.min(2, devicePixelRatio || 1);
     const c = this.canvas;
     const W = innerWidth;
@@ -268,7 +268,6 @@ export class MapView {
     }
     // Player arrow
     const p = player.focus;
-    const yaw = player.vehicle && player.mode !== 'foot' ? player.vehicle.yaw : player.yaw;
     g.save();
     g.translate(X(p.x), Y(p.z));
     g.rotate(Math.atan2(Math.cos(yaw), Math.sin(yaw)) + Math.PI / 2);
