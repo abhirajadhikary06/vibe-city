@@ -27,6 +27,8 @@ export const ACHIEVEMENTS = [
   { id: 'firstDelivery', name: 'Express Delivery', desc: 'Deliver an urgent parcel or food order on time' },
   { id: 'courierPro', name: 'Speedy Dada', desc: 'Complete 5 courier deliveries' },
   { id: 'chronicler', name: 'Calcutta Chronicler', desc: 'Capture a photo in Heritage Photo Mode (P)' },
+  { id: 'addaPhilosopher', name: 'Adda Baaj', desc: 'Sit down for tea & philosophize at a Kolkata Adda' },
+  { id: 'fastTraveler', name: 'Commuter', desc: 'Take Metro or Ferry fast-travel across the city' },
 ];
 
 const load = () => {
@@ -105,12 +107,14 @@ export class Progress {
     setTimeout(() => this.hud.notify(`🏆 ${a.name.toUpperCase()}`, a.desc, '#ffd36b'), 600);
   }
 
-  /** Something worth remembering happened: 'metro', 'tram', 'train', 'ferry', 'underRiver', 'driveMetro', 'fined'. */
+  /** Something worth remembering happened: 'metro', 'tram', 'train', 'ferry', 'underRiver', 'driveMetro', 'fined', 'adda', 'fastTravel'. */
   event(name) {
-    if (['metro', 'tram', 'train', 'express', 'ferry'].includes(name)) {
+    if (['metro', 'tram', 'train', 'express', 'ferry', 'fastTravel', 'adda'].includes(name)) {
       this.d.rides[name] = (this.d.rides[name] || 0) + 1;
       this.dirty = true;
     }
+    if (name === 'adda') this.unlock('addaPhilosopher');
+    if (name === 'fastTravel') this.unlock('fastTraveler');
     this.unlock(name === 'express' ? 'train' : name);
   }
 

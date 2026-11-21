@@ -100,6 +100,7 @@ The short version of everything in the game. Details are in [Features](#-feature
 - 🚋 **Trams, EMU locals and the Rajdhani** on the real lines, stopping at real stations with real platform numbers.
 - 🚇 **Metro Blue and Green lines**, including the tunnel **under the Hooghly**, with twin tracks, sliding doors, platform screen doors, fare gates and next-train countdowns.
 - ⛴️ **Ferries** between the real ghats, plus country boats, a speedboat and a jet ski.
+- 🚇 **Discovered Metro & Ferry Fast-Travel (M):** Click any discovered Metro station or Ferry Ghat on the full-screen map to fast-travel across the city for ₹20 with an authentic station chime.
 - 🎟️ **Ride or drive anything:** F to drive, V to ride as a passenger. Hire a taxi, auto or rickshaw to any place on the map and pay the meter; take a bus with route boards, a train, tram, Metro or ferry and pay the fare. You can even drive the trains, trams and Metro yourself.
 - 🧭 **GPS and search:** search any place, station or ghat, and the route follows one-way streets.
 
@@ -113,8 +114,13 @@ The short version of everything in the game. Details are in [Features](#-feature
 
 **Gameplay**
 - 💼 **Taxi & Courier duty:** pick up fares in taxis and autos, or deliver urgent food orders, parcels and book bundles in bikes, rickshaws and vans (**B**). Beat the clock, earn speed tips and build streaks.
+- 📻 **Multi-Station Procedural Radio ([ and ]):** Switch between three procedurally synthesized Web Audio stations with zero asset downloads:
+  - **Synthwave 96 (96.0 FM):** High-tempo retro synth driving track.
+  - **AIR Kolkata (657 kHz AM):** Akashvani classical sitar & flute drone, morning raga meend, and vintage AM crackle.
+  - **Park Street Disco (104.2 FM):** Funky 118 BPM 80s Bollywood/Bangla disco slap-bass groove and 4-on-the-floor beat.
+- ☕ **The "Adda" & Street Bench Mechanic (E):** Walk up to wooden park benches and roadside tea stalls along Prinsep Ghat, Maidan, Victoria Memorial, and College Street to sit down, sip clay-bhar cha, regenerate health, accelerate time (12x timelapse) to watch sunsets, and listen to local philosophical dialogues.
 - 📸 **Heritage Photo Mode (P):** freeze the city in time, orbit the camera freely, adjust zoom, height and filters (Normal, Vintage, Monsoon, Golden, Noir), and download watermark-stamped high-res snapshots.
-- 🏆 **Progress that's saved:** places discovered, 17 achievements, earnings, deliveries and your best streak.
+- 🏆 **Progress that's saved:** places discovered, 19 achievements, earnings, deliveries and your best streak.
 - 🏎️ **Driving:** drifts, nitro, weight transfer, damage, fire and explosions.
 - 🔫 **Combat:** seven weapons, a punch and kick combo, headshots, and a weapon wheel in slow motion.
 - ❤️ **Health, ₹ money, ammo crates** and a hospital bill when you go down.
