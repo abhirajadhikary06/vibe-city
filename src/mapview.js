@@ -68,7 +68,12 @@ export class MapView {
     });
     c.addEventListener('pointermove', (e) => {
       this.hover = this.toWorld(e.clientX, e.clientY);
-      if (!this.drag) return;
+      if (!this.drag) {
+        const nearby = this.findNearbyTransit(this.hover);
+        c.style.cursor = nearby ? 'pointer' : 'default';
+        return;
+      }
+      c.style.cursor = 'grabbing';
       const dx = e.clientX - this.drag.x;
       const dy = e.clientY - this.drag.y;
       if (Math.hypot(dx, dy) > 4) this.drag.moved = true;
@@ -195,17 +200,30 @@ export class MapView {
       const seen = new Set();
       for (const p of this.labels) {
         if (p.k === 'metro') {
-          const cleanName = p.n.replace(/\s*\(line \d\)/i, '').trim();
-          if (!seen.has(cleanName.toLowerCase())) {
-            seen.add(cleanName.toLowerCase());
-            targets.push({ id: `metro_${cleanName}`, name: cleanName, x: p.x, z: p.z, kind: 'metro', icon: '🚇' });
+          const clean = p.n.replace(/\s*\(line \d\)/i, '').replace(/metro/i, '').trim();
+          const key = clean.toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            targets.push({ id: `metro_${key}`, name: `${clean} Metro`, x: p.x, z: p.z, kind: 'metro', icon: '🚇', color: '#1a5ec4' });
           }
-        } else if (p.k === 'ghat' || (p.k === 'station' && /ghat/i.test(p.n))) {
-          const cleanName = p.n.replace(/\s*\(.*?\)/, '').trim();
-          if (!seen.has(cleanName.toLowerCase())) {
-            seen.add(cleanName.toLowerCase());
-            targets.push({ id: `ghat_${cleanName}`, name: cleanName, x: p.x, z: p.z, kind: 'ferry', icon: '⛴️' });
-          }
+        }
+      }
+      const ferryGhats = [
+        { name: 'Prinsep Ghat', x: -2797, z: 1062 },
+        { name: 'Babu Ghat', x: -1940, z: 120 },
+        { name: 'Fairlie Ghat', x: -1368, z: -1020 },
+        { name: 'Howrah Ghat', x: -1481, z: -1840 },
+        { name: 'Armenian Ghat', x: -1073, z: -1805 },
+        { name: 'Ahiritola Ghat', x: -547, z: -3339 },
+        { name: 'Nimtala Ghat', x: -710, z: -3025 },
+        { name: 'Outram Ghat', x: -2100, z: 215 },
+        { name: 'Jagannath Ghat', x: -912, z: -2384 },
+      ];
+      for (const f of ferryGhats) {
+        const key = f.name.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          targets.push({ id: `ferry_${key}`, name: f.name, x: f.x, z: f.z, kind: 'ferry', icon: '⛴️', color: '#0099cc' });
         }
       }
       this._transitTargets = targets;
@@ -348,20 +366,65 @@ export class MapView {
         g.stroke();
       }
     }
-    // Discovered transit stations highlight rings
+    // Render Metro & Ferry Station Markers on the map
     const targets = this.getTransitTargets();
     for (const t of targets) {
       const disc = this.isDiscovered(t);
       const sx = X(t.x);
       const sy = Y(t.z);
-      if (sx < -40 || sx > W + 40 || sy < -40 || sy > H + 40) continue;
+      if (sx < -60 || sx > W + 60 || sy < -60 || sy > H + 60) continue;
+
+      const isHovered = this.hover && Math.hypot(t.x - this.hover.x, t.z - this.hover.z) < 40 / Math.max(0.35, S);
+      const radius = isHovered ? 13 : disc ? 11 : 9;
+
+      // 1. Subtle glow / pulse ring for discovered stations
+      if (disc) {
+        g.beginPath();
+        g.arc(sx, sy, radius + 4, 0, Math.PI * 2);
+        g.fillStyle = t.kind === 'metro' ? 'rgba(47, 111, 224, 0.28)' : 'rgba(0, 196, 255, 0.28)';
+        g.fill();
+      }
+
+      // 2. Pin / Badge circle
       g.beginPath();
-      g.arc(sx, sy, disc ? 9 : 6, 0, Math.PI * 2);
-      g.fillStyle = disc ? (t.kind === 'metro' ? 'rgba(47, 111, 224, 0.4)' : 'rgba(93, 255, 158, 0.4)') : 'rgba(255, 255, 255, 0.08)';
+      g.arc(sx, sy, radius, 0, Math.PI * 2);
+      g.fillStyle = disc ? (t.kind === 'metro' ? '#1a5ec4' : '#0099cc') : '#252932';
       g.fill();
-      g.lineWidth = disc ? 2 : 1;
-      g.strokeStyle = disc ? (t.kind === 'metro' ? '#6ea6ff' : '#5dff9e') : 'rgba(255, 255, 255, 0.2)';
+      g.lineWidth = 2;
+      g.strokeStyle = disc ? '#ffffff' : '#556070';
       g.stroke();
+
+      // 3. Icon / Letter in center
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      if (t.kind === 'metro') {
+        g.fillStyle = disc ? '#ffffff' : '#8899aa';
+        g.font = `bold ${radius > 10 ? 12 : 10}px Rajdhani`;
+        g.fillText('M', sx, sy + 0.5);
+      } else {
+        g.fillStyle = disc ? '#ffffff' : '#8899aa';
+        g.font = `bold ${radius > 10 ? 11 : 9}px Rajdhani`;
+        g.fillText('F', sx, sy + 0.5);
+      }
+
+      // 4. Station Name Label under marker (when zoomed in or hovered)
+      if (S > 0.4 || isHovered) {
+        const labelY = sy + radius + 10;
+        const txt = t.name;
+        g.font = isHovered ? 'bold 12px Rajdhani' : '600 11px Rajdhani';
+        const tw = g.measureText(txt).width;
+
+        // Label pill background for maximum readability against roads and buildings
+        g.fillStyle = 'rgba(10, 14, 22, 0.85)';
+        g.fillRect(sx - tw / 2 - 5, labelY - 7, tw + 10, 15);
+        g.strokeStyle = disc ? (t.kind === 'metro' ? 'rgba(70, 140, 255, 0.6)' : 'rgba(0, 210, 255, 0.6)') : 'rgba(255, 255, 255, 0.15)';
+        g.lineWidth = 1;
+        g.strokeRect(sx - tw / 2 - 5, labelY - 7, tw + 10, 15);
+
+        // Label text
+        g.fillStyle = disc ? (t.kind === 'metro' ? '#8ec2ff' : '#6fe6ff') : '#99a8b8';
+        g.fillText(txt, sx, labelY + 0.5);
+      }
     }
 
     // Blips

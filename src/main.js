@@ -696,8 +696,20 @@ async function boot() {
     const r = rail.mapLayers();
     const pts = (t) => t.x.filter((_, i) => i % 10 === 0).map((x, i) => [x, t.z[i * 10]]);
     for (const l of metro.lines) r.lines.push({ pts: pts(l.track), color: l.color, width: 4, dash: [7, 5] });
-    for (const st of metro.stations) r.stations.push({ x: st.x, z: st.z, color: st.color, label: 'M' });
+    for (const st of metro.stations) r.stations.push({ x: st.x, z: st.z, color: st.color, label: 'M', name: st.name });
     for (const t of rail.tramStops) r.stations.push({ x: t.x, z: t.z, color: '#3f86d8', label: 'T', name: t.name, small: true });
+    const ferryGhats = [
+      { name: 'Prinsep Ghat', x: -2797, z: 1062 },
+      { name: 'Babu Ghat', x: -1940, z: 120 },
+      { name: 'Fairlie Ghat', x: -1368, z: -1020 },
+      { name: 'Howrah Ghat', x: -1481, z: -1840 },
+      { name: 'Armenian Ghat', x: -1073, z: -1805 },
+      { name: 'Ahiritola Ghat', x: -547, z: -3339 },
+      { name: 'Nimtala Ghat', x: -710, z: -3025 },
+      { name: 'Outram Ghat', x: -2100, z: 215 },
+      { name: 'Jagannath Ghat', x: -912, z: -2384 },
+    ];
+    for (const gh of ferryGhats) r.stations.push({ x: gh.x, z: gh.z, color: '#00c4ff', label: 'F', name: gh.name });
     hud.drawTransit(r.lines, r.stations);
   }
   mapView = new MapView(hud);
@@ -745,6 +757,7 @@ async function boot() {
   mapView.addPlaces([
     ...metro.stations.map((st) => ({ n: `${st.name} Metro (${st.line})`, x: st.x, z: st.z, k: 'metro', tier: 1 })),
     ...rail.tramStops.map((t) => ({ n: `${t.name} Tram Stop`, x: t.x, z: t.z, k: 'tram', tier: 3 })),
+    ...ferryGhats.map((gh) => ({ n: `${gh.name} Ferry Ghat`, x: gh.x, z: gh.z, k: 'ghat', tier: 1 })),
   ]);
   input.onWheel = (open, vec, kind) => {
     const can = state === 'play' && player.mode === 'foot' && !player.dead;
