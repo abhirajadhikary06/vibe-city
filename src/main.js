@@ -388,11 +388,18 @@ function updateCamera(dt) {
       cam.lookPitch = damp(cam.lookPitch, 0, 3, dt);
     }
     let heading = v.yaw;
-    if (v.speed > 3 && v.vf > -1) heading = dampAngle(v.yaw, Math.atan2(v.vel.x, v.vel.y), 1, 0.35);
+    if (p.passenger) {
+      // riding: look the way it's going, even when a tram or train runs cab-end backwards;
+      // stopped, keep looking that way rather than swinging round to the nose
+      if (cam.rideV !== v) {
+        cam.rideV = v;
+        cam.rideYaw = null;
+      }
+      if (Math.hypot(v.vel.x, v.vel.y) > 1) cam.rideYaw = Math.atan2(v.vel.x, v.vel.y);
+      if (cam.rideYaw != null) heading = cam.rideYaw;
+    } else if (v.speed > 3 && v.vf > -1) heading = dampAngle(v.yaw, Math.atan2(v.vel.x, v.vel.y), 1, 0.35);
     cam.yaw = dampAngle(cam.yaw, heading, 5, dt);
     const m = CAR_CAMS[cam.mode];
-    const fx = Math.sin(v.yaw);
-    const fz = Math.cos(v.yaw);
     if (cam.mode === 2) {
       // Rail: ride up front just past the windscreen; road vehicles: the driver's eyes
       const eye = v.rail ? v.local(0, v.def.hl + 0.4) : v.local(v.def.seatX, v.def.seatZ + 0.2);
@@ -415,7 +422,8 @@ function updateCamera(dt) {
       if (v.pos.y < -2.5) ty = Math.min(ty, metro.ceilingAt(tx, tz) - 0.4);
       cam.pos.set(damp(cam.pos.x, tx, 14, dt), damp(cam.pos.y, ty, 8, dt), damp(cam.pos.z, tz, 14, dt));
       camera.position.copy(cam.pos);
-      camera.lookAt(v.pos.x + fx * 2, v.pos.y + m.look, v.pos.z + fz * 2);
+      const ahead = p.passenger ? cam.yaw : v.yaw;
+      camera.lookAt(v.pos.x + Math.sin(ahead) * 2, v.pos.y + m.look, v.pos.z + Math.cos(ahead) * 2);
     }
     targetFov = 60 + clamp(v.speed / 70, 0, 1) * 16 + (v.nitroOn ? 8 : 0);
   }
@@ -812,6 +820,11 @@ document.addEventListener('pointerlockchange', () => {
   if (!locked && wasLocked && state === 'play') setPaused(true);
   wasLocked = locked;
 });
+/** Which way the player's vehicle is going: riding, the way it's travelling (the camera's); else its nose. */
+function vehicleHeading(v) {
+  return player.passenger && cam.rideV === v && cam.rideYaw != null ? cam.rideYaw : v.yaw;
+}
+
 /* ---------- Map, waypoint and GPS route ---------- */
 let waypoint = null;
 let route = null;
@@ -1002,7 +1015,7 @@ function loop() {
   if ((state === 'play' && input.hit('KeyM')) || (state === 'map' && (input.hit('KeyM') || input.hit('Escape')))) setMap(state === 'play');
   if (state === 'map') {
     if (waypoint && !route) route = world.graph.route(player.focus.x, player.focus.z, waypoint.x, waypoint.z);
-    mapView.draw(player, gameplay.blips(), waypoint, route);
+    mapView.draw(player, gameplay.blips(), waypoint, route, player.vehicle && player.mode !== 'foot' ? vehicleHeading(player.vehicle) : player.yaw);
     input.endFrame();
     return;
   }
@@ -1219,7 +1232,7 @@ function loop() {
       dead: player.dead,
     });
   }
-  const mm = pv ? { pos: pv.pos, yaw: pv.yaw, speed: pv.speed } : { pos: player.pos, yaw: cam.yaw, speed: player.speed };
+  const mm = pv ? { pos: pv.pos, yaw: vehicleHeading(pv), speed: pv.speed } : { pos: player.pos, yaw: cam.yaw, speed: player.speed };
   hud.update(dt, mm, day.hours, blipsFn, pv, camera);
   audio.update({
     rpm: pv ? pv.rpm : 0.2,
