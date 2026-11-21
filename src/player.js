@@ -289,6 +289,10 @@ export class Player {
       g.rides.update(dt, T, input);
       return;
     }
+    if (this.mode === 'adda') {
+      if (g.adda) g.adda.update(dt, T, g, input);
+      return;
+    }
     if (this.mode === 'driving') {
       const v = this.vehicle;
       v.update(dt, inp, g.night);
@@ -550,8 +554,9 @@ export class Player {
     // Interactions
     const nearCar = this.findVehicle();
     const nearPed = this.underground ? null : g.peds.nearest(this.pos.x, this.pos.z, 3.2, (n) => n.state !== 'down' && n.state !== 'dead' && n.state !== 'fight' && n.state !== 'shoot');
-    // Stalls and ticket windows (Howrah Station) come before chatting
+    // Stalls, Adda spots, and ticket windows come before chatting
     const spot = !this.underground && g.station ? g.station.near(this.pos) : null;
+    const addaSpot = !this.underground && g.adda ? g.adda.near(this.pos) : null;
     // V: ride as a passenger (hire a taxi, auto or rickshaw; board a bus, train, tram, metro or ferry)
     const ride = !this.aiming && g.rides ? g.rides.offer(this) : null;
     // Metro fare gate: ride (pay and go through) or don't (it stays shut)
@@ -591,6 +596,8 @@ export class Player {
       this.prompt = { key: 'V', text: ride.text };
     } else if (spot) {
       this.prompt = { key: 'E', text: spot.text };
+    } else if (addaSpot) {
+      this.prompt = { key: 'E', text: addaSpot.text };
     } else if (nearPed && !gun) {
       this.prompt = { key: 'E', text: 'Talk', key2: 'G', text2: 'Gesture' };
     }
@@ -611,6 +618,8 @@ export class Player {
       }
     } else if (input.hit('KeyE') && spot) {
       spot.act();
+    } else if (input.hit('KeyE') && addaSpot) {
+      addaSpot.act(this);
     } else if (input.hit('KeyE') && nearPed && !gun) {
       this.talkTo(nearPed);
     }

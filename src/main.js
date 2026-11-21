@@ -20,6 +20,7 @@ import { weaponIcons } from './weapons.js';
 import { Boat, RiverTraffic, buildGhats } from './boats.js';
 import { MapView, routeLength } from './mapview.js';
 import { Station } from './station.js';
+import { AddaManager } from './adda.js';
 import { Voices } from './voice.js';
 import { Rides } from './ride.js';
 import { Boards } from './boards.js';
@@ -82,7 +83,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 3200);
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, rides, boards, progress, jobs, weather;
+let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, adda, rides, boards, progress, jobs, weather;
 const vehicles = [];
 const audio = new AudioEngine();
 const voices = new Voices(audio);
@@ -190,6 +191,12 @@ const game = {
   },
   get jobs() {
     return jobs;
+  },
+  get adda() {
+    return adda;
+  },
+  get day() {
+    return day;
   },
   /** Ask the player for a destination on the map; cb(point | null). */
   pickDestination(text, cb) {
@@ -315,6 +322,13 @@ function updateCamera(dt) {
     camera.position.set(c.x + Math.cos(a) * 520, 140 + Math.sin(elapsed * 0.1) * 20, c.z + Math.sin(a) * 520);
     camera.lookAt(c.x, 30, c.z);
     camera.fov = 55;
+    camera.updateProjectionMatrix();
+    return;
+  }
+  if (adda && adda.active) {
+    camera.position.copy(cam.pos);
+    camera.lookAt(cam.look);
+    camera.fov = damp(camera.fov, 56, 4, dt);
     camera.updateProjectionMatrix();
     return;
   }
@@ -560,6 +574,7 @@ async function boot() {
   hud.voice = voices;
   station = new Station(scene, world, hud, rail);
   station.game = game;
+  adda = new AddaManager(scene, world, hud, audio);
   rides = new Rides(game, scene, world);
   const sp = station.spawn || [(BOUNDS.x0 + BOUNDS.x1) / 2, (BOUNDS.z0 + BOUNDS.z1) / 2];
   world.spawn = { x: sp[0], z: sp[1] };
@@ -686,7 +701,47 @@ async function boot() {
     hud.drawTransit(r.lines, r.stations);
   }
   mapView = new MapView(hud);
+  mapView.game = game;
   mapView.onWaypoint = setWaypoint;
+  mapView.onFastTravel = (target) => {
+    if (gameplay.money < 20) {
+      hud.notify('INSUFFICIENT FARE', 'Metro & Ferry fast-travel costs ₹20', '#ff5f6d');
+      audio.beep(false);
+      return;
+    }
+    gameplay.addMoney(-20);
+    if (target.kind === 'metro') {
+      audio.metroChime(0);
+    } else {
+      audio.honk(0, 'boat');
+    }
+    setMap(false);
+    hud.fadeTransition(0.8, () => {
+      if (player.mode === 'driving' && player.vehicle) {
+        player.vehicle.setDriven(false);
+        player.vehicle.locked = false;
+        player.vehicle = null;
+      }
+      player.mode = 'foot';
+      const gy = world.height(target.x, target.z);
+      player.pos.set(target.x, gy + 0.1, target.z);
+      player.yaw = 0;
+      player.vy = 0;
+      player.ch.mode = 'move';
+      player.ch.mesh.position.copy(player.pos);
+      player.ch.mesh.rotation.set(0, 0, 0);
+      updateCamera(0);
+      hud.notify(
+        target.kind === 'metro' ? `🚇 METRO: ${target.name.toUpperCase()}` : `⛴️ FERRY: ${target.name.toUpperCase()}`,
+        'Fast-travelled for ₹20 · Arrived safely',
+        '#5dff9e'
+      );
+      if (progress) {
+        progress.event(target.kind === 'metro' ? 'metro' : 'ferry');
+        progress.event('fastTravel');
+      }
+    });
+  };
   mapView.addPlaces([
     ...metro.stations.map((st) => ({ n: `${st.name} Metro (${st.line})`, x: st.x, z: st.z, k: 'metro', tier: 1 })),
     ...rail.tramStops.map((t) => ({ n: `${t.name} Tram Stop`, x: t.x, z: t.z, k: 'tram', tier: 3 })),
@@ -1253,7 +1308,23 @@ function loop() {
       refreshSoundButtons();
     }
     if (input.hit('KeyQ')) {
-      hud.notify(audio.toggleRadio() ? 'MUSIC ON' : 'MUSIC OFF', 'Background music · the city sounds stay on', '#b45bff');
+      const on = audio.toggleRadio();
+      if (on) {
+        const st = audio.currentStation;
+        hud.notify(`📻 ${st.name.toUpperCase()} · ${st.dial}`, st.desc, st.color);
+      } else {
+        hud.notify('📻 RADIO OFF', '[ or ] to tune in', '#b45bff');
+      }
+      refreshSoundButtons();
+    }
+    if (input.hit('BracketRight')) {
+      const st = audio.nextStation();
+      hud.notify(`📻 ${st.name.toUpperCase()} · ${st.dial}`, st.desc, st.color);
+      refreshSoundButtons();
+    }
+    if (input.hit('BracketLeft')) {
+      const st = audio.prevStation();
+      hud.notify(`📻 ${st.name.toUpperCase()} · ${st.dial}`, st.desc, st.color);
       refreshSoundButtons();
     }
     if (input.hit('KeyR') && player.mode === 'driving' && !player.vehicle.rail) resetToRoad(player.vehicle);
@@ -1373,7 +1444,8 @@ function loop() {
     const txt = weather.mode === 'live' && w.text ? `${w.icon} ${w.text}` : '';
     if (el.textContent !== txt) el.textContent = txt;
   }
-  day.update(dt, focus, camera.position);
+  const dayDt = adda && adda.active ? dt * 12 : dt;
+  day.update(dayDt, focus, camera.position);
   world.update(dt, elapsed, day.night, day.sunDir, camera.position);
   metro.update(day.night, dt);
   boards.update(dt, camera, day.time);

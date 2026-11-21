@@ -22,6 +22,32 @@ export class MapView {
     this.drag = null;
     this.hover = null;
     this.onWaypoint = null; // (point | null) => void
+    this.onFastTravel = null; // (transitTarget) => void
+    this.game = null;
+    this.selectedTransit = null;
+    this.ftCard = this.el.querySelector('#mfast-travel');
+    this.ftBtn = this.el.querySelector('#mft-btn');
+    this.ftClose = this.el.querySelector('#mft-close');
+    this.ftTitle = this.ftCard ? this.ftCard.querySelector('.mft-title') : null;
+    this.ftDesc = this.ftCard ? this.ftCard.querySelector('.mft-desc') : null;
+    this.ftIcon = this.ftCard ? this.ftCard.querySelector('.mft-icon') : null;
+
+    if (this.ftClose) {
+      this.ftClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.hideFastTravel();
+      });
+    }
+    if (this.ftBtn) {
+      this.ftBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.selectedTransit && this.onFastTravel) {
+          const t = this.selectedTransit;
+          this.hideFastTravel();
+          this.onFastTravel(t);
+        }
+      });
+    }
     // Place names: neighbourhoods when zoomed out, landmarks, stations and ghats closer in
     const seen = new Set();
     const tier = { town: 0, area: 0, airport: 0, landmark: 1, stadium: 1, station: 1, metro: 1, ghat: 2, market: 2, culture: 2, college: 3, hospital: 3, worship: 3, park: 3 };
@@ -50,7 +76,16 @@ export class MapView {
       this.cz = this.drag.cz - dy / this.scale;
     });
     c.addEventListener('pointerup', (e) => {
-      if (this.drag && !this.drag.moved && this.onWaypoint) this.onWaypoint(this.toWorld(e.clientX, e.clientY));
+      if (this.drag && !this.drag.moved) {
+        const wp = this.toWorld(e.clientX, e.clientY);
+        const transit = this.findNearbyTransit(wp);
+        if (transit) {
+          this.showFastTravel(transit);
+        } else {
+          this.hideFastTravel();
+          if (this.onWaypoint) this.onWaypoint(wp);
+        }
+      }
       this.drag = null;
     });
     c.addEventListener('contextmenu', (e) => {
@@ -154,6 +189,88 @@ export class MapView {
     if (this.onWaypoint) this.onWaypoint({ x: p.x, z: p.z });
   }
 
+  getTransitTargets() {
+    if (!this._transitTargets) {
+      const targets = [];
+      const seen = new Set();
+      for (const p of this.labels) {
+        if (p.k === 'metro') {
+          const cleanName = p.n.replace(/\s*\(line \d\)/i, '').trim();
+          if (!seen.has(cleanName.toLowerCase())) {
+            seen.add(cleanName.toLowerCase());
+            targets.push({ id: `metro_${cleanName}`, name: cleanName, x: p.x, z: p.z, kind: 'metro', icon: '🚇' });
+          }
+        } else if (p.k === 'ghat' || (p.k === 'station' && /ghat/i.test(p.n))) {
+          const cleanName = p.n.replace(/\s*\(.*?\)/, '').trim();
+          if (!seen.has(cleanName.toLowerCase())) {
+            seen.add(cleanName.toLowerCase());
+            targets.push({ id: `ghat_${cleanName}`, name: cleanName, x: p.x, z: p.z, kind: 'ferry', icon: '⛴️' });
+          }
+        }
+      }
+      this._transitTargets = targets;
+    }
+    return this._transitTargets;
+  }
+
+  findNearbyTransit(worldPos, maxDist = null) {
+    const lim = maxDist != null ? maxDist : 50 / Math.max(0.35, this.scale);
+    const targets = this.getTransitTargets();
+    let best = null;
+    let bestDist = Infinity;
+    for (const t of targets) {
+      const d = Math.hypot(t.x - worldPos.x, t.z - worldPos.z);
+      if (d < lim && d < bestDist) {
+        best = t;
+        bestDist = d;
+      }
+    }
+    return best;
+  }
+
+  isDiscovered(transit) {
+    if (!this.game || !this.game.progress) return true;
+    const visited = this.game.progress.visited;
+    if (!visited || visited.size === 0) {
+      const d = Math.hypot(transit.x - this.game.player.pos.x, transit.z - this.game.player.pos.z);
+      return d < 300;
+    }
+    const tName = transit.name.toLowerCase();
+    for (const v of visited) {
+      const vn = v.toLowerCase();
+      if (vn.includes(tName) || tName.includes(vn)) return true;
+    }
+    const d = Math.hypot(transit.x - this.game.player.pos.x, transit.z - this.game.player.pos.z);
+    return d < 250;
+  }
+
+  showFastTravel(transit) {
+    if (!this.ftCard) return;
+    this.selectedTransit = transit;
+    const discovered = this.isDiscovered(transit);
+    if (this.ftIcon) this.ftIcon.textContent = transit.kind === 'metro' ? '🚇' : '⛴️';
+    if (this.ftTitle) this.ftTitle.textContent = transit.name;
+    if (this.ftDesc && this.ftBtn) {
+      if (discovered) {
+        this.ftDesc.textContent = `Discovered ${transit.kind === 'metro' ? 'Metro Station' : 'Ferry Ghat'} · ₹20 Fare`;
+        this.ftBtn.textContent = `Take ${transit.kind === 'metro' ? 'Metro' : 'Ferry'} (₹20)`;
+        this.ftBtn.classList.remove('locked');
+        this.ftBtn.disabled = false;
+      } else {
+        this.ftDesc.textContent = '🔒 Undiscovered Location · Visit in person first to unlock';
+        this.ftBtn.textContent = 'Locked (Explore First)';
+        this.ftBtn.classList.add('locked');
+        this.ftBtn.disabled = true;
+      }
+    }
+    this.ftCard.classList.remove('hidden');
+  }
+
+  hideFastTravel() {
+    this.selectedTransit = null;
+    if (this.ftCard) this.ftCard.classList.add('hidden');
+  }
+
   toWorld(sx, sy) {
     return { x: this.cx + (sx - innerWidth / 2) / this.scale, z: this.cz + (sy - innerHeight / 2) / this.scale };
   }
@@ -161,6 +278,7 @@ export class MapView {
   show(on, focus) {
     this.open = on;
     this.el.classList.toggle('hidden', !on);
+    this.hideFastTravel();
     if (!on) {
       this.searchInput.blur();
       this.results.innerHTML = '';
@@ -230,6 +348,22 @@ export class MapView {
         g.stroke();
       }
     }
+    // Discovered transit stations highlight rings
+    const targets = this.getTransitTargets();
+    for (const t of targets) {
+      const disc = this.isDiscovered(t);
+      const sx = X(t.x);
+      const sy = Y(t.z);
+      if (sx < -40 || sx > W + 40 || sy < -40 || sy > H + 40) continue;
+      g.beginPath();
+      g.arc(sx, sy, disc ? 9 : 6, 0, Math.PI * 2);
+      g.fillStyle = disc ? (t.kind === 'metro' ? 'rgba(47, 111, 224, 0.4)' : 'rgba(93, 255, 158, 0.4)') : 'rgba(255, 255, 255, 0.08)';
+      g.fill();
+      g.lineWidth = disc ? 2 : 1;
+      g.strokeStyle = disc ? (t.kind === 'metro' ? '#6ea6ff' : '#5dff9e') : 'rgba(255, 255, 255, 0.2)';
+      g.stroke();
+    }
+
     // Blips
     for (const b of blips) {
       g.beginPath();

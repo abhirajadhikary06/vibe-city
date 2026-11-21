@@ -31,6 +31,7 @@ export class HUD {
       play: $('play'),
       pause: $('pause'),
       photo: $('photo-mode'),
+      fade: $('screen-fade'),
     };
     this.mm = $('minimap').getContext('2d');
     this.sp = $('speedo').getContext('2d');
@@ -487,6 +488,20 @@ export class HUD {
     this.el.notify.appendChild(n);
     while (this.el.notify.children.length > 3) this.el.notify.firstChild.remove();
     setTimeout(() => n.remove(), 3300);
+  }
+  fadeTransition(duration = 0.8, onBlack = null) {
+    const el = this.el.fade;
+    if (!el) {
+      if (onBlack) onBlack();
+      return;
+    }
+    el.classList.add('black');
+    setTimeout(() => {
+      if (onBlack) onBlack();
+      setTimeout(() => {
+        el.classList.remove('black');
+      }, duration * 350);
+    }, duration * 450);
   }
   mission(html) {
     if (!html) {
