@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { paint, merge } from './utils.js';
 import { OUTFITS } from './character.js';
+import { drawDressPreview } from './dresspreview.js';
 
 /*
  * Wardrobe & Outfit Customizer (New Market / College Street)
@@ -217,8 +218,11 @@ export class WardrobeManager {
       const canAfford = currentMoney >= outfit.price;
 
       card.innerHTML = `
-        <div class="wc-swatch" style="background: ${outfit.swatch}">
-          <span class="wc-icon">${outfit.icon || '👕'}</span>
+        <div class="wc-preview-wrap">
+          <canvas class="wc-preview-canvas" width="260" height="240"></canvas>
+          <div class="wc-tag ${currentId === outfit.id ? 'tag-equipped' : owned ? 'tag-owned' : ''}">
+            ${currentId === outfit.id ? 'EQUIPPED' : outfit.price === 0 ? 'FREE' : owned ? 'OWNED' : `₹${outfit.price}`}
+          </div>
         </div>
         <div class="wc-info">
           <div class="wc-title">${outfit.name}</div>
@@ -232,6 +236,11 @@ export class WardrobeManager {
           </button>
         </div>
       `;
+
+      const canvas = card.querySelector('.wc-preview-canvas');
+      if (canvas) {
+        drawDressPreview(canvas, outfit);
+      }
 
       const btn = card.querySelector('.wc-btn');
       btn.addEventListener('click', (e) => {
