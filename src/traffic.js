@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { buildCarMesh, setCarLOD, TYPES, crashDamage } from './car.js';
 import { clamp, dampAngle } from './utils.js';
+import { routesNear, routePlan, dressBus } from './busroutes.js';
 
 // Kolkata traffic: yellow taxis everywhere, buses in WBTC blue, private-bus colours and CTC green
 const COLORS = [0xf5f5f5, 0xf5f5f5, 0x1d1f24, 0x8a8f96, 0x2a4fa8, 0xb8262e, 0xc9c2b0, 0x14324d, 0xd9d4c5, 0x6b6f75];
 const TYPE_POOL = ['taxi', 'taxi', 'taxi', 'taxi', 'taxi', 'ambassador', 'ambassador', 'sedan', 'sedan', 'van', 'pickup', 'truck', 'rickshaw', 'rickshaw', 'bike', 'auto', 'auto', 'auto'];
-// A fixed share of the traffic is buses, so there are always some about
+// A fixed share of the traffic is buses, so there are always some about. Each one runs a real
+// numbered route (busroutes.js), and its livery and board come from that route.
 const BUS_SHARE = 0.25;
-const FIXED_COLOR = { taxi: 0xf2c21b, ambassador: [0xf4f4f0, 0xf4f4f0, 0x1d1f24, 0xe8e2d0], rickshaw: [0x2b4a8a, 0xffffff], schoolbus: 0xf2b705, truck: [0xd8682a, 0x2f6b46, 0x1b4f9a], bus: [0x2f5fb3, 0xd99a22, 0x2f8a4a, 0xc8382c, 0x2f5fb3, 0xd99a22] };
+const FIXED_COLOR = { taxi: 0xf2c21b, ambassador: [0xf4f4f0, 0xf4f4f0, 0x1d1f24, 0xe8e2d0], rickshaw: [0x2b4a8a, 0xffffff], schoolbus: 0xf2b705, truck: [0xd8682a, 0x2f6b46, 0x1b4f9a] };
 
 function evalSeg(seg, t, out) {
   const { a, b, c } = seg;
@@ -64,6 +66,12 @@ export class Traffic {
   }
 
   makeCar(near, minD = 120, type = TYPE_POOL[Math.floor(Math.random() * TYPE_POOL.length)]) {
+    if (type === 'bus') {
+      // the bus's mesh is made once it has a route to wear
+      const car = { mesh: null, type, def: TYPES.bus, color: 0, x: 1e6, z: 1e6, y: 0, yaw: 0, speed: 0, cruise: 0, vel: new THREE.Vector2(), stopT: 0, ghost: 0, spin: 0, honkT: 0, panicT: 0 };
+      if (!this.spawnBus(car, near, minD) && !this.spawnBus(car, near, 0, 600)) this.park(car);
+      return car;
+    }
     const fixed = FIXED_COLOR[type];
     const color = fixed === undefined ? COLORS[Math.floor(Math.random() * COLORS.length)] : Array.isArray(fixed) ? fixed[Math.floor(Math.random() * fixed.length)] : fixed;
     const mesh = buildCarMesh(type, color);
@@ -109,6 +117,95 @@ export class Traffic {
     return false;
   }
 
+  /**
+   * A bus: onto one of the routes through the streets round `near`, part way along it, in
+   * that route's livery and with its board. false if no route passes close enough.
+   */
+  spawnBus(car, near, minD = 120, maxD = 280) {
+    const t = this.tmp;
+    const routes = routesNear(near.x, near.z, maxD);
+    for (let tries = 0; tries < 10 && routes.length; tries++) {
+      const route = routes.splice(Math.floor(Math.random() * routes.length), 1)[0];
+      const back = Math.random() < 0.5;
+      const plan = routePlan(this.graph, route, back);
+      const ok = [];
+      plan.links.forEach((l, i) => {
+        const lane = l.e.lanes[l.dir];
+        if (lane.len < 25) return;
+        lane.at(lane.len / 2, t);
+        const d = Math.hypot(t.x - near.x, t.z - near.z);
+        if (d >= minD && d <= maxD) ok.push(i);
+      });
+      for (let k = 0; k < 6 && ok.length; k++) {
+        const i = ok[Math.floor(Math.random() * ok.length)];
+        const { e, dir } = plan.links[i];
+        const lane = e.lanes[dir];
+        const trim = trimOf(lane);
+        const s = trim + Math.random() * (lane.len - trim * 2);
+        lane.at(s, t);
+        if (this.cars.some((o) => o !== car && Math.hypot(o.x - t.x, o.z - t.z) < 25)) continue;
+        if (!car.mesh || car.color !== route.livery) {
+          if (car.mesh) this.scene.remove(car.mesh.root);
+          car.mesh = buildCarMesh('bus', route.livery);
+          car.color = route.livery;
+          this.scene.add(car.mesh.root);
+          car.busRoute = null;
+        }
+        if (car.busRoute !== route) dressBus(car.mesh.body, this.graph, route);
+        car.busRoute = route;
+        car.busBack = back;
+        car.busLinks = plan.links;
+        car.busI = i;
+        car.idle = 0;
+        car.e = e;
+        car.dir = dir;
+        car.lane = lane;
+        car.seg = null;
+        car.next = null;
+        car.s = s;
+        car.sEnd = lane.len - trim;
+        car.cruise = (0.85 + Math.random() * 0.3) * 0.8;
+        car.speed = Math.min(e.speed, 12) * car.cruise;
+        car.ghost = 0;
+        car.x = t.x;
+        car.z = t.z;
+        car.yaw = Math.atan2(t.tx, t.tz);
+        car.mesh.root.position.set(car.x, 0, car.z);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** A bus with no route near the player waits out of sight until there is one. */
+  park(car) {
+    if (!car.mesh) {
+      car.mesh = buildCarMesh('bus', 0x2f5fb3);
+      car.color = 0x2f5fb3;
+      this.scene.add(car.mesh.root);
+    }
+    car.mesh.root.visible = false;
+    car.idle = 1;
+    car.x = car.z = 1e6;
+    car.speed = 0;
+    car.vel.set(0, 0);
+  }
+
+  /** A bus at the end of its run turns round for the trip back; false if it can't get there. */
+  turnBus(car) {
+    const g = this.graph;
+    const node = car.dir > 0 ? car.e.b : car.e.a;
+    const back = routePlan(g, car.busRoute, !car.busBack);
+    if (!back.links.length) return false;
+    const first = back.links[0];
+    const way = g.links(node, first.dir > 0 ? first.e.a : first.e.b, 3000);
+    if (!way) return false;
+    car.busLinks = [car.busLinks[car.busI], ...way, ...back.links];
+    car.busI = 0;
+    car.busBack = !car.busBack;
+    return true;
+  }
+
   /** At the end of a lane: pick the next street and build a curve through the junction. */
   advance(car) {
     if (car.seg) {
@@ -122,36 +219,17 @@ export class Traffic {
       car.next = null;
       return;
     }
-    const g = this.graph;
-    const node = g.nodes[car.dir > 0 ? car.e.b : car.e.a];
     const t0 = car.lane.at(car.sEnd, {});
-    let opts = node.out.filter((o) => o.e !== car.e && o.e.c <= 5);
-    if (!opts.length) opts = node.out.filter((o) => o.e === car.e);
-    if (!opts.length) opts = [{ e: car.e, dir: -car.dir }].filter((o) => o.e.lanes[o.dir]);
-    if (!opts.length) {
-      car.respawn = true;
-      return;
-    }
-    // Prefer carrying straight on, and staying on roads at least as big
-    let total = 0;
-    const w = opts.map((o) => {
-      const l = o.e.lanes[o.dir];
-      const p = l.at(trimOf(l), {});
-      const straight = 0.25 + Math.max(0, p.tx * t0.tx + p.tz * t0.tz);
-      const size = o.e.c <= car.e.c ? 1.6 : o.e.c >= 5 ? 0.25 : 0.8;
-      const v = straight * size;
-      total += v;
-      return v;
-    });
-    let r = Math.random() * total;
-    let pick = opts[0];
-    for (let i = 0; i < opts.length; i++) {
-      r -= w[i];
-      if (r <= 0) {
-        pick = opts[i];
-        break;
+    let pick;
+    if (car.busLinks) {
+      // a route bus takes the next street of its route
+      if (car.busI + 1 >= car.busLinks.length && !this.turnBus(car)) {
+        car.respawn = true;
+        return;
       }
-    }
+      pick = car.busLinks[++car.busI];
+    } else pick = this.choose(car, t0);
+    if (!pick) return;
     const nl = pick.e.lanes[pick.dir];
     const t1 = nl.at(trimOf(nl), {});
     const a = { x: t0.x, z: t0.z };
@@ -167,6 +245,35 @@ export class Traffic {
     car.seg = { a, b, c, len: Math.max(0.5, curveLen(a, c, b)) };
     car.s = 0;
     car.next = pick;
+  }
+
+  /** The next street at a junction for a car that isn't on a route. */
+  choose(car, t0) {
+    const node = this.graph.nodes[car.dir > 0 ? car.e.b : car.e.a];
+    let opts = node.out.filter((o) => o.e !== car.e && o.e.c <= 5);
+    if (!opts.length) opts = node.out.filter((o) => o.e === car.e);
+    if (!opts.length) opts = [{ e: car.e, dir: -car.dir }].filter((o) => o.e.lanes[o.dir]);
+    if (!opts.length) {
+      car.respawn = true;
+      return null;
+    }
+    // Prefer carrying straight on, and staying on roads at least as big
+    let total = 0;
+    const w = opts.map((o) => {
+      const l = o.e.lanes[o.dir];
+      const p = l.at(trimOf(l), {});
+      const straight = 0.25 + Math.max(0, p.tx * t0.tx + p.tz * t0.tz);
+      const size = o.e.c <= car.e.c ? 1.6 : o.e.c >= 5 ? 0.25 : 0.8;
+      const v = straight * size;
+      total += v;
+      return v;
+    });
+    let r = Math.random() * total;
+    for (let i = 0; i < opts.length; i++) {
+      r -= w[i];
+      if (r <= 0) return opts[i];
+    }
+    return opts[0];
   }
 
   /** Remove a car from AI control; a fresh car spawns elsewhere to keep density. */
@@ -202,9 +309,17 @@ export class Traffic {
     for (let ci = 0; ci < this.cars.length; ci++) {
       const car = this.cars[ci];
       const distP = Math.hypot(car.x - focus.x, car.z - focus.z);
+      if (car.idle) {
+        // a parked-up bus looks for a route every second or so
+        car.idle -= dt;
+        if (car.idle <= 0 && !this.spawnBus(car, focus) && !this.spawnBus(car, focus, 40, 400)) this.park(car);
+        continue;
+      }
       if (distP > 330 || car.respawn) {
         car.respawn = false;
-        if (!this.spawn(car, focus)) this.spawn(car, focus, 40, 400);
+        if (car.type === 'bus') {
+          if (!this.spawnBus(car, focus) && !this.spawnBus(car, focus, 40, 400)) this.park(car);
+        } else if (!this.spawn(car, focus)) this.spawn(car, focus, 40, 400);
         continue;
       }
       const fx = Math.sin(car.yaw);

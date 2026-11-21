@@ -3,6 +3,7 @@ import { Character } from './character.js';
 import { LINES, pick } from './lines.js';
 import { MAP, inPoly } from './geo.js';
 import { merge, paint, damp, dampAngle } from './utils.js';
+import { terminusRoutes } from './busroutes.js';
 
 /*
  * Life at Howrah Station: a ticket window, food and book stalls on the
@@ -144,13 +145,14 @@ export class Station {
     if (bus) {
       const n = world.graph.nearest(bus.x, bus.z, 120);
       const yaw = n ? Math.atan2(n.tx, n.tz) : a;
-      const cols = [0x2f5fb3, 0xd99a22, 0x2f8a4a, 0xc8382c, 0x2f5fb3];
-      for (let i = 0; i < 5; i++) {
+      // real routes that start (or end) here, each waiting to leave
+      const runs = terminusRoutes(world.graph, /^howrah (station|stn)$/i, 5);
+      runs.forEach((run, i) => {
         const off = (i - 2) * 4.2;
         const x = bus.x + Math.cos(yaw) * off;
         const z = bus.z - Math.sin(yaw) * off;
-        if (!world.collideCircle(x, z, 1.8)) this.parked.push(['bus', cols[i], x, z, yaw]);
-      }
+        if (!world.collideCircle(x, z, 1.8)) this.parked.push(['bus', run.route.livery, x, z, yaw, run]);
+      });
     }
     // The taxi rank: two long rows of yellow Ambassadors, and the pre-paid taxi booth
     for (const row of [12, 17]) {

@@ -378,10 +378,16 @@ function routeBoard(L, key = L) {
     g.font = 'bold 50px Arial';
     g.fillText(L.no, 66, h / 2 + 2, 116);
     const cx = (131 + w) / 2;
-    g.font = `bold 32px ${BN_FONT}`;
-    g.fillText(L.bn, cx, 26, 360);
-    g.font = 'bold 26px Arial';
-    g.fillText(L.en, cx, 60, 360);
+    // with no Bengali for the termini, the English gets the whole top of the board
+    if (L.bn) {
+      g.font = `bold 32px ${BN_FONT}`;
+      g.fillText(L.bn, cx, 26, 360);
+      g.font = 'bold 26px Arial';
+      g.fillText(L.en, cx, 60, 360);
+    } else {
+      g.font = 'bold 34px Arial';
+      g.fillText(L.en, cx, 42, 360);
+    }
     if (L.via) {
       g.fillRect(140, 82, w - 150, 38);
       g.fillStyle = L.board;
@@ -400,10 +406,17 @@ function routeBoard(L, key = L) {
     g.fillText(L.no, 90, h / 2 + 2, 160);
     g.fillRect(178, 10, 3, h - 20);
     const cx = (181 + w) / 2;
-    g.font = `bold 36px ${BN_FONT}`;
-    g.fillText(L.bn, cx, 28, 820);
-    g.font = 'bold 28px Arial';
-    g.fillText(L.via ? `${L.en}  ·  VIA ${L.via}` : L.en, cx, 70, 820);
+    if (L.bn) {
+      g.font = `bold 36px ${BN_FONT}`;
+      g.fillText(L.bn, cx, 28, 820);
+      g.font = 'bold 28px Arial';
+      g.fillText(L.via ? `${L.en}  ·  VIA ${L.via}` : L.en, cx, 70, 820);
+    } else {
+      g.font = 'bold 36px Arial';
+      g.fillText(L.en, cx, L.via ? 28 : h / 2, 820);
+      g.font = 'bold 28px Arial';
+      if (L.via) g.fillText(`VIA ${L.via}`, cx, 70, 820);
+    }
   });
   // Glass: the route painted on the windscreen and rear window, letters only
   const glass = canvasTex(1024, 140, (g, w, h) => {
@@ -413,11 +426,12 @@ function routeBoard(L, key = L) {
     g.lineWidth = 8;
     g.strokeStyle = '#111';
     g.fillStyle = L.painted ? '#ffd23a' : '#ffffff';
-    g.font = `bold 62px ${BN_FONT}`;
-    g.strokeText(L.bn, w / 2, 42, 980);
-    g.fillText(L.bn, w / 2, 42, 980);
+    g.font = L.bn ? `bold 62px ${BN_FONT}` : 'bold 56px Arial';
+    const top = L.bn || L.en;
+    g.strokeText(top, w / 2, 42, 980);
+    g.fillText(top, w / 2, 42, 980);
     g.font = 'bold 44px Arial';
-    const en = L.via ? `${L.en} · VIA ${L.via}` : L.en;
+    const en = L.bn ? (L.via ? `${L.en} · VIA ${L.via}` : L.en) : L.via ? `VIA ${L.via}` : '';
     g.strokeText(en, w / 2, 108, 980);
     g.fillText(en, w / 2, 108, 980);
   });

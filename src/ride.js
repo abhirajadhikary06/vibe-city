@@ -3,7 +3,8 @@ import { Character } from './character.js';
 import { LINES, pick } from './lines.js';
 import { MAP, Poly, offsetLine, routeLength } from './geo.js';
 import { inTiles } from './world.js';
-import { clamp, damp, dampAngle } from './utils.js';
+import { routePlan, nearestLink, planPath, busHeading } from './busroutes.js';
+import { clamp, damp, dampAngle, etaText } from './utils.js';
 
 /*
  * Riding as a passenger instead of driving.
@@ -91,7 +92,8 @@ export class Rides {
     if (type === 'launch') return { text: `Board the ferry · ₹${TICKETS.launch}`, act: () => this.boardLaunch(o) };
     if (type === 'bus') {
       const route = o.busRoute;
-      return { text: route ? `Board bus ${route.no} to ${route.short}${route.via ? ` via ${route.via}` : ''} · ₹${TICKETS.bus}` : `Board the bus · ₹${TICKETS.bus}`, act: () => this.hire(o, 'bus') };
+      const via = route && routePlan(this.world.graph, route, o.busBack).via;
+      return { text: route ? `Board bus ${route.no} to ${busHeading(route, o.busBack)}${via ? ` via ${via}` : ''} · ₹${TICKETS.bus}` : `Board the bus · ₹${TICKETS.bus}`, act: () => this.hire(o, 'bus') };
     }
     const name = { taxi: 'taxi', auto: 'auto', rickshaw: 'rickshaw' }[type];
     return { text: `Hire the ${name} · ₹${FARES[type].base}+`, act: () => this.hire(o, type) };
@@ -183,15 +185,18 @@ export class Rides {
     if (type === 'bus') {
       this.pay(TICKETS.bus, 'Bus fare to the conductor');
       g.hud.say(who, pick(LINES.conductor), 2.2);
-      // a route bus goes where its board says; any other bus just runs along the main roads
-      const dest = v.busDest;
-      const pts = dest ? this.world.graph.route(v.pos.x, v.pos.z, dest.x, dest.z) : null;
+      // a route bus runs the streets its route really takes, to the terminus on its board
+      const pts = v.busRoute ? this.busPath(v) : null;
       if (pts && pts.length > 2) {
+        const plan = routePlan(this.world.graph, v.busRoute, v.busBack);
+        const end = pts[pts.length - 1];
         this.follow(pts);
         this.ride.final = true;
         this.ride.state = 'go';
-        g.setWaypointQuiet(dest);
-        g.hud.notify(`BUS ${v.busRoute.no} TO ${v.busRoute.short}`, `${v.busRoute.via ? `Via ${v.busRoute.via} · ` : ''}${(routeLength(pts) / 1000).toFixed(1)} km · F to get off at the next stop`, '#38f3ff');
+        this.ride.terminus = plan.terminus;
+        g.setWaypointQuiet({ x: end[0], z: end[1] });
+        const { left, eta } = this.remaining();
+        g.hud.notify(`BUS ${v.busRoute.no} TO ${busHeading(v.busRoute, v.busBack)}`, `${plan.via ? `Via ${plan.via} · ` : ''}Last stop ${(left / 1000).toFixed(1)} km · about ${etaText(eta)} · F to get off at the next stop`, '#38f3ff');
       } else {
         this.wander();
         g.hud.notify('ON THE BUS', 'F to get off at the next stop', '#38f3ff');
@@ -260,6 +265,46 @@ export class Rides {
     r.path = path;
     r.s = path.project(r.v.pos.x, r.v.pos.z).s;
     r.nextStop = r.kind === 'bus' ? r.s + 420 : Infinity;
+  }
+
+  /**
+   * The rest of a route bus's run: from the street of its route it is on (or, waiting at a
+   * terminus, the nearest one, by road), to the end of the route.
+   */
+  busPath(v) {
+    const graph = this.world.graph;
+    const plan = routePlan(graph, v.busRoute, v.busBack);
+    if (!plan.links.length) return null;
+    let i = v.busI;
+    let d = 0;
+    if (i === undefined || !plan.links[i] || plan.links[i] !== v.busLinks?.[i]) ({ i, d } = nearestLink(plan, v.pos.x, v.pos.z));
+    const pts = planPath(plan, i);
+    if (d > 15) {
+      // off the route's streets (in the terminus): drive onto it first
+      const join = graph.route(v.pos.x, v.pos.z, pts[0][0], pts[0][1]);
+      return [...join.slice(0, -1), ...pts];
+    }
+    return pts;
+  }
+
+  /**
+   * What's left of a road ride, for the GPS line on the map and the distance and time on the
+   * HUD: { pts, left, eta } (metres, seconds), or null when there's no route to show.
+   */
+  remaining() {
+    const r = this.ride;
+    if (!r || !r.path || r.state === 'ask' || r.state === 'arrived') return null;
+    const P = r.path;
+    const pts = [[r.v.pos.x, r.v.pos.z]];
+    for (let i = 0; i < P.n; i++) if (P.cum[i] > r.s) pts.push([P.x[i], P.z[i]]);
+    const left = Math.max(0, P.len - r.s);
+    let eta;
+    if (r.kind === 'bus') {
+      // a city bus averages ~8 m/s between stops, and waits at each one on the way
+      const stops = r.nextStop < P.len ? 1 + Math.floor((P.len - r.nextStop) / 420) : 0;
+      eta = left / 8 + stops * 9 + (r.state === 'stopped' ? Math.max(0, r.stopT) : 0);
+    } else eta = left / (FARES[r.kind].speed * 0.7);
+    return { pts, left, eta };
   }
 
   /** The bus keeps going: a main-road destination a couple of kilometres away. */
@@ -611,7 +656,8 @@ export class Rides {
         if (r.final) {
           // the last stop: everybody off
           r.state = 'arrived';
-          g.hud.notify('LAST STOP', v.busRoute ? v.busRoute.short : '', '#ffd36b');
+          if (r.terminus || !v.busRoute) g.hud.notify('LAST STOP', v.busRoute ? busHeading(v.busRoute, v.busBack) : '', '#ffd36b');
+          else g.hud.notify('EDGE OF THE MAPPED CITY', `Bus ${v.busRoute.no} runs on to ${busHeading(v.busRoute, v.busBack)} · everybody off`, '#ffd36b');
           g.hud.say(this.driver || g.player.ch, pick(LINES.busStop), 2);
           setTimeout(() => {
             if (this.ride === r) this.leave(false);

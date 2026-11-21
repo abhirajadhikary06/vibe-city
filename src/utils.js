@@ -57,3 +57,9 @@ export function colorCyl(list, rt, rb, h, x, y, z, hex, seg = 10) {
   list.push(paint(g, hex));
   return g;
 }
+
+/** "4 min", "1 h 10 min" */
+export const etaText = (sec) => {
+  const m = Math.max(1, Math.round(sec / 60));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+};
