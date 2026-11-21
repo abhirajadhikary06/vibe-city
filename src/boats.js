@@ -30,6 +30,8 @@ export const BOATS = {
   launch: base({ label: 'Ganga Ferry Launch', L: 24, B: 6, keel: 1.3, free: 1.3, bow: 0.6, h: 7, top: 9, accel: 1.6, turn: 0.42, grip: 4, drag: 0.035, mass: 18, seatZ: 8.6, seatY: 3.8, camDist: 22, camH: 7, lift: 0.01, hp: 700, engine: 0.4 }),
   nouka: base({ label: 'Country Boat (Nouka)', L: 9, B: 2.2, keel: 0.5, free: 0.6, bow: 0.9, h: 2.2, top: 6.5, accel: 2.2, turn: 0.75, grip: 3, drag: 0.05, mass: 1.2, seatZ: -3.4, seatY: 0.45, camDist: 4, camH: 1, lift: 0.02, hp: 150, engine: 0.3 }),
   ferry: base({ label: 'Harbor Ferry', L: 34, B: 9, keel: 2.0, free: 2.4, bow: 1.2, h: 10, top: 11, accel: 1.5, turn: 0.32, grip: 4, drag: 0.04, mass: 30, seatZ: 9.6, seatY: 7.6, camDist: 30, camH: 10, lift: 0.01, hp: 900, engine: 0.35 }),
+  trawler: base({ label: 'Fishing Trawler', L: 21, B: 5.6, keel: 1.4, free: 1.5, bow: 1.1, h: 6.8, top: 11, accel: 2.0, turn: 0.48, grip: 3.8, drag: 0.03, mass: 14, seatX: 0, seatZ: 3.5, seatY: 3.0, camDist: 18, camH: 6, lift: 0.012, hp: 650, engine: 0.5 }),
+  ship: base({ label: 'River Cargo Ship', L: 58, B: 11.5, keel: 2.6, free: 2.2, bow: 1.4, h: 12.5, top: 8.5, accel: 1.0, turn: 0.22, grip: 4.5, drag: 0.04, mass: 65, seatX: 0, seatZ: -18, seatY: 8.5, camDist: 48, camH: 15, lift: 0.005, hp: 1800, engine: 0.3 }),
 };
 
 /* ---------- Hull: lofted sections from the transom to a pointed bow ---------- */
@@ -94,15 +96,78 @@ const rbox = (w, h, d, x, y, z, hex, r = 0.1) => {
   return paint(g, hex);
 };
 const cyl = (rt, rb, h, x, y, z, hex, seg = 12) => paint(new THREE.CylinderGeometry(rt, rb, h, seg).translate(x, y, z), hex);
+const torus = (r, tube, x, y, z, hex, rx = 0, ry = 0, rz = 0, radSeg = 10, tubeSeg = 6) => {
+  const g = new THREE.TorusGeometry(r, tube, radSeg, tubeSeg);
+  if (rx || ry || rz) g.rotateX(rx).rotateY(ry).rotateZ(rz);
+  g.translate(x, y, z);
+  g.deleteAttribute('uv');
+  return paint(g, hex);
+};
 const GLASS = '#0d1820';
 const WHITE = '#f4f4f0';
 
 /** Rails along both gunwales between z0 and z1. */
-function railing(parts, hw, y, z0, z1) {
+function railing(parts, hw, y, z0, z1, col = '#d8dade') {
   for (const s of [1, -1]) {
-    parts.push(box(0.04, 0.04, z1 - z0, s * hw, y + 0.9, (z0 + z1) / 2, '#d8dade'));
-    for (let z = z0; z <= z1; z += 1.2) parts.push(box(0.035, 0.9, 0.035, s * hw, y + 0.45, z, '#d8dade'));
+    parts.push(box(0.04, 0.04, z1 - z0, s * hw, y + 0.9, (z0 + z1) / 2, col));
+    parts.push(box(0.03, 0.03, z1 - z0, s * hw, y + 0.45, (z0 + z1) / 2, col));
+    for (let z = z0; z <= z1; z += 1.2) parts.push(box(0.035, 0.9, 0.035, s * hw, y + 0.45, z, col));
   }
+}
+
+/** Lifebuoy ring in marine orange with reflective white quadrant bands. */
+function lifebuoy(parts, x, y, z, rx = 0, ry = 0, rz = 0, r = 0.36, tube = 0.08) {
+  parts.push(torus(r, tube, x, y, z, '#ff5722', rx, ry, rz));
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 2) {
+    const band = new THREE.TorusGeometry(r * 1.01, tube * 1.05, 4, 4, Math.PI * 0.18).rotateZ(a);
+    if (rx || ry || rz) band.rotateX(rx).rotateY(ry).rotateZ(rz);
+    band.translate(x, y, z);
+    band.deleteAttribute('uv');
+    parts.push(paint(band, '#ffffff'));
+  }
+}
+
+/** Black rubber tire fender hung on the gunwale with a hanging rope. */
+function tireFender(parts, x, y, z, rx = 0, ry = 0, rz = 0, r = 0.32) {
+  parts.push(torus(r, 0.09, x, y, z, '#18191b', rx, ry, rz));
+  parts.push(box(0.03, 0.4, 0.03, x, y + r + 0.18, z, '#8d785a'));
+}
+
+/** Marine searchlight with swivel mount, housing, and glowing lens. */
+function searchlight(parts, x, y, z, ry = 0) {
+  parts.push(cyl(0.06, 0.08, 0.18, x, y + 0.09, z, '#78909c', 8));
+  const lamp = new THREE.CylinderGeometry(0.18, 0.18, 0.28, 10).rotateX(Math.PI / 2);
+  if (ry) lamp.rotateY(ry);
+  lamp.translate(x, y + 0.24, z);
+  lamp.deleteAttribute('uv');
+  parts.push(paint(lamp, '#eceff1'));
+  const lens = new THREE.CylinderGeometry(0.16, 0.16, 0.04, 10).rotateX(Math.PI / 2);
+  if (ry) lens.rotateY(ry);
+  lens.translate(x, y + 0.24, z + 0.14);
+  lens.deleteAttribute('uv');
+  parts.push(paint(lens, '#ffffd0'));
+}
+
+/** Rotating open-array marine radar scanner bar on pedestal. */
+function radarScanner(parts, x, y, z, angle = 0.35) {
+  parts.push(cyl(0.08, 0.1, 0.35, x, y + 0.18, z, '#cfd8dc', 8));
+  const bar = new THREE.BoxGeometry(1.3, 0.1, 0.16).rotateY(angle);
+  bar.translate(x, y + 0.4, z);
+  bar.deleteAttribute('uv');
+  parts.push(paint(bar, '#ffffff'));
+  const stripe = new THREE.BoxGeometry(1.32, 0.03, 0.17).rotateY(angle);
+  stripe.translate(x, y + 0.4, z);
+  stripe.deleteAttribute('uv');
+  parts.push(paint(stripe, '#1e293b'));
+}
+
+/** Brass marine trumpet horn. */
+function marineHorn(parts, x, y, z) {
+  const horn = new THREE.CylinderGeometry(0.12, 0.04, 0.4, 8).rotateX(Math.PI / 2);
+  horn.translate(x, y, z + 0.15);
+  horn.deleteAttribute('uv');
+  parts.push(paint(horn, '#d4af37'));
+  parts.push(box(0.04, 0.15, 0.04, x, y - 0.08, z, '#d4af37'));
 }
 
 const MODELS = {
@@ -111,55 +176,139 @@ const MODELS = {
     const d = BOATS.launch;
     const f = d.free;
     const parts = [hull(d.L, d.B, d.keel, f, d.bow, { hull: WHITE, bottom: '#6e1a1e', stripe: color, deck: '#7d6a55' })];
+    // Rubbing strakes / bumper guards along sides
     for (const s of [1, -1]) {
+      parts.push(box(0.1, 0.12, 21, s * 2.85, f + 0.55, -1, '#37474f'));
       for (let z = -10; z <= 8; z += 2.25) parts.push(box(0.12, 2.3, 0.12, s * 2.75, f + 1.15, z, '#e8e8e4'));
       parts.push(box(0.06, 0.9, 18.5, s * 2.78, f + 0.45, -1, color));
+      for (const z of [-6, -1, 4]) tireFender(parts, s * 2.92, f + 0.42, z, 0, Math.PI / 2, 0);
     }
-    parts.push(box(5.9, 0.2, 19.5, 0, f + 2.4, -1, '#f2f2ee')); // lower roof = upper deck
-    for (let z = -9; z <= 6; z += 2.2) parts.push(box(4.6, 0.45, 0.6, 0, f + 0.45, z, '#5a4636')); // benches
+    // Lower roof = upper deck with colorful valance trim
+    parts.push(box(5.9, 0.2, 19.5, 0, f + 2.4, -1, '#f2f2ee'));
+    parts.push(box(6.0, 0.12, 19.6, 0, f + 2.3, -1, color));
+    // Slatted passenger benches with backrests
+    for (let z = -9; z <= 6; z += 2.2) {
+      parts.push(box(4.6, 0.45, 0.55, 0, f + 0.45, z, '#5a4636'));
+      parts.push(box(4.6, 0.35, 0.06, 0, f + 0.8, z + 0.25, '#4a3626'));
+    }
+    // Lifejacket locker box on lower deck
+    parts.push(rbox(1.4, 0.7, 0.9, 0, f + 0.45, 7.5, '#c49a45', 0.08));
+    // Mooring bollards & anchor winch on foredeck
+    parts.push(cyl(0.24, 0.24, 0.45, 0, f + 0.35, 9.6, '#37474f', 8));
+    for (const s of [1, -1]) {
+      parts.push(cyl(0.08, 0.08, 0.25, s * 1.5, f + 0.25, 9.8, '#263238', 6));
+      parts.push(cyl(0.08, 0.08, 0.25, s * 2.4, f + 0.25, -11.2, '#263238', 6));
+    }
+    // Upper deck columns, roof, and wheelhouse
     for (const s of [1, -1]) for (let z = -8; z <= 2; z += 2.5) parts.push(box(0.1, 1.9, 0.1, s * 2.5, f + 3.4, z, '#e8e8e4'));
     parts.push(box(5.2, 0.16, 12, 0, f + 4.4, -3, color)); // upper roof
     parts.push(rbox(3.2, 1.9, 2.8, 0, f + 3.4, 4.6, WHITE, 0.15)); // wheelhouse
+    parts.push(box(3.3, 0.08, 0.4, 0, f + 4.15, 5.9, color)); // windshield sun visor
     parts.push(rbox(3.25, 0.7, 2.85, 0, f + 3.7, 4.6, GLASS, 0.1));
+    for (const s of [1, -1]) parts.push(box(0.04, 1.5, 0.7, s * 1.62, f + 3.2, 4.4, '#5d4037')); // doors
     railing(parts, 2.75, f + 2.5, -10.5, 8.5);
-    parts.push(cyl(0.3, 0.3, 2.2, 0, f + 5.4, -9, '#202020', 8)); // exhaust
+    // Lifebuoys mounted on railings and cabin sides
+    for (const s of [1, -1]) {
+      lifebuoy(parts, s * 2.8, f + 2.9, -4, 0, Math.PI / 2, 0);
+      lifebuoy(parts, s * 1.64, f + 3.7, 3.8, 0, Math.PI / 2, 0);
+    }
+    // Roof searchlight, horns, radar mast and Indian river flag
+    searchlight(parts, 0, f + 4.4, 5.6);
+    marineHorn(parts, -0.7, f + 4.5, 5.2);
+    marineHorn(parts, 0.7, f + 4.5, 5.2);
+    parts.push(cyl(0.07, 0.09, 2.0, 0, f + 5.3, 4.0, '#cfd8dc', 8));
+    parts.push(box(1.5, 0.05, 0.05, 0, f + 5.7, 4.0, '#cfd8dc'));
+    radarScanner(parts, 0, f + 6.3, 4.0);
+    // River pennant
+    parts.push(box(0.02, 0.15, 0.45, 0, f + 6.25, 3.7, '#ff9933'));
+    parts.push(box(0.02, 0.15, 0.45, 0, f + 6.1, 3.7, '#ffffff'));
+    parts.push(box(0.02, 0.15, 0.45, 0, f + 5.95, 3.7, '#138808'));
+    // Heavy exhaust stack with red top rim
+    parts.push(cyl(0.32, 0.32, 2.2, 0, f + 5.4, -9, '#263238', 10));
+    parts.push(cyl(0.36, 0.33, 0.3, 0, f + 6.4, -9, '#d32f2f', 10));
     return { parts, nav: [[1.7, f + 4.6, 5.8]], name: true };
   },
-  /** Wooden country boat with upswept ends and a bamboo-matting canopy. */
+  /** Wooden country boat with upswept ends, bamboo chhoi, clay chula, and lantern. */
   nouka(color) {
     const d = BOATS.nouka;
     const f = d.free;
-    const parts = [hull(d.L, d.B, d.keel, f, d.bow, { hull: '#6b4a2e', bottom: '#2c2219', stripe: color, deck: '#8a6a48' })];
-    // raised stern
-    parts.push(box(0.5, 0.9, 0.8, 0, f + 0.35, -d.L / 2 + 0.3, '#6b4a2e'));
-    // chhoi: half-cylinder canopy of woven bamboo
-    const canopy = new THREE.CylinderGeometry(1.0, 1.0, 3.2, 14, 1, true, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2);
+    const parts = [hull(d.L, d.B, d.keel, f, d.bow, { hull: '#5d3c1e', bottom: '#1f1610', stripe: color, deck: '#7c5a36' })];
+    // Raised stern seating platform & stem posts
+    parts.push(box(1.4, 0.35, 1.2, 0, f + 0.6, -d.L / 2 + 0.7, '#4e3423'));
+    parts.push(box(0.12, 0.9, 0.2, 0, f + 0.8, d.L / 2 - 0.2, '#3e271a'));
+    // Bamboo Chhoi (canopy of woven bamboo) with curved bamboo rib arches
+    const canopy = new THREE.CylinderGeometry(1.02, 1.02, 3.2, 14, 1, true, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2);
     canopy.rotateY(Math.PI / 2).translate(0, f + 0.15, -0.2);
     canopy.deleteAttribute('uv');
-    parts.push(paint(canopy, '#b38b4a'));
-    parts.push(box(0.06, 2.4, 0.06, 0, f + 1.2, 2.6, '#4a3626')); // mast
-    parts.push(box(0.08, 0.08, 3.4, 0.5, f + 0.8, -d.L / 2 - 1.0, '#4a3626')); // steering oar
+    parts.push(paint(canopy, '#c29b4e'));
+    for (const z of [-1.6, -0.2, 1.2]) parts.push(torus(1.04, 0.035, 0, f + 0.15, z, '#5c401e', Math.PI / 2, 0, 0));
+    parts.push(box(0.06, 0.06, 3.4, 0, f + 1.2, -0.2, '#4e3423')); // canopy ridge pole
+    for (const s of [1, -1]) parts.push(box(0.05, 0.05, 3.2, s * 1.02, f + 0.2, -0.2, '#4e3423'));
+    // Clay Chula (earthen stove) & tea kettle on foredeck
+    parts.push(cyl(0.2, 0.24, 0.26, -0.38, f + 0.2, 1.8, '#a0522d', 8));
+    parts.push(cyl(0.11, 0.13, 0.16, -0.38, f + 0.4, 1.8, '#d4af37', 8));
+    parts.push(box(0.03, 0.07, 0.1, -0.38, f + 0.42, 1.9, '#d4af37'));
+    // Coiled coir mooring rope on bow
+    parts.push(torus(0.26, 0.065, 0.32, f + 0.1, 2.2, '#9e8156', Math.PI / 2, 0, 0));
+    parts.push(torus(0.14, 0.055, 0.32, f + 0.12, 2.2, '#8a6e45', Math.PI / 2, 0, 0));
+    // Kerosene lantern hanging at prow
+    parts.push(box(0.04, 0.65, 0.04, 0, f + 1.2, 3.2, '#3e271a'));
+    parts.push(cyl(0.07, 0.08, 0.05, 0, f + 1.1, 3.05, '#c99e32', 8));
+    parts.push(cyl(0.06, 0.06, 0.13, 0, f + 1.2, 3.05, '#ffe082', 8));
+    parts.push(cyl(0.05, 0.03, 0.06, 0, f + 1.3, 3.05, '#c99e32', 8));
+    // Bamboo poling pole (logi) resting along gunwale
+    parts.push(box(0.05, 0.05, 5.0, 0.88, f + 0.25, 0.4, '#d7b36a'));
+    // Mast & steering oar
+    parts.push(box(0.07, 2.5, 0.07, 0, f + 1.25, 2.5, '#4a3626'));
+    parts.push(box(0.08, 0.08, 3.6, 0.55, f + 0.75, -d.L / 2 - 1.0, '#4a3626'));
+    parts.push(box(0.02, 0.32, 0.9, 0.55, f + 0.4, -d.L / 2 - 2.2, '#3e271a'));
     return { parts, nav: [[0.5, f + 0.3, 3.5]] };
   },
   jetski(color) {
     const d = BOATS.jetski;
     const parts = [hull(d.L, d.B, d.keel, d.free, d.bow, { hull: color, bottom: '#1b1d22', stripe: WHITE, deck: '#2a2c30' })];
-    parts.push(rbox(0.42, 0.22, 1.2, 0, d.free + 0.15, -0.25, '#1c1c1e', 0.08)); // seat
-    parts.push(rbox(0.7, 0.35, 0.8, 0, d.free + 0.15, 0.7, color, 0.15)); // nose cowl
-    parts.push(box(0.75, 0.05, 0.06, 0, d.free + 0.55, 0.35, '#202022')); // bars
+    parts.push(rbox(0.42, 0.24, 1.25, 0, d.free + 0.16, -0.25, '#1c1c1e', 0.08)); // seat
+    parts.push(rbox(0.7, 0.35, 0.85, 0, d.free + 0.15, 0.7, color, 0.15)); // nose cowl
+    parts.push(box(0.78, 0.05, 0.06, 0, d.free + 0.55, 0.35, '#202022')); // bars
     parts.push(box(0.06, 0.25, 0.06, 0, d.free + 0.42, 0.42, '#202022'));
+    parts.push(box(0.2, 0.08, 0.04, 0, d.free + 0.56, 0.4, '#00e5ff')); // digital gauge
+    // Footwell traction pads
+    for (const s of [1, -1]) parts.push(box(0.18, 0.02, 1.4, s * 0.36, d.free + 0.06, -0.2, '#111214'));
+    // Jet pump nozzle at stern
+    const jet = new THREE.CylinderGeometry(0.12, 0.14, 0.35, 8).rotateX(Math.PI / 2);
+    jet.translate(0, d.free - 0.05, -d.L / 2 - 0.15);
+    jet.deleteAttribute('uv');
+    parts.push(paint(jet, '#1a1a1c'));
     return { parts, nav: [[0.3, d.free + 0.35, 1.0]] };
   },
   speedboat(color) {
     const d = BOATS.speedboat;
     const f = d.free;
     const parts = [hull(d.L, d.B, d.keel, f, d.bow, { hull: WHITE, bottom: '#7a1c22', stripe: color, deck: '#d7c4a0' })];
-    parts.push(rbox(1.0, 0.7, 0.7, 0.45, f + 0.35, 0.6, WHITE, 0.12)); // console
-    parts.push(box(0.5, 0.06, 0.08, 0.45, f + 0.75, 0.7, '#202022'));
+    // Console with steering wheel and throttle
+    parts.push(rbox(1.0, 0.7, 0.7, 0.45, f + 0.35, 0.6, WHITE, 0.12));
+    parts.push(torus(0.14, 0.025, 0.45, f + 0.72, 0.45, '#212121', -0.5, 0, 0));
+    parts.push(box(0.04, 0.12, 0.04, 0.82, f + 0.72, 0.6, '#cfd8dc'));
     parts.push(paint(new THREE.BoxGeometry(2.1, 0.5, 0.04).rotateX(-0.6).translate(0, f + 0.85, 1.05), GLASS)); // windscreen
-    for (const x of [0.45, -0.45]) parts.push(rbox(0.6, 0.45, 0.6, x, f + 0.22, -0.3, '#efe7d6', 0.1)); // seats
+    // Front cushioned seats
+    for (const x of [0.45, -0.45]) {
+      parts.push(rbox(0.6, 0.45, 0.6, x, f + 0.22, -0.3, '#efe7d6', 0.1));
+      parts.push(box(0.62, 0.1, 0.62, x, f + 0.3, -0.3, color)); // seat piping
+    }
     parts.push(rbox(2.0, 0.4, 0.9, 0, f + 0.2, -2.3, '#efe7d6', 0.12)); // rear bench
-    parts.push(rbox(0.45, 0.9, 0.6, 0, f + 0.2, -3.6, '#1b1c1f', 0.08), box(0.12, 0.9, 0.18, 0, f - 0.5, -3.75, '#2a2b2e')); // outboard
+    // Twin outboards at stern
+    for (const x of [0.45, -0.45]) {
+      parts.push(rbox(0.42, 0.85, 0.55, x, f + 0.22, -3.6, '#1b1c1f', 0.08));
+      parts.push(box(0.43, 0.12, 0.56, x, f + 0.48, -3.6, color));
+      parts.push(box(0.12, 0.7, 0.25, x, f - 0.35, -3.75, '#2a2b2e'));
+      parts.push(cyl(0.07, 0.07, 0.1, x, f - 0.6, -3.85, '#cfd8dc', 6));
+    }
+    // Stainless wakeboard/radar tower arch
+    for (const s of [1, -1]) parts.push(box(0.05, 1.5, 0.05, s * 1.1, f + 0.9, -1.0, '#cfd8dc'));
+    parts.push(box(2.25, 0.06, 0.06, 0, f + 1.65, -1.0, '#cfd8dc'));
+    searchlight(parts, 0, f + 1.68, -1.0);
+    marineHorn(parts, -0.35, f + 1.7, -1.0);
+    lifebuoy(parts, -1.18, f + 0.5, 0, 0, Math.PI / 2, 0, 0.26, 0.06);
     railing(parts, d.B / 2 - 0.05, f, 0.8, 2.6);
     return { parts, nav: [[0.6, f + 0.4, 2.8]] };
   },
@@ -172,7 +321,21 @@ const MODELS = {
     parts.push(rbox(3.2, 1.4, 4.5, 0, f + 2.7, -0.5, WHITE, 0.3)); // flybridge deck
     parts.push(rbox(3.25, 0.5, 4.0, 0, f + 2.8, -0.5, GLASS, 0.15));
     parts.push(paint(new THREE.BoxGeometry(3.6, 0.9, 0.06).rotateX(-0.5).translate(0, f + 1.6, 4.4), GLASS)); // windscreen
-    parts.push(cyl(0.08, 0.08, 2.4, 0, f + 4.4, -1.2, '#d8dade', 8), box(1.2, 0.08, 0.3, 0, f + 5.1, -1.2, '#d8dade')); // radar mast
+    // Sunbed on foredeck
+    parts.push(rbox(2.2, 0.15, 2.4, 0, f + 1.0, 5.0, '#e8eaf6', 0.08));
+    // Bow anchor winch & roller
+    parts.push(box(0.5, 0.3, 0.5, 0, f + 1.0, 7.2, '#cfd8dc'));
+    // Teak swim platform at stern with ladder
+    parts.push(box(4.2, 0.12, 1.2, 0, f + 0.1, -8.3, '#c9a774'));
+    parts.push(box(0.4, 0.6, 0.04, 1.4, f - 0.15, -8.9, '#cfd8dc'));
+    // Radar mast, scanner bar, satellite radome, searchlight
+    parts.push(cyl(0.08, 0.08, 2.4, 0, f + 4.4, -1.2, '#d8dade', 8), box(1.2, 0.08, 0.3, 0, f + 5.1, -1.2, '#d8dade'));
+    radarScanner(parts, 0, f + 5.6, -1.2);
+    parts.push(cyl(0.24, 0.26, 0.35, 0.8, f + 4.5, -1.2, '#ffffff', 10)); // satellite dome
+    searchlight(parts, 0, f + 3.8, 1.8);
+    marineHorn(parts, -0.6, f + 3.8, 1.6);
+    // Lifebuoys on flybridge
+    for (const s of [1, -1]) lifebuoy(parts, s * 1.68, f + 3.2, -1.2, 0, Math.PI / 2, 0, 0.28, 0.07);
     railing(parts, d.B / 2 - 0.1, f, 4.5, 7.0);
     railing(parts, 1.5, f + 3.4, -2.6, 1.5);
     return { parts, nav: [[1.9, f + 0.6, 4.6]] };
@@ -185,15 +348,174 @@ const MODELS = {
     parts.push(rbox(8.25, 1.0, 23.4, 0, f + 1.5, -2, GLASS, 0.1));
     parts.push(rbox(7.4, 2.4, 16, 0, f + 3.8, -3, WHITE, 0.2)); // upper deck house
     parts.push(rbox(7.45, 0.9, 15.4, 0, f + 4.0, -3, GLASS, 0.1));
-    parts.push(rbox(6.0, 1.8, 3.4, 0, f + 5.9, 9.6, WHITE, 0.2)); // bridge
-    parts.push(rbox(6.05, 0.8, 3.45, 0, f + 6.1, 9.6, GLASS, 0.1));
+    // Bridge with extended bridge wings
+    parts.push(rbox(8.4, 1.8, 3.4, 0, f + 5.9, 9.6, WHITE, 0.2));
+    parts.push(rbox(8.45, 0.8, 3.45, 0, f + 6.1, 9.6, GLASS, 0.1));
+    for (const s of [1, -1]) searchlight(parts, s * 4.1, f + 6.9, 9.6);
+    radarScanner(parts, 0, f + 7.4, 9.6);
+    marineHorn(parts, -1.2, f + 6.9, 9.6);
     parts.push(cyl(1.0, 1.2, 3.6, 0, f + 6.8, -8, '#e8e8e8', 16), cyl(1.02, 1.02, 0.8, 0, f + 8.0, -8, color, 16), cyl(1.04, 1.04, 0.4, 0, f + 8.7, -8, '#181818', 16)); // funnel
     for (const s of [1, -1]) {
       for (const z of [-9, -2, 5]) parts.push(rbox(1.2, 0.9, 4.2, s * 3.9, f + 5.4, z, '#ff7a1a', 0.35)); // lifeboats
+      for (const z of [-6, 1]) lifebuoy(parts, s * 3.75, f + 5.2, z, 0, Math.PI / 2, 0);
     }
     railing(parts, d.B / 2 - 0.15, f, 11, 15.5);
     railing(parts, 3.6, f + 5.0, -11, 5);
     return { parts, nav: [[4.4, f + 6.2, 11]], name: true };
+  },
+  /** Bay of Bengal River Fishing Trawler: swept bow, aft A-frame trawl gantry, net drum, outriggers, fish crates. */
+  trawler(color = '#2d5a44') {
+    const d = BOATS.trawler;
+    const f = d.free;
+    const parts = [hull(d.L, d.B, d.keel, f, d.bow, { hull: color, bottom: '#7a1c1d', stripe: '#f4f4f0', deck: '#4e5349' })];
+    // Heavy timber/rubber rub rails
+    for (const s of [1, -1]) {
+      parts.push(box(0.12, 0.14, 18, s * (d.B / 2 + 0.05), f + 0.6, -1, '#263238'));
+      for (const z of [-5, 0, 4]) tireFender(parts, s * (d.B / 2 + 0.12), f + 0.5, z, 0, Math.PI / 2, 0);
+    }
+    // Forward-set wheelhouse
+    parts.push(rbox(3.8, 2.2, 3.6, 0, f + 1.2, 3.8, '#f5f5f0', 0.2));
+    parts.push(rbox(3.85, 0.8, 3.65, 0, f + 1.55, 3.8, GLASS, 0.1));
+    parts.push(box(3.9, 0.12, 0.5, 0, f + 2.0, 5.7, '#263238')); // brow visor
+    parts.push(box(4.0, 0.15, 3.8, 0, f + 2.35, 3.8, '#263238')); // roof
+    for (const s of [1, -1]) parts.push(box(0.04, 1.5, 0.7, s * 1.92, f + 1.0, 3.5, '#455a64')); // side doors
+    searchlight(parts, 0, f + 2.45, 5.4);
+    marineHorn(parts, -0.8, f + 2.5, 5.2);
+    // Radar mast & scanner
+    parts.push(cyl(0.08, 0.1, 2.2, 0, f + 3.5, 3.4, '#cfd8dc', 8));
+    parts.push(box(1.4, 0.05, 0.05, 0, f + 3.9, 3.4, '#cfd8dc'));
+    radarScanner(parts, 0, f + 4.7, 3.4);
+    // Exhaust stack with rain flap
+    parts.push(cyl(0.22, 0.22, 2.8, 1.2, f + 2.6, 2.4, '#263238', 8));
+    parts.push(cyl(0.26, 0.23, 0.2, 1.2, f + 4.0, 2.4, '#e53935', 8));
+    for (const s of [1, -1]) lifebuoy(parts, s * 1.94, f + 1.5, 3.2, 0, Math.PI / 2, 0);
+
+    // Stern A-Frame Trawl Gantry
+    for (const s of [1, -1]) {
+      const leg = new THREE.BoxGeometry(0.18, 4.2, 0.18);
+      leg.rotateZ(s * -0.15);
+      leg.translate(s * 2.2, f + 2.2, -8.5);
+      leg.deleteAttribute('uv');
+      parts.push(paint(leg, '#37474f'));
+      parts.push(cyl(0.18, 0.18, 0.12, s * 1.2, f + 3.9, -8.5, '#cfd8dc', 8)); // trawl blocks/sheaves
+    }
+    parts.push(box(3.8, 0.22, 0.22, 0, f + 4.2, -8.5, '#37474f')); // top crossbeam
+
+    // Net Winch Drum on aft deck with wound trawl net
+    parts.push(cyl(0.65, 0.65, 0.1, -1.3, f + 0.8, -3.2, '#263238', 12));
+    parts.push(cyl(0.65, 0.65, 0.1, 1.3, f + 0.8, -3.2, '#263238', 12));
+    const drum = new THREE.CylinderGeometry(0.55, 0.55, 2.5, 12).rotateZ(Math.PI / 2);
+    drum.translate(0, f + 0.8, -3.2);
+    drum.deleteAttribute('uv');
+    parts.push(paint(drum, '#2e4d3a'));
+
+    // Outrigger Stabilizer Trolling Booms
+    for (const s of [1, -1]) {
+      const boom = new THREE.CylinderGeometry(0.06, 0.08, 4.8, 6).rotateZ(s * -0.55);
+      boom.translate(s * 2.5, f + 2.5, 1.0);
+      boom.deleteAttribute('uv');
+      parts.push(paint(boom, '#455a64'));
+    }
+
+    // Deck Details: Central fish hold hatch & colorful stacked fish crates
+    parts.push(box(2.2, 0.4, 2.0, 0, f + 0.35, -0.6, '#3e2723'));
+    parts.push(box(2.3, 0.1, 2.1, 0, f + 0.58, -0.6, '#cfd8dc'));
+    parts.push(box(0.9, 0.55, 0.7, -1.6, f + 0.4, -0.4, '#f57c00')); // orange fish crates
+    parts.push(box(0.9, 0.55, 0.7, -1.6, f + 0.4, 0.5, '#0288d1')); // blue fish crates
+    parts.push(box(0.9, 0.55, 0.7, 1.6, f + 0.4, -0.4, '#388e3c')); // green fish crates
+    parts.push(box(1.2, 0.55, 0.8, 0, f + 0.4, 7.5, '#37474f')); // bow anchor windlass
+    railing(parts, d.B / 2 - 0.1, f, 6.0, 9.2);
+    return { parts, nav: [[2.0, f + 2.2, 5.0]], name: true };
+  },
+  /** Hooghly River Cargo / Container Ship: loaded container bays, deck crane, island bridge, and funnel. */
+  ship(color = '#1e293b') {
+    const d = BOATS.ship;
+    const f = d.free;
+    const parts = [hull(d.L, d.B, d.keel, f, d.bow, { hull: color, bottom: '#6e1a1e', stripe: '#f8fafc', deck: '#334155' })];
+    // Forecastle deck at bow
+    parts.push(box(8.6, 0.6, 0.2, 0, f + 0.8, 22, '#475569')); // breakwater
+    parts.push(box(2.6, 1.0, 1.4, 0, f + 0.7, 23.5, '#1e293b')); // anchor windlass
+    parts.push(cyl(0.06, 0.08, 2.4, 0, f + 1.8, 26, '#e2e8f0', 6)); // forward jackstaff
+    for (const s of [1, -1]) {
+      parts.push(box(0.2, 0.9, 0.6, s * 5.2, f - 0.2, 22, '#0f172a')); // hawsehole anchor
+      parts.push(box(0.15, 0.15, 48, s * (d.B / 2 + 0.06), f + 0.8, -3, '#334155')); // rub rail
+    }
+
+    // Container Stacks (20ft & 40ft containers in authentic shipping line colors)
+    const bayColors = [
+      ['#0284c7', '#15803d', '#dc2626'],
+      ['#eab308', '#0284c7', '#15803d'],
+      ['#dc2626', '#eab308', '#0284c7'],
+      ['#15803d', '#dc2626', '#eab308'],
+    ];
+    // Bay 1 (forward container bay, z = 8 to 18)
+    for (let row = 0; row < 2; row++) {
+      const z = 10.5 + row * 6.5;
+      for (const [colIdx, x] of [-2.6, 0, 2.6].entries()) {
+        const c1 = bayColors[row][colIdx];
+        const c2 = bayColors[row + 2][colIdx];
+        parts.push(rbox(2.4, 2.3, 6.0, x, f + 1.25, z, c1, 0.08));
+        parts.push(rbox(2.4, 2.3, 6.0, x, f + 3.6, z, c2, 0.08));
+        for (const sx of [-1.15, 1.15]) {
+          for (const sz of [-2.9, 2.9]) {
+            parts.push(box(0.12, 4.6, 0.12, x + sx, f + 2.4, z + sz, '#f8fafc'));
+          }
+        }
+      }
+    }
+    // Bay 2 (aft container bay, z = -7 to 3)
+    for (let row = 0; row < 2; row++) {
+      const z = -4.5 + row * 6.5;
+      for (const [colIdx, x] of [-2.6, 0, 2.6].entries()) {
+        const c1 = bayColors[row + 1][colIdx];
+        const c2 = bayColors[row][colIdx];
+        parts.push(rbox(2.4, 2.3, 6.0, x, f + 1.25, z, c1, 0.08));
+        parts.push(rbox(2.4, 2.3, 6.0, x, f + 3.6, z, c2, 0.08));
+        for (const sx of [-1.15, 1.15]) {
+          for (const sz of [-2.9, 2.9]) {
+            parts.push(box(0.12, 4.6, 0.12, x + sx, f + 2.4, z + sz, '#f8fafc'));
+          }
+        }
+      }
+    }
+
+    // Heavy Cargo Derrick Crane (between bays at z = 5.0)
+    parts.push(cyl(0.9, 1.0, 3.4, 0, f + 1.7, 5.0, '#f8fafc', 12));
+    parts.push(rbox(2.4, 1.8, 2.2, 0, f + 3.9, 5.0, '#f8fafc', 0.2));
+    parts.push(box(0.8, 1.2, 1.0, 1.25, f + 4.0, 5.4, GLASS));
+    const boom = new THREE.BoxGeometry(0.65, 0.65, 13).rotateX(0.24);
+    boom.translate(0, f + 5.2, 10.8);
+    boom.deleteAttribute('uv');
+    parts.push(paint(boom, '#eab308'));
+    parts.push(cyl(0.18, 0.18, 0.6, 0, f + 3.5, 16.5, '#0f172a', 8));
+
+    // Aft Island Bridge Superstructure (z = -14 to -23)
+    parts.push(rbox(9.2, 2.6, 8.5, 0, f + 1.3, -18.5, '#f8fafc', 0.3)); // Tier 1
+    parts.push(rbox(8.8, 2.4, 7.8, 0, f + 3.8, -18.5, '#f8fafc', 0.3)); // Tier 2
+    parts.push(box(8.85, 0.5, 7.2, 0, f + 4.0, -18.5, GLASS));
+    // Tier 3: Navigation Bridge with extended wings
+    parts.push(rbox(11.2, 2.2, 5.4, 0, f + 6.1, -17.5, '#f8fafc', 0.2));
+    parts.push(rbox(11.25, 0.9, 5.45, 0, f + 6.3, -17.5, GLASS, 0.1));
+    for (const s of [1, -1]) searchlight(parts, s * 5.4, f + 7.3, -17.5);
+    // Funnel (smokestack)
+    parts.push(cyl(1.1, 1.3, 4.2, 0, f + 8.8, -22.5, '#f8fafc', 14));
+    parts.push(cyl(1.12, 1.12, 1.2, 0, f + 9.6, -22.5, '#dc2626', 14));
+    parts.push(cyl(1.15, 1.15, 0.5, 0, f + 10.6, -22.5, '#0f172a', 14));
+    for (const s of [-0.4, 0.4]) parts.push(cyl(0.2, 0.2, 0.9, s, f + 11.2, -22.5, '#0f172a', 8));
+    // Radar mast & instruments
+    parts.push(cyl(0.12, 0.16, 4.2, 0, f + 9.2, -16.5, '#e2e8f0', 8));
+    parts.push(box(3.2, 0.08, 0.08, 0, f + 9.6, -16.5, '#e2e8f0'));
+    radarScanner(parts, 0, f + 11.4, -16.5);
+    parts.push(cyl(0.45, 0.48, 0.6, 0.9, f + 8.2, -18.5, '#ffffff', 10)); // satellite dome
+    // Enclosed lifeboats in gravity davits
+    for (const s of [1, -1]) {
+      parts.push(rbox(1.2, 0.9, 3.8, s * 5.0, f + 5.0, -20.5, '#ea580c', 0.3));
+      parts.push(box(0.12, 1.8, 0.12, s * 4.9, f + 5.2, -19.2, '#64748b'));
+      parts.push(box(0.12, 1.8, 0.12, s * 4.9, f + 5.2, -21.8, '#64748b'));
+      lifebuoy(parts, s * 5.65, f + 6.3, -17.5, 0, Math.PI / 2, 0);
+    }
+    railing(parts, 4.4, f + 4.9, -22.5, -14.5);
+    return { parts, nav: [[5.6, f + 6.8, -15.0]], name: true };
   },
 };
 
@@ -649,31 +971,86 @@ function riverCentreline(river) {
   return pts.length > 4 ? new Poly(pts) : null;
 }
 
-/* ---------- Scenery: a river cruise steamer and a cargo barge working up and down the Hooghly ---------- */
+/* ---------- Scenery: cargo ships, fishing trawlers, cruise steamer, and hopper barge working up and down the Hooghly ---------- */
 export class RiverTraffic {
   constructor(scene, world) {
     this.line = world.river ? riverCentreline(world.river) : null;
     this.ships = [];
     if (!this.line) return;
-    const steamer = [hull(46, 10, 2.2, 2.2, 1.2, { hull: '#f4f4f0', bottom: '#6e1a1e', stripe: '#1f4f8a', deck: '#8b7356' })];
-    steamer.push(rbox(9.4, 3, 30, 0, 3.7, -2, '#f4f4f0', 0.3), rbox(9.45, 1.1, 29.4, 0, 3.9, -2, GLASS, 0.15));
-    steamer.push(rbox(8.6, 2.6, 22, 0, 6.5, -3, '#f4f4f0', 0.3), rbox(8.65, 1.0, 21.4, 0, 6.7, -3, GLASS, 0.15));
-    steamer.push(box(9, 0.2, 24, 0, 8.0, -3, '#1f4f8a'), rbox(5, 2, 4, 0, 9.1, 7, '#f4f4f0', 0.2), cyl(1.1, 1.3, 4, 0, 10, -10, '#1f4f8a', 14));
-    const barge = [hull(60, 11, 2.6, 1.6, 0.8, { hull: '#3a3d33', bottom: '#6e1a1e', stripe: '#c9a43a', deck: '#4b4a44' })];
-    for (let z = -22; z <= 14; z += 9) barge.push(box(9, 2.4, 7.6, 0, 2.6, z, ['#a8432f', '#2e6b8a', '#c9a43a', '#5a7a3a'][Math.abs(z) % 4]));
-    barge.push(rbox(8, 5, 6, 0, 4.2, -26, '#e8e2d4', 0.2), rbox(8.05, 1, 6.05, 0, 5.6, -26, GLASS, 0.1));
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide });
-    for (const [parts, s, v] of [[steamer, 0.3, 4.5], [barge, 0.7, 3]]) {
-      const mesh = new THREE.Mesh(merge(parts), mat);
-      mesh.castShadow = true;
-      scene.add(mesh);
-      this.ships.push({ mesh, s: this.line.len * s, v, dir: s < 0.5 ? 1 : -1 });
+
+    // 1. Cargo Container Ship (58m)
+    const cargoMesh = new THREE.Mesh(merge(MODELS.ship('#1e293b').parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side: THREE.DoubleSide }));
+    cargoMesh.castShadow = true;
+
+    // 2. Fishing Trawler 1 (21m, Deep Sea Green)
+    const trawler1Mesh = new THREE.Mesh(merge(MODELS.trawler('#1e4632').parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }));
+    trawler1Mesh.castShadow = true;
+
+    // 3. Fishing Trawler 2 (21m, Rust Orange & White)
+    const trawler2Mesh = new THREE.Mesh(merge(MODELS.trawler('#c85a2b').parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }));
+    trawler2Mesh.castShadow = true;
+
+    // 4. Heritage River Cruise Steamer (48m)
+    const steamer = [hull(48, 10, 2.2, 2.2, 1.2, { hull: '#f8fafc', bottom: '#6e1a1e', stripe: '#1f4f8a', deck: '#8b7356' })];
+    steamer.push(rbox(9.4, 3.0, 32, 0, 3.7, -2, '#f8fafc', 0.3), rbox(9.45, 1.1, 31.4, 0, 3.9, -2, GLASS, 0.15));
+    steamer.push(rbox(8.6, 2.6, 24, 0, 6.5, -3, '#f8fafc', 0.3), rbox(8.65, 1.0, 23.4, 0, 6.7, -3, GLASS, 0.15));
+    steamer.push(box(9.2, 0.2, 26, 0, 8.0, -3, '#1f4f8a')); // promenade shade canopy
+    steamer.push(rbox(5.4, 2.0, 4.2, 0, 9.1, 7.5, '#f8fafc', 0.2), rbox(5.45, 0.8, 4.25, 0, 9.3, 7.5, GLASS, 0.1)); // bridge
+    searchlight(steamer, 0, 10.2, 9.0);
+    radarScanner(steamer, 0, 10.8, 7.5);
+    steamer.push(cyl(1.1, 1.3, 4.2, 0, 10.2, -10, '#1f4f8a', 14)); // funnel
+    steamer.push(cyl(1.15, 1.15, 0.4, 0, 12.1, -10, '#0f172a', 14));
+    for (const s of [1, -1]) {
+      for (const z of [-9, 3]) lifebuoy(steamer, s * 4.75, 4.2, z, 0, Math.PI / 2, 0);
+      steamer.push(rbox(1.2, 0.9, 4.2, s * 4.6, 7.6, -2, '#ff6d00', 0.3)); // lifeboats
     }
-    // Ships are obstacles for the player's boats
+    railing(steamer, 4.6, 8.1, -15, 6);
+    const steamerMesh = new THREE.Mesh(merge(steamer), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }));
+    steamerMesh.castShadow = true;
+
+    // 5. Hooghly Sand Hopper Barge (56m)
+    const barge = [hull(56, 11, 2.5, 1.7, 0.9, { hull: '#374151', bottom: '#5b181b', stripe: '#f59e0b', deck: '#4b5563' })];
+    for (const z of [-14, -2, 10]) {
+      const sand = new THREE.ConeGeometry(4.2, 2.2, 12);
+      sand.translate(0, 2.6, z);
+      sand.deleteAttribute('uv');
+      barge.push(paint(sand, '#d97706'));
+    }
+    barge.push(cyl(0.7, 0.8, 2.6, 0, 2.8, -20, '#f59e0b', 8));
+    const derrick = new THREE.BoxGeometry(0.5, 0.5, 14).rotateX(-0.35);
+    derrick.translate(0, 5.2, -13);
+    derrick.deleteAttribute('uv');
+    barge.push(paint(derrick, '#f59e0b'));
+    barge.push(rbox(7.5, 4.5, 5.5, 0, 4.0, -24, '#e5e7eb', 0.2), rbox(7.55, 1.0, 5.55, 0, 5.4, -24, GLASS, 0.1));
+    searchlight(barge, 0, 6.4, -22);
+    radarScanner(barge, 0, 7.0, -24);
+    for (const s of [1, -1]) {
+      for (const z of [-22, -10, 2, 14]) tireFender(barge, s * 5.6, 1.6, z, 0, Math.PI / 2, 0);
+    }
+    const bargeMesh = new THREE.Mesh(merge(barge), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65, side: THREE.DoubleSide }));
+    bargeMesh.castShadow = true;
+
+    const fleet = [
+      { mesh: cargoMesh, s: 0.2, v: 3.8, dir: 1, offDist: 48, obsOffsets: [-22, -11, 0, 11, 22], obsR: 6.2 },
+      { mesh: trawler1Mesh, s: 0.42, v: 4.8, dir: -1, offDist: 34, obsOffsets: [-6, 6], obsR: 3.2 },
+      { mesh: steamerMesh, s: 0.65, v: 4.4, dir: 1, offDist: 46, obsOffsets: [-16, 0, 16], obsR: 5.5 },
+      { mesh: trawler2Mesh, s: 0.84, v: 4.6, dir: 1, offDist: 34, obsOffsets: [-6, 6], obsR: 3.2 },
+      { mesh: bargeMesh, s: 0.12, v: 3.2, dir: -1, offDist: 46, obsOffsets: [-18, -6, 6, 18], obsR: 5.8 },
+    ];
+
     world.boatObstacles = world.boatObstacles || [];
-    for (const sh of this.ships) {
-      sh.obs = [-18, 0, 18].map((off) => ({ x: 0, z: 0, r: 6.5, off }));
-      world.boatObstacles.push(...sh.obs);
+    for (const item of fleet) {
+      scene.add(item.mesh);
+      const obs = item.obsOffsets.map((off) => ({ x: 0, z: 0, r: item.obsR, off }));
+      world.boatObstacles.push(...obs);
+      this.ships.push({
+        mesh: item.mesh,
+        s: this.line.len * item.s,
+        v: item.v,
+        dir: item.dir,
+        offDist: item.offDist,
+        obs,
+      });
     }
   }
   update(dt, t) {
@@ -686,7 +1063,7 @@ export class RiverTraffic {
       }
       this.line.at(sh.s, q);
       // keep to the east half going one way, the west going the other
-      const off = sh.dir * 45;
+      const off = sh.dir * (sh.offDist || 44);
       sh.mesh.position.set(q.x + q.tz * off, WATER_Y + Math.sin(t * 0.4 + sh.s) * 0.08, q.z - q.tx * off);
       sh.mesh.rotation.y = Math.atan2(q.tx * sh.dir, q.tz * sh.dir);
       sh.mesh.rotation.z = Math.sin(t * 0.3) * 0.008;
