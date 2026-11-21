@@ -647,16 +647,17 @@ async function boot() {
     // berths: where a launch ties up at each end, bow to the pontoon
     b.route = { pts: d.pts, i: 1, dir: 1, wait: 2 + i * 4, berths: d.ends.map((e) => ({ x: e.dock[0], z: e.dock[1], yaw: e.yaw + Math.PI })) };
     vehicles.push(b);
-    // a couple of noukas tied up beside each jetty, a speedboat at the first
+    // a couple of noukas and fishing trawlers tied up beside each jetty, speedboats at the main ghats
     for (const [k, end] of d.ends.entries()) {
-      const kinds = k === 0 && i === 0 ? ['nouka', 'speedboat', 'jetski'] : ['nouka'];
+      const kinds = k === 0 && i === 0 ? ['nouka', 'trawler', 'speedboat', 'jetski'] : k === 1 && i === 0 ? ['nouka', 'trawler'] : i === 1 ? ['nouka', 'trawler'] : ['nouka'];
       kinds.forEach((type, j) => {
         const side = j % 2 ? -1 : 1;
-        const along = 8 + j * 6;
-        const x = end.x + end.ux * along - end.uz * (7 + j * 2) * side;
-        const z = end.z + end.uz * along + end.ux * (7 + j * 2) * side;
+        const along = 10 + j * 9;
+        const x = end.x + end.ux * along - end.uz * (9 + j * 3) * side;
+        const z = end.z + end.uz * along + end.ux * (9 + j * 3) * side;
         if (!world.river || !inPoly(world.river, x, z) || nearestOnRing(world.river, x, z, {}).d < 4) return;
-        const boat = new Boat(scene, world, fx, type, [0xc9a43a, 0xff3fa4, 0x38f3ff][j % 3]);
+        const boatCol = type === 'trawler' ? [0x2d5a44, 0xc85a2b, 0x1f4f8a][j % 3] : [0xc9a43a, 0xff3fa4, 0x38f3ff][j % 3];
+        const boat = new Boat(scene, world, fx, type, boatCol);
         boat.place(x, z, end.yaw);
         vehicles.push(boat);
       });

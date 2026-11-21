@@ -99,7 +99,8 @@ The short version of everything in the game. Details are in [Features](#-feature
 - 🚕 **Kolkata's own vehicles:** the yellow Ambassador taxi, autos, hand-pulled rickshaws, WBTC and private buses, plus cars, bikes and trucks. Traffic keeps left and obeys one-way streets.
 - 🚋 **Trams, EMU locals and the Rajdhani** on the real lines, stopping at real stations with real platform numbers.
 - 🚇 **Metro Blue and Green lines**, including the tunnel **under the Hooghly**, with twin tracks, sliding doors, platform screen doors, fare gates and next-train countdowns.
-- ⛴️ **Ferries** between the real ghats, plus country boats, a speedboat and a jet ski.
+- ⛴️ **Refined River Fleet:** Ganga ferry launches, traditional wooden country boats (nouka), speedboats, and jet skis, all upgraded with authentic lifebuoys, tire fenders, brass horns, searchlights, bamboo chhoi, and lanterns.
+- 🚢 **River Cargo Ships & Fishing Trawlers:** Large 58m container cargo ships with colorful container stacks and deck cranes, plus Bay of Bengal fishing trawlers with stern A-frame gantries, net winch drums, and outriggers—both driveable and cruising the Hooghly in autonomous traffic lanes.
 - 🚇 **Discovered Metro & Ferry Fast-Travel (M):** Click any discovered Metro station or Ferry Ghat on the full-screen map to fast-travel across the city for ₹20 with an authentic station chime.
 - 🎟️ **Ride or drive anything:** F to drive, V to ride as a passenger. Hire a taxi, auto or rickshaw to any place on the map and pay the meter; take a bus with route boards, a train, tram, Metro or ferry and pay the fare. You can even drive the trains, trams and Metro yourself.
 - 🧭 **GPS and search:** search any place, station or ghat, and the route follows one-way streets.
@@ -249,8 +250,12 @@ Modelled in code and placed on their real footprints:
 <details>
 <summary><b>River</b></summary>
 
-- **Ferry launches** work the real ferry routes between the ghats on autopilot, docking at floating pontoon jetties. Board one from the jetty (**F**) and take the wheel; step off and it carries on.
-- **Country boats (nouka)**, a speedboat and a jet ski moored at the ghats; a **river cruise steamer** and a **cargo barge** work up and down the river.
+- **Refined Boat Visuals:** Every river vessel features authentic handcrafted nautical detailing: reflective orange lifebuoys, black rubber tire fenders with hanging hemp ropes, brass horns, searchlights, rotating radar scanners, and Indian river pennants.
+- **Traditional Country Boats (Nouka):** Wooden dinghis crafted with arched bamboo chhoi canopies, clay chula cooking stoves with brass kettles, hanging kerosene hurricane lanterns, coiled coir ropes, and long steering oars (বৈঠা).
+- **Ganga Ferry Launches:** Open-lower-deck passenger launches with slatted wooden seating, lifejacket chests, dual-tone roof canopies, and passenger railings.
+- **Bay of Bengal Fishing Trawlers:** Authentic river-sea trawlers featuring high flared bows, heavy aft A-frame gantry cranes, winch drums with wound trawl net, outrigger trolling booms, stacked plastic fish crates, and deep diesel chug. Boardable and driveable (**F**)!
+- **Hooghly River Cargo Ships:** 58-metre container feeder vessels with realistic stacks of colorful shipping containers (Maersk, Evergreen, CMA CGM, Hanjin), deck derrick crane, island bridge with wings, and smokestack funnel.
+- **Living Riverway Traffic:** 5 distinct vessels cruise up and down the Hooghly in traffic lanes with starboard channel rules, floating water swell, wakes, and mass collision obstacles.
 
 </details>
 
