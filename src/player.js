@@ -213,7 +213,8 @@ export class Player {
     return best;
   }
 
-  enter(target) {
+  enter(target, startDuty = false) {
+    this.startDutyOnEnter = startDuty;
     const g = this.game;
     let v = target.v;
     let jacked = false;
@@ -221,7 +222,10 @@ export class Player {
       v = g.adoptTrafficCar(target.traffic, new THREE.Vector2(0, 0), 0);
       jacked = true;
     }
-    if (g.vehicles.some((o) => o !== v && o.driven)) return;
+    if (g.vehicles.some((o) => o !== v && o.driven)) {
+      this.startDutyOnEnter = false;
+      return;
+    }
     if (target.cab) v.setCab(target.cab);
     // Pick the closer door, walk there, then climb in
     const d = v.def;
@@ -304,7 +308,7 @@ export class Player {
       } else if (isTaxi) {
         this.prompt = { key: 'F', text: 'Exit', key2: 'B', text2: jobsOn ? 'Off Duty' : 'Taxi Duty' };
       } else {
-        this.prompt = { key: 'F', text: 'Exit' };
+        this.prompt = null;
       }
       return;
     }
@@ -331,6 +335,7 @@ export class Player {
   }
 
   updateEntering(dt, T) {
+    const g = this.game;
     const a = this.anim;
     const v = this.vehicle;
     a.t += dt;
@@ -374,8 +379,10 @@ export class Player {
       v.locked = false;
       v.setDriven(true);
       this.game.onEnterVehicle(v);
-      if (this.startDutyOnEnter && g.jobs && g.jobs.eligible(v)) {
-        g.jobs.start(v);
+      if (this.startDutyOnEnter) {
+        if (g.jobs && g.jobs.eligible(v)) {
+          g.jobs.start(v);
+        }
         this.startDutyOnEnter = false;
       }
     }
@@ -601,13 +608,12 @@ export class Player {
       return;
     }
     if (input.hit('KeyF') && nearCar && !this.aiming) {
-      this.enter(nearCar);
+      this.enter(nearCar, false);
       return;
     } else if (input.hit('KeyB') && nearCar && !this.aiming) {
       const vType = nearCar.v ? nearCar.v.type : nearCar.traffic ? nearCar.traffic.type : null;
       if (vType === 'bike' || vType === 'rickshaw' || vType === 'van' || vType === 'taxi' || vType === 'auto') {
-        this.startDutyOnEnter = true;
-        this.enter(nearCar);
+        this.enter(nearCar, true);
         return;
       }
     } else if (input.hit('KeyE') && spot) {
