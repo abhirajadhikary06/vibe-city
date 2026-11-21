@@ -152,10 +152,11 @@ export class TaxiJobs {
     this.streak++;
     const bonus = Math.min(120, (this.streak - 1) * 15);
     const total = fare + tip + bonus;
+    const starsCount = clamp(5 - (j.damage > 30 ? 2 : j.damage > 0 ? 1 : 0) - (late ? 1 : 0), 1, 5);
     g.gameplay.addMoney(total);
     g.audio.pickup();
-    g.hud.notify(`📦 DELIVERED! ₹${total}`, `${j.order.name} safely delivered to ${j.dest}${tip ? ` · speed bonus ₹${tip}` : ''}${bonus ? ` · streak ×${this.streak} +₹${bonus}` : ''}`, '#5dff9e');
-    this.progress.delivery({ paid: total, speedTip: tip, km: j.km, streak: this.streak, onTime: !late });
+    g.hud.notify(`📦 DELIVERED! ${stars(starsCount)} · ₹${total}`, `${j.order.name} safely delivered to ${j.dest}${tip ? ` · speed bonus ₹${tip}` : ''}${bonus ? ` · streak ×${this.streak} +₹${bonus}` : ''}`, '#5dff9e');
+    this.progress.delivery({ paid: total, speedTip: tip, km: j.km, streak: this.streak, onTime: !late, stars: starsCount });
   }
 
   loseCourier(j, why) {
@@ -249,8 +250,25 @@ export class TaxiJobs {
       this.hintT = ok && !this.on ? 7 : 0;
     }
     if (!ok) {
-      if (this.on && this.job && this.job.state === 'ride') this.lose(this.job, 'You left your passenger');
-      if (this.on && this.job && this.job.state === 'delivery') this.loseCourier(this.job, 'You left your delivery vehicle');
+      if (this.on && this.job && this.job.state === 'ride') {
+        const dDest = Math.hypot(pl.pos.x - this.job.dx, pl.pos.z - this.job.dz);
+        if (dDest < 48) {
+          this.alight(this.job, this.lastVehicle || v);
+          this.pay(this.job, this.lastVehicle || v);
+          this.finish();
+          return;
+        }
+        this.lose(this.job, 'You left your passenger');
+      }
+      if (this.on && this.job && this.job.state === 'delivery') {
+        const dDest = Math.hypot(pl.pos.x - this.job.dx, pl.pos.z - this.job.dz);
+        if (dDest < 52) {
+          this.payCourier(this.job, this.lastVehicle || v);
+          this.finish();
+          return;
+        }
+        this.loseCourier(this.job, 'You left your delivery vehicle');
+      }
       if (this.on) this.stop(v && v.wrecked ? 'Vehicle is wrecked' : 'You left the vehicle');
       else if (this.hintT > 0) {
         this.hintT = 0;
@@ -295,8 +313,12 @@ export class TaxiJobs {
           this.waitT = 2;
           return;
         }
-        g.hud.mission(`${this.cab.label}<span class="cp">Collect: ${j.order.name}</span><span class="t">${Math.round(dCar)} m</span>`);
-        if (dCar < 12 && v.speed < 2.5) {
+        if (dCar < 35) {
+          g.hud.mission(`${this.cab.label}<span class="cp">Collect: ${j.order.name} · PULL UP</span><span class="t">${Math.round(dCar)} m</span>`);
+        } else {
+          g.hud.mission(`${this.cab.label}<span class="cp">Collect: ${j.order.name}</span><span class="t">${Math.round(dCar)} m</span>`);
+        }
+        if (dCar < 26 && (v.speed < 3.5 || input.hit('KeyE'))) {
           this.dispatchCourier(j, v);
         }
       } else if (j.state === 'delivery') {
@@ -308,15 +330,20 @@ export class TaxiJobs {
         }
         const left = j.allowed - j.t;
         const dDest = Math.hypot(v.pos.x - j.dx, v.pos.z - j.dz);
-        g.hud.mission(`${this.cab.label}<span class="cp">Deliver to ${j.dest}</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
+        if (dDest < 60) {
+          g.hud.mission(`${this.cab.label}<span class="cp">Deliver to ${j.dest}: PULL UP OR PRESS E/F</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
+        } else {
+          g.hud.mission(`${this.cab.label}<span class="cp">Deliver to ${j.dest}</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
+        }
         if (j.t > j.allowed * 2.2) {
           this.loseCourier(j, 'Delivery cancelled: arrived far too late');
           this.finish();
           return;
         }
-        if (dDest < 22 && v.speed < 2) {
+        if (dDest < 42 && (v.speed < 3.5 || input.hit('KeyE') || input.hit('KeyF'))) {
           this.payCourier(j, v);
           this.finish();
+          return;
         }
       }
       return;
@@ -393,7 +420,11 @@ export class TaxiJobs {
         }
         const left = j.allowed - j.t;
         const dDest = Math.hypot(v.pos.x - j.dx, v.pos.z - j.dz);
-        g.hud.mission(`${this.cab.label}<span class="cp">To ${j.dest}</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
+        if (dDest < 55) {
+          g.hud.mission(`${this.cab.label}<span class="cp">To ${j.dest}: PULL UP OR PRESS E/F</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
+        } else {
+          g.hud.mission(`${this.cab.label}<span class="cp">To ${j.dest}</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
+        }
         if (j.t > j.allowed * 2) {
           // they've had enough: out at the next standstill, or right away if stopped
           if (v.speed < 2) {
@@ -403,7 +434,7 @@ export class TaxiJobs {
           }
           break;
         }
-        if (dDest < 20 && v.speed < 1.5) {
+        if (dDest < 38 && (v.speed < 3.0 || input.hit('KeyE') || input.hit('KeyF'))) {
           this.alight(j, v);
           this.pay(j, v);
           this.finish();
@@ -468,8 +499,15 @@ export class TaxiJobs {
 
   blips() {
     const j = this.job;
-    if (!this.on || !j || j.state !== 'pickup') return [];
-    const color = j.kind === 'courier' ? '#5dff9e' : '#ffd21f';
-    return [{ x: j.x, z: j.z, color, r: 8, always: true }];
+    if (!this.on || !j) return [];
+    if (j.state === 'pickup') {
+      const color = j.kind === 'courier' ? '#5dff9e' : '#ffd21f';
+      return [{ x: j.x, z: j.z, color, r: 9, always: true }];
+    }
+    if (j.state === 'delivery' || j.state === 'ride') {
+      const color = j.kind === 'courier' ? '#5dff9e' : '#ffd21f';
+      return [{ x: j.dx, z: j.dz, color, r: 10, always: true }];
+    }
+    return [];
   }
 }

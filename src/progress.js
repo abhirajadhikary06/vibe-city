@@ -86,6 +86,18 @@ export class Progress {
     this.checkT = 0;
     this.saveT = 0;
     this.dirty = false;
+
+    // Self-healing: if player had completed courier deliveries marked lost upon vehicle exit, restore them
+    if (this.d.lost > 0 && (!this.d.deliveries || this.d.deliveries === 0)) {
+      const restored = Math.min(this.d.lost, 2);
+      this.d.deliveries = restored;
+      this.d.earned = Math.max(this.d.earned, restored * 115);
+      this.d.tips = Math.max(this.d.tips, restored * 25);
+      this.d.stars = Math.max(this.d.stars, restored * 5);
+      this.d.bestStreak = Math.max(this.d.bestStreak, restored);
+      if (!this.d.ach.includes('firstDelivery')) this.d.ach.push('firstDelivery');
+      this.save();
+    }
   }
 
   save() {
@@ -141,13 +153,14 @@ export class Progress {
   }
 
   /** A courier parcel or food delivery. */
-  delivery({ paid, speedTip, km, streak, onTime, lost = false }) {
+  delivery({ paid, speedTip, km, streak, onTime, stars = 5, lost = false }) {
     if (lost) {
       this.d.lost++;
     } else {
       this.d.deliveries = (this.d.deliveries || 0) + 1;
       this.d.earned += paid;
       this.d.tips += speedTip || 0;
+      this.d.stars += stars || 5;
       this.d.km += km;
       this.d.bestStreak = Math.max(this.d.bestStreak, streak);
       if (onTime) this.unlock('firstDelivery');
@@ -164,7 +177,8 @@ export class Progress {
   }
 
   get rating() {
-    return this.d.fares ? this.d.stars / this.d.fares : 0;
+    const total = this.d.fares + (this.d.deliveries || 0);
+    return total ? this.d.stars / total : 0;
   }
 
   /** Discover places as you pass them; save now and then. */
