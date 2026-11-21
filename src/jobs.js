@@ -13,6 +13,23 @@ import { clamp, dampAngle } from './utils.js';
  */
 
 const CABS = { taxi: { base: 60, perKm: 45, speed: 9, label: 'TAXI' }, auto: { base: 40, perKm: 35, speed: 6.5, label: 'AUTO' } };
+const COURIERS = {
+  bike: { base: 50, perKm: 40, speed: 13, label: 'COURIER BIKE', jobName: 'DELIVERY' },
+  rickshaw: { base: 70, perKm: 55, speed: 3.5, label: 'RICKSHAW COURIER', jobName: 'DELIVERY' },
+  van: { base: 80, perKm: 45, speed: 9, label: 'CARGO VAN', jobName: 'PARCEL RUSH' },
+};
+const ORDERS = [
+  { name: 'Arsalan Mutton Biryani', note: 'Deliver while steaming hot!' },
+  { name: 'K.C. Das Rosogolla Tin', note: 'Handle with care: syrup tins' },
+  { name: 'College Street Rare Books', note: 'Urgent academic edition' },
+  { name: 'Flurys Rum Balls & Patties', note: 'Fresh Park Street pastries' },
+  { name: 'Gariahat Handloom Sarees', note: 'Festival rush boutique order' },
+  { name: 'High Court Legal Dossier', note: 'Deliver before bench sits' },
+  { name: 'Burrabazar Spice Crate', note: 'Fragrant cargo consignment' },
+  { name: 'Writers\' Building Files', note: 'Urgent secretariat papers' },
+  { name: 'Macher Bazar Fresh Rohu', note: 'Deliver before the ice melts' },
+  { name: 'New Market Brass Souvenirs', note: 'Fragile terracotta & handicrafts' },
+];
 const DEST_KINDS = new Set(['landmark', 'station', 'metro', 'market', 'hospital', 'hotel', 'college', 'park', 'stadium', 'worship', 'ghat', 'area']);
 
 const fmt = (t) => {
@@ -37,7 +54,7 @@ export class TaxiJobs {
   }
 
   eligible(v) {
-    return !!v && !v.rail && !v.boat && !v.wrecked && !!CABS[v.type];
+    return !!v && !v.rail && !v.boat && !v.wrecked && (!!CABS[v.type] || !!COURIERS[v.type]);
   }
 
   /** Named places a fare might ask for, each with the road point to stop at. */
@@ -61,9 +78,15 @@ export class TaxiJobs {
   /* ---------- Going on and off duty ---------- */
   start(v) {
     this.on = true;
-    this.cab = CABS[v.type];
-    this.game.hud.notify(`ON DUTY · ${this.cab.label}`, 'Look for the yellow marker: someone wants a ride', '#ffd21f');
-    this.spawnFare(v);
+    this.isCourier = !!COURIERS[v.type];
+    this.cab = this.isCourier ? COURIERS[v.type] : CABS[v.type];
+    if (this.isCourier) {
+      this.game.hud.notify(`ON DUTY · ${this.cab.label}`, 'Look for the green marker: collect the parcel', '#5dff9e');
+      this.spawnCourier(v);
+    } else {
+      this.game.hud.notify(`ON DUTY · ${this.cab.label}`, 'Look for the yellow marker: someone wants a ride', '#ffd21f');
+      this.spawnFare(v);
+    }
   }
   stop(why = 'B to go back on duty') {
     if (this.job) this.dropPassenger(true);
@@ -72,6 +95,74 @@ export class TaxiJobs {
     this.game.clearWaypoint();
     this.game.hud.mission(null);
     this.game.hud.notify('OFF DUTY', why, '#ffd21f');
+  }
+
+  /** Courier parcel order waiting at a nearby street spot. */
+  spawnCourier(v) {
+    const W = this.world;
+    const cand = W.pickupSpots.filter(([x, , z]) => {
+      const d = Math.hypot(x - v.pos.x, z - v.pos.z);
+      return d > 80 && d < 550 && inTiles(x, z, -100);
+    });
+    if (!cand.length) {
+      this.waitT = 4;
+      return;
+    }
+    const [x, , z] = cand[Math.floor(Math.random() * cand.length)];
+    const order = pick(ORDERS);
+    this.job = { state: 'pickup', kind: 'courier', order, x, z, t: 0 };
+    this.game.setWaypointQuiet({ x, z, job: true });
+  }
+
+  /** Collected parcel: dispatch to destination. */
+  dispatchCourier(j, v) {
+    const g = this.game;
+    const all = this.destinations();
+    const far = all.filter((d) => {
+      const dist = Math.hypot(d.x - v.pos.x, d.z - v.pos.z);
+      return dist > 450 && dist < 2400;
+    });
+    const list = far.length ? far : all;
+    const d = list[Math.floor(Math.random() * list.length)];
+    const route = this.world.graph.route(v.pos.x, v.pos.z, d.x, d.z);
+    const len = Math.max(300, routeLength(route));
+    j.state = 'delivery';
+    j.dest = d.n;
+    j.dx = d.x;
+    j.dz = d.z;
+    j.km = len / 1000;
+    j.allowed = Math.round(len / this.cab.speed + 25);
+    j.t = 0;
+    j.knocks = 0;
+    j.knockT = 0;
+    j.damage = 0;
+    this.game.setWaypointQuiet({ x: d.x, z: d.z, job: true });
+    g.audio.pickup();
+    g.hud.notify(`PARCEL COLLECTED · ${j.order.name.toUpperCase()}`, `Deliver to ${d.n} (${j.km.toFixed(1)} km) · ${fmt(j.allowed)} on the clock · ${j.order.note}`, '#5dff9e');
+  }
+
+  /** Successful courier dropoff. */
+  payCourier(j, v) {
+    const g = this.game;
+    const late = j.t > j.allowed;
+    const condition = Math.max(0.4, (100 - (j.damage || 0)) / 100);
+    const fare = Math.round((this.cab.base + this.cab.perKm * j.km) * condition);
+    const spare = clamp((j.allowed - j.t) / j.allowed, 0, 0.5);
+    const tip = !late && spare > 0.05 ? Math.round(fare * spare * 0.9) : 0;
+    this.streak++;
+    const bonus = Math.min(120, (this.streak - 1) * 15);
+    const total = fare + tip + bonus;
+    g.gameplay.addMoney(total);
+    g.audio.pickup();
+    g.hud.notify(`📦 DELIVERED! ₹${total}`, `${j.order.name} safely delivered to ${j.dest}${tip ? ` · speed bonus ₹${tip}` : ''}${bonus ? ` · streak ×${this.streak} +₹${bonus}` : ''}`, '#5dff9e');
+    this.progress.delivery({ paid: total, speedTip: tip, km: j.km, streak: this.streak, onTime: !late });
+  }
+
+  loseCourier(j, why) {
+    const g = this.game;
+    g.hud.notify('ORDER CANCELLED', why, '#ff5f6d');
+    this.streak = 0;
+    this.progress.delivery({ paid: 0, lost: true });
   }
 
   /** Someone on a pavement a short drive away flags you down. */
@@ -159,7 +250,8 @@ export class TaxiJobs {
     }
     if (!ok) {
       if (this.on && this.job && this.job.state === 'ride') this.lose(this.job, 'You left your passenger');
-      if (this.on) this.stop(v && v.wrecked ? 'The cab is wrecked' : 'You left the cab');
+      if (this.on && this.job && this.job.state === 'delivery') this.loseCourier(this.job, 'You left your delivery vehicle');
+      if (this.on) this.stop(v && v.wrecked ? 'Vehicle is wrecked' : 'You left the vehicle');
       else if (this.hintT > 0) {
         this.hintT = 0;
         g.hud.mission(null);
@@ -177,18 +269,58 @@ export class TaxiJobs {
     if (!this.on) {
       if (this.hintT > 0) {
         this.hintT -= dt;
-        g.hud.mission(this.hintT > 0 ? `${CABS[v.type].label}<span class="cp">B · go on duty and pick up fares</span>` : null);
+        const cabDef = COURIERS[v.type] || CABS[v.type];
+        const isC = !!COURIERS[v.type];
+        g.hud.mission(this.hintT > 0 ? `${cabDef.label}<span class="cp">B · go on duty (${isC ? 'express deliveries' : 'pick up fares'})</span>` : null);
       }
       return;
     }
     const j = this.job;
     if (!j) {
       this.waitT -= dt;
-      g.hud.mission(`${this.cab.label} DUTY<span class="cp">Waiting for a fare…</span>`);
-      if (this.waitT <= 0) this.spawnFare(v);
+      g.hud.mission(`${this.cab.label} DUTY<span class="cp">Waiting for ${this.isCourier ? 'next order' : 'a fare'}…</span>`);
+      if (this.waitT <= 0) {
+        if (this.isCourier) this.spawnCourier(v);
+        else this.spawnFare(v);
+      }
       return;
     }
     j.t += dt;
+    if (j.kind === 'courier') {
+      const dCar = Math.hypot(v.pos.x - j.x, v.pos.z - j.z);
+      if (j.state === 'pickup') {
+        if (j.t > 240) {
+          g.hud.notify('ORDER EXPIRED', 'The client cancelled the request', '#ffd36b');
+          this.job = null;
+          this.waitT = 2;
+          return;
+        }
+        g.hud.mission(`${this.cab.label}<span class="cp">Collect: ${j.order.name}</span><span class="t">${Math.round(dCar)} m</span>`);
+        if (dCar < 12 && v.speed < 2.5) {
+          this.dispatchCourier(j, v);
+        }
+      } else if (j.state === 'delivery') {
+        j.knockT -= dt;
+        if (v.impact > 4 && j.knockT <= 0) {
+          j.damage = Math.min(100, (j.damage || 0) + 15);
+          j.knockT = 2;
+          g.hud.notify('⚠️ CARGO DAMAGED!', `${j.order.name} took a hit! (-15% value)`, '#ff5f6d');
+        }
+        const left = j.allowed - j.t;
+        const dDest = Math.hypot(v.pos.x - j.dx, v.pos.z - j.dz);
+        g.hud.mission(`${this.cab.label}<span class="cp">Deliver to ${j.dest}</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
+        if (j.t > j.allowed * 2.2) {
+          this.loseCourier(j, 'Delivery cancelled: arrived far too late');
+          this.finish();
+          return;
+        }
+        if (dDest < 22 && v.speed < 2) {
+          this.payCourier(j, v);
+          this.finish();
+        }
+      }
+      return;
+    }
     const ch = j.ch;
     if (ch) {
       ch.acc += dt;
@@ -337,6 +469,7 @@ export class TaxiJobs {
   blips() {
     const j = this.job;
     if (!this.on || !j || j.state !== 'pickup') return [];
-    return [{ x: j.x, z: j.z, color: '#ffd21f', r: 8, always: true }];
+    const color = j.kind === 'courier' ? '#5dff9e' : '#ffd21f';
+    return [{ x: j.x, z: j.z, color, r: 8, always: true }];
   }
 }

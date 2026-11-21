@@ -842,3 +842,195 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   #splash *, #splash { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* ---------- Photo Mode Button in HUD ---------- */
+#btn-photo {
+  pointer-events: auto;
+  margin-top: 6px;
+  background: rgba(18, 10, 32, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  backdrop-filter: blur(4px);
+}
+#btn-photo:hover {
+  background: rgba(255, 63, 164, 0.4);
+  border-color: var(--pink);
+  box-shadow: 0 0 10px rgba(255, 63, 164, 0.5);
+  transform: translateY(-1px);
+}
+
+/* ---------- Photo Mode Overlay ---------- */
+#photo-mode {
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.photo-top {
+  padding: 24px 32px;
+  background: linear-gradient(180deg, rgba(8, 5, 14, 0.85) 0%, rgba(8, 5, 14, 0) 100%);
+  pointer-events: none;
+}
+.photo-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 38px;
+  letter-spacing: 3px;
+  color: var(--gold);
+  text-shadow: 0 0 16px rgba(255, 211, 107, 0.4);
+  line-height: 1;
+}
+.photo-sub {
+  font-size: 14px;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+.photo-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.grid-line {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.5);
+}
+.gh-1 { top: 33.333%; left: 0; right: 0; height: 1px; }
+.gh-2 { top: 66.666%; left: 0; right: 0; height: 1px; }
+.gv-1 { left: 33.333%; top: 0; bottom: 0; width: 1px; }
+.gv-2 { left: 66.666%; top: 0; bottom: 0; width: 1px; }
+
+.photo-controls {
+  align-self: flex-end;
+  margin: 24px 32px;
+  padding: 18px 24px;
+  background: rgba(14, 9, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  min-width: 320px;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: auto;
+}
+.photo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.photo-row label {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  min-width: 90px;
+}
+.photo-row span {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  color: var(--cyan);
+  min-width: 40px;
+  text-align: right;
+}
+.photo-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--pink);
+  cursor: pointer;
+}
+.photo-filters {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.photo-filters button, .photo-row button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.photo-filters button:hover, .photo-row button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.photo-filters button.active {
+  background: var(--pink);
+  border-color: var(--pink);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(255, 63, 164, 0.5);
+}
+.photo-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.btn-snap {
+  flex: 1;
+  padding: 10px 16px;
+  background: var(--green);
+  border: none;
+  border-radius: 4px;
+  color: #0b140b;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 0 16px rgba(93, 255, 158, 0.35);
+}
+.btn-snap:hover {
+  filter: brightness(1.15);
+  transform: scale(1.02);
+}
+.btn-exit {
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-exit:hover {
+  background: rgba(255, 63, 164, 0.3);
+  border-color: var(--pink);
+}
+#shutter-flash {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 999;
+  transition: opacity 0.25s ease-out;
+}
+#shutter-flash.flash {
+  opacity: 0.92;
+  transition: none;
+}

@@ -112,8 +112,9 @@ The short version of everything in the game. Details are in [Features](#-feature
 - 💃 **Gestures:** wave, point, cheer, and start a **dance party** that the crowd joins.
 
 **Gameplay**
-- 💼 **Taxi duty:** pick up fares, beat the clock, earn tips and a star rating, and build streaks.
-- 🏆 **Progress that's saved:** places discovered, 14 achievements, earnings and your best streak.
+- 💼 **Taxi & Courier duty:** pick up fares in taxis and autos, or deliver urgent food orders, parcels and book bundles in bikes, rickshaws and vans (**B**). Beat the clock, earn speed tips and build streaks.
+- 📸 **Heritage Photo Mode (P):** freeze the city in time, orbit the camera freely, adjust zoom, height and filters (Normal, Vintage, Monsoon, Golden, Noir), and download watermark-stamped high-res snapshots.
+- 🏆 **Progress that's saved:** places discovered, 17 achievements, earnings, deliveries and your best streak.
 - 🏎️ **Driving:** drifts, nitro, weight transfer, damage, fire and explosions.
 - 🔫 **Combat:** seven weapons, a punch and kick combo, headshots, and a weapon wheel in slow motion.
 - ❤️ **Health, ₹ money, ammo crates** and a hospital bill when you go down.
@@ -181,7 +182,8 @@ Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributor
 | Hold **Tab** | Weapon wheel (time slows while it's open) | — |
 | Hold **G** | Gestures: Wave, Dance, Point, Thumbs Up, Cheer, Shrug, Flex, Laugh | — |
 | **H** | — | Horn or bell (startles nearby people) |
-| **B** | — | In a yellow taxi or an auto: go on / off taxi duty |
+| **B** | — | In a yellow taxi or auto: taxi duty; in a bike, rickshaw or van: courier delivery rush |
+| **P** | Heritage Photo Mode: freeze time, orbit, filter, zoom and capture | Heritage Photo Mode |
 | **R** | Reload | Reset the vehicle onto the nearest road |
 | **C** | Change camera distance | Cycle chase / far / hood camera |
 | **Q** | Background music on/off | Background music on/off |

@@ -505,6 +505,14 @@ export class AudioEngine {
     const v = Math.min(0.1, 2 / Math.max(dist, 6));
     [[988, 0], [784, 0.32], [659, 0.64]].forEach(([f, d]) => this.tone(f, 0.5, 'sine', v, null, d));
   }
+  shutter() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.tone(1900, 0.02, 'square', 0.12, null, 0);
+    this.burst(t, { type: 'highpass', freq: 4200, vol: 0.22, dur: 0.04 });
+    this.burst(t + 0.07, { type: 'bandpass', freq: 1100, vol: 0.25, dur: 0.05 });
+    this.burst(t + 0.12, { type: 'highpass', freq: 3600, vol: 0.16, dur: 0.03 });
+  }
   hurt() {
     this.tone(220, 0.18, 'sawtooth', 0.06, 110);
   }
