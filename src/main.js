@@ -188,6 +188,9 @@ const game = {
   get progress() {
     return progress;
   },
+  get jobs() {
+    return jobs;
+  },
   /** Ask the player for a destination on the map; cb(point | null). */
   pickDestination(text, cb) {
     pickCb = cb;

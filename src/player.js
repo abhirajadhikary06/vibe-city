@@ -46,6 +46,7 @@ export class Player {
     this.downT = 0;
     this.speed = 0;
     this.prompt = null;
+    this.startDutyOnEnter = false;
     this.hp = 100;
     this.dead = false;
     this.deadT = 0;
@@ -294,6 +295,17 @@ export class Player {
       this.ch.steer = v.steer / 0.6;
       if (input.hit('KeyF')) this.exit();
       this.ch.update(dt, T);
+
+      const isCourier = v.type === 'bike' || v.type === 'rickshaw' || v.type === 'van';
+      const isTaxi = v.type === 'taxi' || v.type === 'auto';
+      const jobsOn = g.jobs && g.jobs.on;
+      if (isCourier) {
+        this.prompt = { key: 'F', text: 'Exit', key2: 'B', text2: jobsOn ? 'Off Duty' : 'Courier Delivery' };
+      } else if (isTaxi) {
+        this.prompt = { key: 'F', text: 'Exit', key2: 'B', text2: jobsOn ? 'Off Duty' : 'Taxi Duty' };
+      } else {
+        this.prompt = { key: 'F', text: 'Exit' };
+      }
       return;
     }
     if (this.mode === 'entering') {
@@ -362,6 +374,10 @@ export class Player {
       v.locked = false;
       v.setDriven(true);
       this.game.onEnterVehicle(v);
+      if (this.startDutyOnEnter && g.jobs && g.jobs.eligible(v)) {
+        g.jobs.start(v);
+        this.startDutyOnEnter = false;
+      }
     }
   }
 
@@ -549,7 +565,28 @@ export class Player {
       if (nearCar.v && nearCar.v.rail) text = `Drive ${nearCar.v.label}`;
       else if (nearCar.v) text = `Drive ${nearCar.v.label}`;
       else text = `Steal ${TYPES[nearCar.traffic.type].label}`;
-      this.prompt = ride ? { key: 'F', text, key2: 'V', text2: ride.text } : { key: 'F', text };
+
+      const vType = nearCar.v ? nearCar.v.type : nearCar.traffic ? nearCar.traffic.type : null;
+      const isCourier = vType === 'bike' || vType === 'rickshaw' || vType === 'van';
+      const isTaxi = vType === 'taxi' || vType === 'auto';
+
+      if (ride) {
+        if (isCourier) {
+          this.prompt = { key: 'F', text, key2: 'V', text2: ride.text, key3: 'B', text3: 'Delivery' };
+        } else if (isTaxi) {
+          this.prompt = { key: 'F', text, key2: 'V', text2: ride.text, key3: 'B', text3: 'Taxi Duty' };
+        } else {
+          this.prompt = { key: 'F', text, key2: 'V', text2: ride.text };
+        }
+      } else {
+        if (isCourier) {
+          this.prompt = { key: 'F', text, key2: 'B', text2: 'Courier Delivery' };
+        } else if (isTaxi) {
+          this.prompt = { key: 'F', text, key2: 'B', text2: 'Taxi Duty' };
+        } else {
+          this.prompt = { key: 'F', text };
+        }
+      }
     } else if (ride) {
       this.prompt = { key: 'V', text: ride.text };
     } else if (spot) {
@@ -566,6 +603,13 @@ export class Player {
     if (input.hit('KeyF') && nearCar && !this.aiming) {
       this.enter(nearCar);
       return;
+    } else if (input.hit('KeyB') && nearCar && !this.aiming) {
+      const vType = nearCar.v ? nearCar.v.type : nearCar.traffic ? nearCar.traffic.type : null;
+      if (vType === 'bike' || vType === 'rickshaw' || vType === 'van' || vType === 'taxi' || vType === 'auto') {
+        this.startDutyOnEnter = true;
+        this.enter(nearCar);
+        return;
+      }
     } else if (input.hit('KeyE') && spot) {
       spot.act();
     } else if (input.hit('KeyE') && nearPed && !gun) {
