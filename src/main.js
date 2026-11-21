@@ -24,6 +24,7 @@ import { Voices } from './voice.js';
 import { Rides } from './ride.js';
 import { Boards } from './boards.js';
 import { BusStand } from './busstand.js';
+import { dressBus } from './busroutes.js';
 import { inPoly, nearestOnRing } from './geo.js';
 import * as T from './textures.js';
 import { clamp, damp, dampAngle, lerp } from './utils.js';
@@ -203,6 +204,8 @@ const game = {
     if (!released) traffic.release(car, player.focus);
     const v = new Vehicle(scene, world, fx, car.type, car.color, car.mesh);
     v.place(car.x, car.z, car.yaw, vel, car.y);
+    // a route bus keeps its route, and where it had got to along it
+    if (car.busRoute) Object.assign(v, { busRoute: car.busRoute, busBack: car.busBack, busLinks: car.busLinks, busI: car.busI });
     v.angVel = angVel || 0;
     vehicles.push(v);
     pruneVehicles();
@@ -578,10 +581,16 @@ async function boot() {
       break;
     }
   }
-  for (const [type, color, x, z, yaw] of parked) {
+  for (const [type, color, x, z, yaw, run] of parked) {
     const v = new Vehicle(scene, world, fx, type, color);
     v.place(x, z, yaw);
     v.keep = true;
+    if (run) {
+      // a bus waiting at its terminus, with that route's boards
+      dressBus(v.car.body, world.graph, run.route);
+      v.busRoute = run.route;
+      v.busBack = run.back;
+    }
     vehicles.push(v);
   }
   // Dharmatala: buses waiting at the Esplanade terminus
@@ -592,7 +601,7 @@ async function boot() {
     v.keep = true;
     vehicles.push(v);
     return v;
-  });
+  }, world.graph);
   // every station's lights, collected from the platforms, stalls and shelters above
   world.buildStationLamps();
   // On the Hooghly: launches working the ferry routes, country boats at the ghats
@@ -841,6 +850,14 @@ function updateRoute(dt) {
     return;
   }
   const f = player.focus;
+  // riding: the line follows the way the bus or driver is actually going, with the time it'll take
+  const ride = rides.remaining();
+  if (ride) {
+    route = ride.pts;
+    hud.route = route;
+    hud.waypoint(ride.left, ride.eta, rides.ride.kind === 'bus' && rides.ride.final ? 'LAST STOP' : '');
+    return;
+  }
   // a taxi job's waypoint stays until the job moves on
   if (!waypoint.job && Math.hypot(f.x - waypoint.x, f.z - waypoint.z) < 12) {
     hud.notify('ARRIVED', 'Waypoint reached', '#ff3fa4');

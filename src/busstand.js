@@ -1,23 +1,16 @@
 import * as THREE from 'three';
 import { MAP, polygon, inPoly } from './geo.js';
-import { busRouteBoard } from './fleet.js';
+import { terminusRoutes, dressBus } from './busroutes.js';
 import { merge, paint } from './utils.js';
 
 /*
  * The Esplanade (Dharmatala) bus terminus beside Shaheed Minar: buses in WBTC
  * and private liveries waiting in their bays under the shelters, each with its
- * route board. Board one (V) and it takes you to where the board says.
+ * route board: real routes that start or end at Esplanade. Board one (V) and it
+ * takes you the way that route really runs.
  */
 
-/** Routes out of Esplanade to places inside the map: number, where to, via, Bengali, map name, livery. */
-export const ROUTES = [
-  { no: '12C/1', en: 'ESPLANADE - HOWRAH STN', via: 'B.B.D. BAG · HOWRAH BRIDGE', bn: 'ধর্মতলা – হাওড়া স্টেশন', to: 'Howrah Bus Station', short: 'HOWRAH STN', livery: 0xd99a22 },
-  { no: 'S-163', en: 'ESPLANADE - SHOBHABAZAR', via: 'C.R. AVENUE · GIRISH PARK', bn: 'ধর্মতলা – শোভাবাজার', to: 'Shobhabazar Sutanuti', short: 'SHOBHABAZAR', livery: 0x2f5fb3 },
-  { no: '24B', en: 'ESPLANADE - SEALDAH', via: 'S.N. BANERJEE RD · MOULALI', bn: 'ধর্মতলা – শিয়ালদহ', to: 'Sealdah', short: 'SEALDAH', livery: 0xc8382c },
-  { no: 'S-101', en: 'ESPLANADE - B.B.D. BAG', via: 'RAJ BHAVAN · LALDIGHI', bn: 'ধর্মতলা – বি.বা.দী. বাগ', to: 'BBD Bagh', short: 'B.B.D. BAG', livery: 0x2f5fb3 },
-  { no: 'RT-27', en: 'ESPLANADE - PARK CIRCUS', via: 'PARK STREET · MULLICK BAZAR', bn: 'ধর্মতলা – পার্ক সার্কাস', to: 'Park Circus', short: 'PARK CIRCUS', livery: 0x2f8a4a },
-  { no: '213', en: 'ESPLANADE - BABUGHAT', via: 'EDEN GARDENS · STRAND RD', bn: 'ধর্মতলা – বাবুঘাট', to: 'Babughat bus stand', short: 'BABUGHAT', livery: 0xd99a22 },
-];
+const BAYS = 6;
 
 const box = (w, h, d, x, y, z, hex) => {
   const g = new THREE.BoxGeometry(w, h, d).translate(x, y, z);
@@ -77,11 +70,12 @@ export class BusStand {
     // Bays: buses side by side across the long axis, nose to the road
     const parts = [];
     const busYaw = Math.atan2(-uz, ux) + Math.PI / 2;
+    const runs = terminusRoutes(world.graph, /^esplanade$/i, BAYS);
     let k = 0;
-    for (let u = -ROUTES.length * 2.6; k < ROUTES.length && u < 60; u += 5.2) {
+    for (let u = -runs.length * 2.6; k < runs.length && u < 60; u += 5.2) {
       const [x, z] = W(u, 0);
       if (!inPoly(P, x, z) || world.collideCircle(x, z, 2)) continue;
-      this.buses.push({ route: ROUTES[k], x, z, yaw: busYaw });
+      this.buses.push({ run: runs[k], x, z, yaw: busYaw });
       // a numbered post at the head of each bay
       const [px, pz] = W(u, -7.4);
       parts.push(box(0.12, 2.4, 0.12, px, 1.2, pz, '#2a2b2e'));
@@ -112,7 +106,7 @@ export class BusStand {
     }
     // Ticket and enquiry booth
     {
-      const [x, z] = W(-ROUTES.length * 2.6 - 6, -9.5);
+      const [x, z] = W(-BAYS * 2.6 - 6, -9.5);
       parts.push(box(3, 2.6, 2.6, x, 1.3, z, '#e8e2d4'), box(3.4, 0.15, 3, x, 2.7, z, '#9a3a2a'));
       world.addCircle(x, z, 1.8);
     }
@@ -134,20 +128,13 @@ export class BusStand {
   }
 
   /** Put the waiting buses in their bays (called once vehicles can be created). */
-  spawn(make) {
+  spawn(make, graph) {
     for (const b of this.buses) {
-      const v = make('bus', b.route.livery, b.x, b.z, b.yaw);
-      v.busRoute = b.route;
-      const dest = MAP.pois.find((p) => p.n === b.route.to) || MAP.stations.find((p) => p.n === b.route.to);
-      v.busDest = dest ? { x: dest.x, z: dest.z } : null;
-      // its own route boards: front, sides and the lettering on the glass
-      const { board, side, glass } = busRouteBoard(b.route.livery, { no: b.route.no, en: b.route.en, bn: b.route.bn, via: b.route.via });
-      v.car.body.traverse((o) => {
-        const u = o.isMesh && o.material.userData;
-        if (u && u.dest) o.material = board;
-        else if (u && u.destSide) o.material = side;
-        else if (u && u.destGlass) o.material = glass;
-      });
+      const { route, back } = b.run;
+      const v = make('bus', route.livery, b.x, b.z, b.yaw);
+      v.busRoute = route;
+      v.busBack = back;
+      dressBus(v.car.body, graph, route);
     }
   }
 }

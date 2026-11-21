@@ -298,6 +298,7 @@ class Heap {
 /* =========================================================
    Road graph
    ========================================================= */
+const STEP = 1 << 20; // node pair key: a * STEP + b
 const NO_TRAFFIC = new Set(['parking_aisle', 'driveway', 'drive-through', 'emergency_access']);
 export const KEEP_LEFT = true; // India drives on the left
 
@@ -325,6 +326,7 @@ export class RoadGraph {
       return g;
     };
     this.edges = [];
+    this.steps = new Map();
     for (const r of drivable) {
       let start = 0;
       for (let k = 1; k < r.n.length; k++) {
@@ -336,6 +338,11 @@ export class RoadGraph {
         if (poly.len < 0.5) continue;
         const e = { id: this.edges.length, a: G(ids[0]), b: G(ids[ids.length - 1]), pts, poly, len: poly.len, c: r.c, w: r.w, o: r.o || 0, br: !!r.br, name: r.name || '', hw: r.h };
         this.edges.push(e);
+        // which edge, and which way along it, each step between two map nodes is
+        for (let i = 1; i < ids.length; i++) {
+          this.steps.set(ids[i - 1] * STEP + ids[i], { e, dir: 1 });
+          this.steps.set(ids[i] * STEP + ids[i - 1], { e, dir: -1 });
+        }
         if (e.o >= 0) this.nodes[e.a].out.push({ e, dir: 1 });
         if (e.o <= 0) this.nodes[e.b].out.push({ e, dir: -1 });
         // incoming lists help find dead ends and U-turns
@@ -467,6 +474,52 @@ export class RoadGraph {
     push(g.x, g.z);
     return pts;
   }
+  /** The edge and direction for one step from map node a to map node b, or undefined. */
+  step(a, b) {
+    return this.steps.get(a * STEP + b);
+  }
+
+  /**
+   * Drivable links [{ e, dir }] from graph node `from` to graph node `to` (one-way rules kept),
+   * or to the first node within `near` metres of it; null if there's no way within maxCost.
+   */
+  links(from, to, maxCost = 2000, near = 0) {
+    if (from === to) return [];
+    const dist = new Map([[from, 0]]);
+    const prev = new Map();
+    const heap = new Heap();
+    const goal = this.nodes[to];
+    const h = (n) => Math.hypot(this.nodes[n].x - goal.x, this.nodes[n].z - goal.z);
+    heap.push(h(from), from);
+    const done = new Set();
+    while (heap.size) {
+      const n = heap.pop();
+      if (done.has(n)) continue;
+      done.add(n);
+      if (n === to || (near && Math.hypot(this.nodes[n].x - goal.x, this.nodes[n].z - goal.z) < near)) {
+        to = n;
+        break;
+      }
+      for (const l of this.nodes[n].out) {
+        const m = l.dir > 0 ? l.e.b : l.e.a;
+        const cost = dist.get(n) + l.e.len;
+        if (cost > maxCost || cost >= (dist.get(m) ?? Infinity)) continue;
+        dist.set(m, cost);
+        prev.set(m, l);
+        heap.push(cost + h(m), m);
+      }
+    }
+    if (to === from) return [];
+    if (!prev.has(to)) return null;
+    const chain = [];
+    for (let n = to; n !== from; ) {
+      const l = prev.get(n);
+      chain.push(l);
+      n = l.dir > 0 ? l.e.a : l.e.b;
+    }
+    return chain.reverse();
+  }
+
   allLinks(n) {
     if (!this._all) {
       this._all = this.nodes.map(() => []);

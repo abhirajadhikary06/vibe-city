@@ -1,7 +1,7 @@
 import { BOUNDS } from './world.js';
 import { MAP } from './geo.js';
 import * as THREE from 'three';
-import { clamp } from './utils.js';
+import { clamp, etaText } from './utils.js';
 import { EMOTE_LIST, EMOTE_LABELS } from './character.js';
 import { SLOTS, WEAPONS } from './weapons.js';
 
@@ -114,8 +114,10 @@ export class HUD {
       }
     }
   }
-  waypoint(dist) {
-    const t = dist == null ? '' : dist > 1000 ? `${(dist / 1000).toFixed(1)} km` : `${Math.round(dist)} m`;
+  /** Distance to the waypoint; riding, with the time it'll take and what it is ("LAST STOP"). */
+  waypoint(dist, eta = null, label = '') {
+    let t = dist == null ? '' : dist > 1000 ? `${(dist / 1000).toFixed(1)} km` : `${Math.round(dist)} m`;
+    if (t && eta != null) t = `${label ? `${label} · ` : ''}${t} · ${etaText(eta)}`;
     if (t !== this._wp) {
       this.waypointEl.textContent = this._wp = t;
       this.waypointEl.classList.toggle('hidden', !t);

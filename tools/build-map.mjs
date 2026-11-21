@@ -6,7 +6,7 @@
  * Reads every map-data/*.osm file, merges them, projects lat/lon to metres
  * around a fixed origin (x = east, z = south, 1 unit = 1 m) and writes a
  * compact src/data/kolkata.json with roads, buildings, water, green areas,
- * rail, platforms, stations, metro and ferry routes and named places.
+ * rail, platforms, stations, metro, bus and ferry routes and named places.
  *
  * Map data © OpenStreetMap contributors, available under the ODbL.
  */
@@ -234,6 +234,7 @@ const piers = [];
 const areas = []; // other ground cover: railway land, parking, plazas
 const ferries = [];
 const railIds = new Map(); // OSM way id -> index in rails
+const roadWays = new Set(); // OSM ids of the drivable ways kept as roads
 const relWays = new Set();
 for (const r of rels.values()) if (r.tags.type === 'multipolygon') for (const m of r.members) if (m.type === 'way' && m.role === 'outer') relWays.add(m.ref);
 
@@ -262,6 +263,7 @@ for (const w of ways.values()) {
     if (t.layer) road.l = parseInt(t.layer) || 0;
     if (t.service) road.sv = t.service;
     if (!DRIVE.has(t.highway)) road.foot = 1;
+    else roadWays.add(w.id);
     roads.push(road);
     continue;
   }
@@ -442,6 +444,71 @@ for (const r of rels.values()) {
   routes.push({ k: t.route, name: name(t), ref: t.ref || '', color: t.colour || '', stops, rails: railRefs });
 }
 
+/* ---------- Bus routes: the streets each numbered route really runs along ---------- */
+// The member ways of each route relation, in order, joined into runs of road nodes. Where one
+// way runs on past the junction the next one leaves from, the run is cut back to that junction;
+// where the next way doesn't touch the run at all (a gap in the data, or the route leaving the
+// map), a new run starts. The game strings the runs onto its street graph.
+const busRoutes = [];
+for (const r of rels.values()) {
+  const t = r.tags;
+  if (t.route !== 'bus' || !t.ref || !t.from || !t.to) continue;
+  const members = r.members.filter((m) => m.type === 'way' && !/platform/.test(m.role)).map((m) => (roadWays.has(m.ref) ? ways.get(m.ref).nds : null));
+  const runs = [];
+  let cur = null;
+  let fresh = false; // cur is still a single way, so it may be the wrong way round
+  members.forEach((nds, k) => {
+    if (!nds || nds[0] === nds[nds.length - 1]) {
+      // missing, or a roundabout (which way round the bus goes is up to the street graph)
+      if (cur) runs.push(cur);
+      cur = null;
+      return;
+    }
+    if (!cur) {
+      cur = nds.slice();
+      fresh = true;
+      return;
+    }
+    const join = (run) => {
+      // the latest node of the run that this way touches, preferring the way's ends
+      for (let i = run.length - 1; i >= Math.max(0, run.length - 400); i--) {
+        const j = nds.indexOf(run[i]);
+        if (j >= 0) return { i, j };
+      }
+      return null;
+    };
+    let hit = join(cur);
+    if (fresh && (!hit || (hit.i !== cur.length - 1 && (nds[0] === cur[0] || nds[nds.length - 1] === cur[0])))) {
+      cur.reverse();
+      hit = join(cur);
+    }
+    fresh = false;
+    if (!hit) {
+      runs.push(cur);
+      cur = nds.slice();
+      fresh = true;
+      return;
+    }
+    // which way along this way: towards the end that the next member touches, else the longer side
+    const next = members[k + 1];
+    const toEnd = nds.slice(hit.j);
+    const toStart = nds.slice(0, hit.j + 1).reverse();
+    let part;
+    if (hit.j === 0) part = toEnd;
+    else if (hit.j === nds.length - 1) part = toStart;
+    else if (next && next.includes(nds[nds.length - 1])) part = toEnd;
+    else if (next && next.includes(nds[0])) part = toStart;
+    else part = toEnd.length >= toStart.length ? toEnd : toStart;
+    cur = cur.slice(0, hit.i + 1).concat(part.slice(1));
+  });
+  if (cur) runs.push(cur);
+  const p = runs.map((run) => run.map((id) => nodeIndex.get(id)).filter((i) => i !== undefined)).filter((run) => run.length > 1);
+  if (!p.length) continue;
+  const route = { ref: t.ref.trim(), from: t.from.trim(), to: t.to.trim(), p };
+  if (t.network || t.operator) route.net = t.network || t.operator;
+  busRoutes.push(route);
+}
+
 /* ---------- Region-wide context (tools/fetch-region.mjs): railways and places ---------- */
 const region = { rails: [], places: [] };
 function dp(ps, eps) {
@@ -532,6 +599,7 @@ const out = {
   ferries,
   stations,
   routes,
+  busRoutes,
   pois,
   region,
 };
@@ -545,6 +613,7 @@ console.log(
     .map(([k, v]) => `${k} ${k === 'nodes' ? v.length / 2 : v.length}`)
     .join(', '),
 );
+console.log(`bus routes: ${busRoutes.length}, ${busRoutes.reduce((s, r) => s + r.p.length, 0)} runs`);
 console.log(`region: ${region.rails.length} rail lines, ${region.places.length} places`);
 console.log(`river banks: ${river ? river.banks.map((b) => b.length / 2).join(', ') : 'none'}`);
 console.log('routes:', routes.map((r) => `${r.k} ${r.name} [${r.stops.map((s) => s.n).join(' > ')}] rails ${r.rails.length}`).join('\n  '));
