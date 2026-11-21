@@ -30,6 +30,7 @@ export class HUD {
       loading: $('loading'),
       play: $('play'),
       pause: $('pause'),
+      photo: $('photo-mode'),
     };
     this.mm = $('minimap').getContext('2d');
     this.sp = $('speedo').getContext('2d');
@@ -462,6 +463,10 @@ export class HUD {
   }
   setPaused(p) {
     this.el.pause.classList.toggle('hidden', !p);
+  }
+  setPhoto(p) {
+    this.el.photo.classList.toggle('hidden', !p);
+    this.el.hud.classList.toggle('hidden', p);
   }
 
   /* ---------- Messages ---------- */
