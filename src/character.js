@@ -94,10 +94,555 @@ function npcMaterial() {
   }
   return NPC_MAT;
 }
-export function playerMaterial() {
+export const OUTFITS = {
+  default: {
+    id: 'default',
+    name: 'Vibe City Tropical',
+    bengali: 'রেট্রো প্রিন্ট শার্ট',
+    desc: 'Signature cyan floral print shirt, white chinos, and boat loafers',
+    price: 0,
+    swatch: 'linear-gradient(135deg, #1fb5b0, #ff4f9a)',
+    icon: '🌴',
+    look: {
+      female: false,
+      skin: '#c98e6a',
+      shirt: '#ffffff',
+      print: true,
+      pants: '#f4f2ec',
+      shoes: '#d9c3a1',
+      hair: '#2a1c14',
+      longHair: false,
+      skirt: false,
+      glasses: true,
+      shorts: false,
+      longSleeve: false,
+      scale: 1.02,
+      player: true,
+    },
+    drawAtlas(g) {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 512, 256);
+      g.fillStyle = '#1fb5b0';
+      g.fillRect(0, 0, 256, 256);
+      let s = 7;
+      const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+      g.save();
+      g.beginPath();
+      g.rect(0, 0, 256, 256);
+      g.clip();
+      for (let i = 0; i < 26; i++) {
+        const x = rnd() * 256;
+        const y = rnd() * 256;
+        const a = rnd() * Math.PI;
+        g.fillStyle = '#0d6f62';
+        g.save();
+        g.translate(x + 10, y + 8);
+        g.rotate(a);
+        g.beginPath();
+        g.ellipse(0, 0, 22, 7, 0, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
+      }
+      const flowers = ['#ff4f9a', '#ffd166', '#ff8a5b', '#ffffff'];
+      for (let i = 0; i < 22; i++) {
+        const x = rnd() * 256;
+        const y = rnd() * 256;
+        const r = 9 + rnd() * 9;
+        g.fillStyle = flowers[i % flowers.length];
+        for (let p = 0; p < 5; p++) {
+          const pa = (p / 5) * Math.PI * 2 + i;
+          g.beginPath();
+          g.ellipse(x + Math.cos(pa) * r * 0.7, y + Math.sin(pa) * r * 0.7, r * 0.62, r * 0.4, pa, 0, Math.PI * 2);
+          g.fill();
+        }
+        g.fillStyle = '#fff3b0';
+        g.beginPath();
+        g.arc(x, y, r * 0.25, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.restore();
+    },
+  },
+
+  kurta_dhoti: {
+    id: 'kurta_dhoti',
+    name: 'Classic Kurta & Dhoti',
+    bengali: 'ধুতি-পাঞ্জাবি ও নাগরা',
+    desc: 'Crisp ivory silk Bengali Panjabi with gold Kantha embroidery, pleated dhoti & leather sandals',
+    price: 150,
+    swatch: 'linear-gradient(135deg, #fdfbf7, #d4af37)',
+    icon: '✨',
+    look: {
+      female: false,
+      skin: '#c98e6a',
+      shirt: '#ffffff',
+      print: true,
+      pants: '#f5f2e9',
+      shoes: '#6a3e1f',
+      hair: '#2a1c14',
+      longHair: false,
+      skirt: false,
+      glasses: false,
+      shorts: false,
+      longSleeve: true,
+      scale: 1.02,
+      player: true,
+    },
+    drawAtlas(g) {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 512, 256);
+      g.fillStyle = '#fdfbf7';
+      g.fillRect(0, 0, 256, 256);
+
+      g.strokeStyle = '#eee5d3';
+      g.lineWidth = 0.8;
+      for (let x = 6; x < 256; x += 10) {
+        g.beginPath();
+        g.moveTo(x, 0);
+        g.lineTo(x, 256);
+        g.stroke();
+      }
+
+      g.fillStyle = '#f7eedd';
+      g.fillRect(122, 60, 12, 185);
+      g.strokeStyle = '#d4af37';
+      g.lineWidth = 1.5;
+      g.strokeRect(122, 60, 12, 185);
+
+      for (const by of [90, 125, 160, 195, 230]) {
+        g.fillStyle = '#c99a2c';
+        g.beginPath();
+        g.arc(128, by, 3.5, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = '#8c6815';
+        g.stroke();
+      }
+
+      for (const side of [-1, 1]) {
+        const kx = 128 + side * 28;
+        for (const ky of [130, 180]) {
+          g.save();
+          g.translate(kx, ky);
+          g.fillStyle = '#e8d5a7';
+          g.strokeStyle = '#c99a2c';
+          g.lineWidth = 1;
+          g.beginPath();
+          g.moveTo(0, 12);
+          g.bezierCurveTo(side * 14, 10, side * 14, -8, 0, -12);
+          g.bezierCurveTo(side * -6, -6, side * -6, 8, 0, 12);
+          g.fill();
+          g.stroke();
+          g.restore();
+        }
+      }
+
+      g.fillStyle = '#f3e5c8';
+      g.fillRect(0, 240, 256, 16);
+      g.strokeStyle = '#c99a2c';
+      g.lineWidth = 1.5;
+      g.strokeRect(0, 240, 256, 16);
+      g.fillStyle = '#c99a2c';
+      for (let cx = 10; cx < 256; cx += 18) {
+        g.beginPath();
+        g.arc(cx, 248, 2, 0, Math.PI * 2);
+        g.fill();
+      }
+    },
+  },
+
+  taxi_khaki: {
+    id: 'taxi_khaki',
+    name: 'Kolkata Yellow Taxi Khaki',
+    bengali: 'হলুদ ট্যাক্সি ড্রাইভার খাকি',
+    desc: 'Official cabbie safari uniform with KOL-TAXI brass badge, button flaps & dark work shoes',
+    price: 200,
+    swatch: 'linear-gradient(135deg, #c3a270, #f4c51c)',
+    icon: '🚕',
+    look: {
+      female: false,
+      skin: '#c98e6a',
+      shirt: '#ffffff',
+      print: true,
+      pants: '#a88752',
+      shoes: '#1e1e1e',
+      hair: '#2a1c14',
+      longHair: false,
+      skirt: false,
+      glasses: true,
+      shorts: false,
+      longSleeve: false,
+      scale: 1.02,
+      player: true,
+    },
+    drawAtlas(g) {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 512, 256);
+      g.fillStyle = '#c3a270';
+      g.fillRect(0, 0, 256, 256);
+
+      g.strokeStyle = '#b5935b';
+      g.lineWidth = 1;
+      for (let y = 8; y < 256; y += 12) {
+        g.beginPath();
+        g.moveTo(0, y);
+        g.lineTo(256, y);
+        g.stroke();
+      }
+
+      g.fillStyle = '#b5935b';
+      g.fillRect(122, 10, 12, 236);
+      g.strokeStyle = '#8d6e3f';
+      g.strokeRect(122, 10, 12, 236);
+      for (const by of [40, 90, 140, 190]) {
+        g.fillStyle = '#4a3219';
+        g.beginPath();
+        g.arc(128, by, 4, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#d4af37';
+        g.beginPath();
+        g.arc(128, by, 1.5, 0, Math.PI * 2);
+        g.fill();
+      }
+
+      g.fillStyle = '#b5935b';
+      g.fillRect(72, 110, 42, 48);
+      g.strokeStyle = '#8d6e3f';
+      g.strokeRect(72, 110, 42, 48);
+      g.fillStyle = '#a88752';
+      g.beginPath();
+      g.moveTo(70, 158);
+      g.lineTo(116, 158);
+      g.lineTo(116, 172);
+      g.lineTo(93, 180);
+      g.lineTo(70, 172);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#4a3219';
+      g.beginPath();
+      g.arc(93, 170, 3, 0, Math.PI * 2);
+      g.fill();
+
+      g.fillStyle = '#d4af37';
+      g.fillRect(74, 188, 38, 14);
+      g.strokeStyle = '#634718';
+      g.strokeRect(74, 188, 38, 14);
+      g.fillStyle = '#1a1a1a';
+      g.font = 'bold 8px sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('KOL-TAXI', 93, 195);
+
+      g.fillStyle = '#b5935b';
+      g.fillRect(142, 110, 42, 48);
+      g.strokeStyle = '#8d6e3f';
+      g.strokeRect(142, 110, 42, 48);
+      g.fillStyle = '#a88752';
+      g.beginPath();
+      g.moveTo(140, 158);
+      g.lineTo(186, 158);
+      g.lineTo(186, 172);
+      g.lineTo(163, 180);
+      g.lineTo(140, 172);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#4a3219';
+      g.beginPath();
+      g.arc(163, 170, 3, 0, Math.PI * 2);
+      g.fill();
+
+      for (const ex of [45, 200]) {
+        g.fillStyle = '#a88752';
+        g.fillRect(ex, 232, 14, 24);
+        g.fillStyle = '#d4af37';
+        g.beginPath();
+        g.arc(ex + 7, 244, 3, 0, Math.PI * 2);
+        g.fill();
+      }
+    },
+  },
+
+  mohun_bagan: {
+    id: 'mohun_bagan',
+    name: 'Mohun Bagan AC (Maroon & Green)',
+    bengali: 'মোহনবাগান (মেরুন ও সবুজ)',
+    desc: 'The National Club of India: iconic maroon & green vertical stripes, sailing boat crest & No. 10',
+    price: 250,
+    swatch: 'linear-gradient(135deg, #781428, #006a3b)',
+    icon: '⚽',
+    look: {
+      female: false,
+      skin: '#c98e6a',
+      shirt: '#ffffff',
+      print: true,
+      pants: '#ffffff',
+      shoes: '#111111',
+      hair: '#2a1c14',
+      longHair: false,
+      skirt: false,
+      glasses: false,
+      shorts: true,
+      longSleeve: false,
+      scale: 1.02,
+      player: true,
+    },
+    drawAtlas(g) {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 512, 256);
+      const stripeW = 32;
+      for (let i = 0; i < 8; i++) {
+        g.fillStyle = i % 2 === 0 ? '#006a3b' : '#781428';
+        g.fillRect(i * stripeW, 0, stripeW, 256);
+      }
+      g.strokeStyle = '#ffd700';
+      g.lineWidth = 1.5;
+      for (let i = 1; i < 8; i++) {
+        g.beginPath();
+        g.moveTo(i * stripeW, 0);
+        g.lineTo(i * stripeW, 256);
+        g.stroke();
+      }
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 242, 256, 14);
+      g.fillStyle = '#781428';
+      g.fillRect(0, 248, 256, 4);
+
+      g.save();
+      g.translate(96, 160);
+      g.fillStyle = '#ffd700';
+      g.beginPath();
+      g.arc(0, 0, 22, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#781428';
+      g.beginPath();
+      g.arc(0, 0, 19, -Math.PI / 2, Math.PI / 2);
+      g.fill();
+      g.fillStyle = '#006a3b';
+      g.beginPath();
+      g.arc(0, 0, 19, Math.PI / 2, -Math.PI / 2);
+      g.fill();
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.moveTo(-2, 10);
+      g.lineTo(-2, -10);
+      g.lineTo(11, 2);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#ffd700';
+      g.beginPath();
+      g.ellipse(0, 8, 12, 4, 0, 0, Math.PI);
+      g.fill();
+      g.restore();
+
+      g.fillStyle = '#ffd700';
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 1;
+      g.font = 'bold 22px sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.strokeText('10', 160, 160);
+      g.fillText('10', 160, 160);
+
+      g.font = 'bold 36px sans-serif';
+      g.strokeText('10', 20, 150);
+      g.fillText('10', 20, 150);
+      g.strokeText('10', 236, 150);
+      g.fillText('10', 236, 150);
+    },
+  },
+
+  east_bengal: {
+    id: 'east_bengal',
+    name: 'East Bengal FC (Red & Gold)',
+    bengali: 'ইস্টবেঙ্গল (লাল ও হলুদ)',
+    desc: 'Red & golden-yellow brigade: historic flaming torch mashal crest, athletic shorts & No. 7',
+    price: 250,
+    swatch: 'linear-gradient(135deg, #c41528, #ffcc00)',
+    icon: '🔥',
+    look: {
+      female: false,
+      skin: '#c98e6a',
+      shirt: '#ffffff',
+      print: true,
+      pants: '#1a1a1a',
+      shoes: '#c41528',
+      hair: '#2a1c14',
+      longHair: false,
+      skirt: false,
+      glasses: false,
+      shorts: true,
+      longSleeve: false,
+      scale: 1.02,
+      player: true,
+    },
+    drawAtlas(g) {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 512, 256);
+      g.fillStyle = '#c41528';
+      g.fillRect(0, 0, 128, 256);
+      g.fillStyle = '#ffcc00';
+      g.fillRect(128, 0, 128, 256);
+
+      g.fillStyle = '#ff6d00';
+      g.beginPath();
+      g.moveTo(110, 0);
+      g.lineTo(146, 256);
+      g.lineTo(136, 256);
+      g.lineTo(100, 0);
+      g.closePath();
+      g.fill();
+
+      g.fillStyle = '#1a1a1a';
+      g.fillRect(0, 244, 256, 12);
+      g.fillStyle = '#ffcc00';
+      g.fillRect(0, 250, 128, 6);
+      g.fillStyle = '#c41528';
+      g.fillRect(128, 250, 128, 6);
+
+      g.save();
+      g.translate(86, 160);
+      g.fillStyle = '#0f172a';
+      g.beginPath();
+      g.moveTo(-18, -18);
+      g.lineTo(18, -18);
+      g.lineTo(18, 8);
+      g.quadraticCurveTo(18, 22, 0, 26);
+      g.quadraticCurveTo(-18, 22, -18, 8);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = '#ffd700';
+      g.lineWidth = 2;
+      g.stroke();
+
+      g.fillStyle = '#ffd700';
+      g.fillRect(-3, 2, 6, 16);
+      g.fillRect(-6, 2, 12, 4);
+
+      g.fillStyle = '#c41528';
+      g.beginPath();
+      g.moveTo(-8, 2);
+      g.lineTo(-12, -8);
+      g.lineTo(-4, -6);
+      g.lineTo(0, -16);
+      g.lineTo(4, -6);
+      g.lineTo(12, -8);
+      g.lineTo(8, 2);
+      g.closePath();
+      g.fill();
+
+      g.fillStyle = '#ffcc00';
+      g.beginPath();
+      g.moveTo(-5, 0);
+      g.lineTo(-7, -6);
+      g.lineTo(-2, -4);
+      g.lineTo(0, -11);
+      g.lineTo(2, -4);
+      g.lineTo(7, -6);
+      g.lineTo(5, 0);
+      g.closePath();
+      g.fill();
+      g.restore();
+
+      g.fillStyle = '#c41528';
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 1.5;
+      g.font = 'bold 24px sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.strokeText('7', 170, 160);
+      g.fillText('7', 170, 160);
+
+      g.fillStyle = '#ffffff';
+      g.strokeText('7', 20, 150);
+      g.fillText('7', 20, 150);
+      g.strokeText('7', 236, 150);
+      g.fillText('7', 236, 150);
+    },
+  },
+
+  scholar: {
+    id: 'scholar',
+    name: 'College Street Scholar',
+    bengali: 'কলেজ স্ট্রিট বুদ্ধিজীবী',
+    desc: 'Intellectual black Nehru waistcoat over pure white punjabi, dhoti, pen pocket & horn-rimmed frames',
+    price: 180,
+    swatch: 'linear-gradient(135deg, #1c1c1f, #fdfbf7)',
+    icon: '📖',
+    look: {
+      female: false,
+      skin: '#c98e6a',
+      shirt: '#ffffff',
+      print: true,
+      pants: '#f4f1ea',
+      shoes: '#5c3a21',
+      hair: '#2a1c14',
+      longHair: false,
+      skirt: false,
+      glasses: true,
+      shorts: false,
+      longSleeve: false,
+      scale: 1.02,
+      player: true,
+    },
+    drawAtlas(g) {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 512, 256);
+      g.fillStyle = '#fafafa';
+      g.fillRect(0, 0, 256, 256);
+
+      g.fillStyle = '#1c1c1f';
+      g.fillRect(8, 0, 240, 236);
+
+      g.strokeStyle = '#2d2d30';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(128, 0);
+      g.lineTo(128, 236);
+      g.stroke();
+
+      for (const by of [30, 75, 120, 165, 210]) {
+        g.fillStyle = '#3a3a3e';
+        g.beginPath();
+        g.arc(128, by, 4, 0, Math.PI * 2);
+        g.fill();
+      }
+
+      g.fillStyle = '#262629';
+      g.fillRect(78, 160, 36, 6);
+      g.fillStyle = '#d4af37';
+      g.fillRect(92, 163, 4, 16);
+      g.beginPath();
+      g.arc(94, 179, 3, 0, Math.PI * 2);
+      g.fill();
+
+      for (const px of [68, 152]) {
+        g.fillStyle = '#262629';
+        g.fillRect(px, 55, 36, 5);
+      }
+
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 236, 256, 20);
+      g.fillStyle = '#1c1c1f';
+      g.fillRect(0, 248, 256, 8);
+    },
+  },
+};
+
+export function playerMaterial(outfitId) {
+  const savedId = outfitId || (typeof localStorage !== 'undefined' ? localStorage.getItem('vibe_city_outfit') : null) || 'default';
+  const outfit = OUTFITS[savedId] || OUTFITS.default;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const g = c.getContext('2d');
+  outfit.drawAtlas(g);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
   return new THREE.MeshStandardMaterial({
     vertexColors: true,
-    map: printAtlas('#1fb5b0', ['#ff4f9a', '#ffd166', '#ff8a5b', '#ffffff'], '#0d6f62'),
+    map: t,
     roughness: 0.7,
   });
 }
@@ -593,6 +1138,12 @@ export const EMOTE_LABELS = { wave: 'Wave', dance: 'Dance', point: 'Point', thum
    ========================================================= */
 export class Character {
   constructor(scene, look, material) {
+    if (look && look.player) {
+      const savedId = typeof localStorage !== 'undefined' ? localStorage.getItem('vibe_city_outfit') : null;
+      if (savedId && OUTFITS[savedId]) {
+        look = { ...look, ...OUTFITS[savedId].look, outfitId: savedId };
+      }
+    }
     const geo = buildGeometry(look);
     const mat = material || npcMaterial();
     const bones = DEF.map(([name, , x, y, z]) => {
@@ -612,6 +1163,7 @@ export class Character {
     this.mesh = mesh;
     this.bones = Object.fromEntries(NAMES.map((n, i) => [n, bones[i]]));
     this.look = look;
+    this.outfitId = (look && look.outfitId) || 'default';
     scene.add(mesh);
 
     this.speed = 0;
@@ -626,6 +1178,28 @@ export class Character {
     this.turn = 0; // yaw rate, for leaning into corners
     this.P = zeroPose({});
     this.hipsY = 0;
+  }
+
+  setOutfit(outfitId) {
+    const outfit = typeof outfitId === 'string' ? OUTFITS[outfitId] : outfitId;
+    if (!outfit) return;
+    this.outfitId = outfit.id;
+    const canvas = this.mesh.material && this.mesh.material.map && this.mesh.material.map.image;
+    if (canvas && canvas.getContext) {
+      const g = canvas.getContext('2d');
+      g.clearRect(0, 0, 512, 256);
+      outfit.drawAtlas(g);
+      this.mesh.material.map.needsUpdate = true;
+    }
+    const newLook = { ...this.look, ...outfit.look, outfitId: outfit.id };
+    const newGeo = buildGeometry(newLook);
+    this.mesh.geometry.dispose();
+    this.mesh.geometry = newGeo;
+    this.mesh.bind(this.mesh.skeleton, this.mesh.bindMatrix);
+    this.look = newLook;
+    try {
+      localStorage.setItem('vibe_city_outfit', outfit.id);
+    } catch {}
   }
 
   play(name) {

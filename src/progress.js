@@ -29,6 +29,7 @@ export const ACHIEVEMENTS = [
   { id: 'chronicler', name: 'Calcutta Chronicler', desc: 'Capture a photo in Heritage Photo Mode (P)' },
   { id: 'addaPhilosopher', name: 'Adda Baaj', desc: 'Sit down for tea & philosophize at a Kolkata Adda' },
   { id: 'fastTraveler', name: 'Commuter', desc: 'Take Metro or Ferry fast-travel across the city' },
+  { id: 'fashionista', name: 'Babu of Bengal', desc: 'Customise your outfit at New Market or College Street' },
 ];
 
 const load = () => {
@@ -115,6 +116,7 @@ export class Progress {
     }
     if (name === 'adda') this.unlock('addaPhilosopher');
     if (name === 'fastTravel') this.unlock('fastTraveler');
+    if (name === 'fashionista') this.unlock('fashionista');
     this.unlock(name === 'express' ? 'train' : name);
   }
 

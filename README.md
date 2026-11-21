@@ -191,6 +191,7 @@ Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributor
 | **H** | — | Horn or bell (startles nearby people) |
 | **B** | — | In a yellow taxi or auto: taxi duty; in a bike, rickshaw or van: courier delivery rush |
 | **P** | Heritage Photo Mode: freeze time, orbit, filter, zoom and capture | Heritage Photo Mode |
+| **O** | Wardrobe & Outfits Customizer (New Market & College Street tailors) | — |
 | **R** | Reload | Reset the vehicle onto the nearest road |
 | **C** | Change camera distance | Cycle chase / far / hood camera |
 | **Q** | Background music on/off | Background music on/off |
@@ -287,7 +288,14 @@ Modelled in code and placed on their real footprints:
 <details>
 <summary><b>Gameplay</b></summary>
 
-- **Money in ₹:** cash pickups on the pavements; spend it on fares, tickets and street food.
+- **Money in ₹:** cash pickups on the pavements; spend it on fares, tickets, street food, and authentic Kolkata outfits.
+- **Wardrobe & Outfit Customizer (O):** visit heritage tailoring hubs at New Market and College Street (or press **O** on foot) to buy and equip culturally rich attire:
+  - *Classic Kurta-Pajama & Dhoti (সোনালী পাঞ্জাবি ও ধুতি)*: Ivory tussar silk with gold zari border.
+  - *Yellow Taxi Driver Uniform (ট্যাক্সি চালক খাকি)*: Khaki collared uniform with Kolkata yellow cab crest.
+  - *Mohun Bagan AC Jersey (মোহনবাগান সবুজ-মেরুন)*: Iconic maroon and green stripes of the Mariners.
+  - *East Bengal FC Jersey (ইস্টবেঙ্গল লাল-হলুদ)*: Historic red and gold torchbearer stripes.
+  - *College Street Scholar (কলেজ স্ট্রিট পণ্ডিত)*: Black Nehru waistcoat over white khadi punjabi.
+  - *Zero-load architecture:* updates hex colors and dynamic in-memory 512x256 canvas print atlas (`printAtlas`) on-the-fly with 0 extra meshes or polygons.
 - **Ammo crates** (under glowing beams) top up every gun.
 - **Health:** a health bar that refills slowly once you've stayed out of trouble for a few seconds; street food restores it too. Go down and you wake up on the nearest pavement, minus a hospital bill (₹100 plus 5% of your cash).
 - **Taxi duty:** in a yellow Ambassador or an auto, press **B**. Someone waves you down on a pavement nearby (yellow marker on the minimap); pull up beside them and they get in and name a place across town. Beat the clock without knocking them about: the fare is paid by distance, plus a tip for a smooth, quick ride (rated out of five stars) and a bonus for fares in a row. Leave the cab mid-ride and the fare is lost.
