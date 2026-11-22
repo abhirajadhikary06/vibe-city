@@ -37,6 +37,7 @@ import { TaxiJobs } from './jobs.js';
 import { Weather } from './weather.js';
 import { WardrobeManager } from './wardrobe.js';
 import { Newspaper } from './newspaper.js';
+import { FestiveManager } from './festive.js';
 
 
 /* ---------- Quality presets ---------- */
@@ -87,7 +88,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 3200);
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, adda, rides, boards, progress, jobs, weather, wardrobe, cricket, newspaper;
+let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, adda, rides, boards, progress, jobs, weather, wardrobe, cricket, newspaper, festive;
 const vehicles = [];
 const audio = new AudioEngine();
 const voices = new Voices(audio);
@@ -144,6 +145,22 @@ document.querySelectorAll('.timeset button').forEach((b) =>
   }),
 );
 applyTimeMode(timeMode);
+
+function refreshFestiveButtons() {
+  const on = festive ? festive.enabled : false;
+  document.querySelectorAll('.festiveset button').forEach((b) => {
+    b.classList.toggle('on', (b.dataset.f === 'on') === on);
+  });
+}
+document.querySelectorAll('.festiveset button').forEach((b) =>
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (festive) {
+      festive.setEnabled(b.dataset.f === 'on');
+      refreshFestiveButtons();
+    }
+  }),
+);
 const input = new Input(renderer.domElement);
 let state = 'loading';
 let elapsed = 0;
@@ -207,6 +224,9 @@ const game = {
   },
   get newspaper() {
     return newspaper;
+  },
+  get festive() {
+    return festive;
   },
   setWardrobe(open) {
     setWardrobe(open);
@@ -726,6 +746,9 @@ async function boot() {
   wardrobe.initUI(player, gameplay);
   newspaper = new Newspaper(game);
   newspaper.initUI();
+  festive = new FestiveManager(game, scene, world);
+  festive.init();
+  refreshFestiveButtons();
   progress = new Progress(hud, audio);
   jobs = new TaxiJobs(game, scene, world, progress);
   combat = new Combat(scene, world, fx, audio, game);
@@ -1029,7 +1052,10 @@ function setPaused(p) {
   if (p && state !== 'play') return;
   if (!p && state !== 'pause') return;
   state = p ? 'pause' : 'play';
-  if (p) document.querySelector('#pause .progress-panel').innerHTML = progress.html();
+  if (p) {
+    document.querySelector('#pause .progress-panel').innerHTML = progress.html();
+    refreshFestiveButtons();
+  }
   hud.setPaused(p);
   if (audio.ctx) p ? audio.ctx.suspend() : audio.ctx.resume();
   if (!p) input.lock();
@@ -1564,6 +1590,7 @@ function loop() {
   const dayDt = adda && adda.active ? dt * 12 : dt;
   day.update(dayDt, focus, camera.position);
   world.update(dt, elapsed, day.night, day.sunDir, camera.position);
+  if (festive) festive.update(dt, player.pos, day.night);
   metro.update(day.night, dt);
   boards.update(dt, camera, day.time);
   // Distance culling: rail cars and parked vehicles past the haze aren't drawn;
