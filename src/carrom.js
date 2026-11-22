@@ -477,7 +477,7 @@ export class Carrom {
     }
 
     if (this.game.gameplay) {
-      this.game.gameplay.addMoney(-spot.stake);
+      this.game.gameplay.addMoney(-spot.stake, 'Carrom stake');
     }
 
     this.active = true;
@@ -633,7 +633,7 @@ export class Carrom {
       return;
     }
     if (this.game.gameplay) {
-      this.game.gameplay.addMoney(-this.config.stake);
+      this.game.gameplay.addMoney(-this.config.stake, 'Carrom stake');
     }
 
     this.initBoardPieces();
@@ -1126,7 +1126,7 @@ export class Carrom {
       title.style.color = 'var(--gold)';
       text.textContent = `You cleared the board and defeated ${this.config.uncle}! You won ₹${this.config.prize} prize money.`;
       if (this.game.gameplay) {
-        this.game.gameplay.addMoney(this.config.prize);
+        this.game.gameplay.addMoney(this.config.prize, 'Carrom prize');
       }
       if (this.game.progress) {
         this.game.progress.event('carromKing');

@@ -32,6 +32,7 @@ export class HUD {
       pause: $('pause'),
       photo: $('photo-mode'),
       fade: $('screen-fade'),
+      moneyPopups: $('money-popups'),
     };
     this.mm = $('minimap').getContext('2d');
     this.sp = $('speedo').getContext('2d');
@@ -474,12 +475,88 @@ export class HUD {
   }
 
   /* ---------- Messages ---------- */
-  setMoney(v, instant = false) {
+  setMoney(v, instant = false, delta = null, note = '') {
+    const prev = this.targetMoney;
     this.targetMoney = v;
-    if (instant) this.shownMoney = v;
-    this.el.money.classList.add('bump');
-    clearTimeout(this._bump);
-    this._bump = setTimeout(() => this.el.money.classList.remove('bump'), 160);
+    if (instant) {
+      this.shownMoney = v;
+      return;
+    }
+    const diff = delta !== null ? delta : (v - prev);
+    if (diff !== 0) {
+      this.moneyDelta(diff, note);
+      const isGain = diff > 0;
+      this.el.money.classList.remove('bump', 'bump-gain', 'bump-loss');
+      void this.el.money.offsetWidth;
+      this.el.money.classList.add('bump', isGain ? 'bump-gain' : 'bump-loss');
+      clearTimeout(this._bump);
+      this._bump = setTimeout(() => {
+        this.el.money.classList.remove('bump', 'bump-gain', 'bump-loss');
+      }, 260);
+    }
+  }
+
+  /** Large, hard-to-miss money change popup on the lower-right side of the HUD. */
+  moneyDelta(delta, note = '') {
+    if (!delta || !this.el.moneyPopups) return;
+    const isGain = delta > 0;
+    const abs = Math.abs(delta);
+    const sign = isGain ? '+' : '−';
+    const formatted = `${sign}₹${abs.toLocaleString('en-IN')}`;
+    const cleanNote = note ? note.replace(/^TIP\s*\+?₹?\d*\s*/i, 'Tip: ').trim() : '';
+    const now = Date.now();
+
+    // Merge changes within ~350 ms into a single popup with the total (same sign)
+    const last = this.el.moneyPopups.lastElementChild;
+    if (last && (now - (last._time || 0) < 350) && (last._sign === (isGain ? 1 : -1))) {
+      last._val += delta;
+      last._time = now;
+      const combinedAbs = Math.abs(last._val);
+      const combinedSign = last._val >= 0 ? '+' : '−';
+      const isBig = combinedAbs >= 500;
+      last.classList.toggle('big', isBig);
+
+      const numEl = last.querySelector('.mp-num');
+      if (numEl) numEl.textContent = `${combinedSign}₹${combinedAbs.toLocaleString('en-IN')}`;
+
+      if (cleanNote) {
+        let noteEl = last.querySelector('.mp-note');
+        if (!noteEl) {
+          noteEl = document.createElement('div');
+          noteEl.className = 'mp-note';
+          last.appendChild(noteEl);
+        }
+        noteEl.textContent = cleanNote;
+      }
+
+      // Re-trigger the pop animation
+      last.style.animation = 'none';
+      void last.offsetWidth;
+      last.style.animation = '';
+      return;
+    }
+
+    // Limit maximum stacked popups to 4
+    while (this.el.moneyPopups.children.length >= 4) {
+      this.el.moneyPopups.firstElementChild.remove();
+    }
+
+    const isBig = abs >= 500;
+    const el = document.createElement('div');
+    el.className = `money-popup ${isGain ? 'gain' : 'loss'}${isBig ? ' big' : ''}`;
+    el._val = delta;
+    el._sign = isGain ? 1 : -1;
+    el._time = now;
+
+    el.innerHTML = `<div class="mp-num">${formatted}</div>${cleanNote ? `<div class="mp-note">${cleanNote}</div>` : ''}`;
+
+    const remove = () => {
+      if (el.parentNode) el.remove();
+    };
+    el.addEventListener('animationend', remove, { once: true });
+    setTimeout(remove, 1700);
+
+    this.el.moneyPopups.appendChild(el);
   }
   notify(title, sub = '', color = '#ffd36b') {
     const n = document.createElement('div');

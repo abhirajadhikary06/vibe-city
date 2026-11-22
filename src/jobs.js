@@ -154,7 +154,7 @@ export class TaxiJobs {
     const bonus = Math.min(120, (this.streak - 1) * 15);
     const total = fare + tip + bonus;
     const starsCount = clamp(5 - (j.damage > 30 ? 2 : j.damage > 0 ? 1 : 0) - (late ? 1 : 0), 1, 5);
-    g.gameplay.addMoney(total);
+    g.gameplay.addMoney(total, `${j.order.name}`);
     g.audio.pickup();
     g.hud.notify(`📦 DELIVERED! ${stars(starsCount)} · ₹${total}`, `${j.order.name} safely delivered to ${j.dest}${tip ? ` · speed bonus ₹${tip}` : ''}${bonus ? ` · streak ×${this.streak} +₹${bonus}` : ''}`, '#5dff9e');
     this.progress.delivery({ paid: total, speedTip: tip, km: j.km || 1, streak: this.streak, onTime: !late, stars: starsCount });
@@ -214,7 +214,7 @@ export class TaxiJobs {
     const tip = n >= 4 ? Math.round(fare * (n === 5 ? 0.3 : 0.15) * (1 + spare)) : 0;
     this.streak++;
     const bonus = Math.min(100, (this.streak - 1) * 10);
-    g.gameplay.addMoney(fare + tip + bonus);
+    g.gameplay.addMoney(fare + tip + bonus, 'Taxi fare');
     g.audio.pickup();
     g.hud.notify(`${stars(n)}  ₹${fare + tip + bonus}`, `Fare ₹${fare}${tip ? ` · tip ₹${tip}` : ''}${bonus ? ` · streak ×${this.streak} +₹${bonus}` : ''}`, '#ffd21f');
     g.hud.say(j.ch, pick(n >= 4 ? LINES.happy : late ? LINES.late : LINES.thanks), 2.6);

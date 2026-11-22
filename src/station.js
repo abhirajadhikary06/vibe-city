@@ -215,7 +215,7 @@ export class Station {
       g.audio.beep(false);
       return;
     }
-    g.gameplay.addMoney(-d.price);
+    g.gameplay.addMoney(-d.price, d.en || d.name || 'Station stall');
     g.audio.beep(true);
     if (d.id === 'tickets') {
       this.ticketT = 300;
@@ -286,7 +286,7 @@ export class Station {
         if (dist > 240) this.hud.notify('GOT AWAY', 'The TTE lost you in the crowd', '#ffd36b');
       } else if (dist < 1.8) {
         const fine = Math.min(250, this.game.gameplay.money);
-        this.game.gameplay.addMoney(-fine);
+        this.game.gameplay.addMoney(-fine, 'TTE Fine');
         if (this.game.progress) this.game.progress.event('fined');
         this.ticketT = 300;
         this.hud.say(T.ch, pick(fine ? LINES.fined : LINES.noFine), 3);

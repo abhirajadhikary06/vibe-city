@@ -318,7 +318,7 @@ export class Newspaper {
       if (this.game.audio) this.game.audio.beep(false);
       return;
     }
-    this.game.gameplay.addMoney(-5);
+    this.game.gameplay.addMoney(-5, 'The Calcutta Chronicle');
     if (this.game.audio) {
       this.game.audio.beep(true);
       if (this.game.audio.paperRustle) this.game.audio.paperRustle();
