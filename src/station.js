@@ -14,18 +14,18 @@ import { terminusRoutes } from './busroutes.js';
 const STALLS = [
   { id: 'tickets', en: 'TICKETS', bn: 'টিকিট', color: '#1f3f9a', price: 10, text: 'Buy a ticket', where: 'in', u: -1, v: -0.15 },
   { id: 'cha', en: 'CHA', bn: 'চা', color: '#b5322b', price: 10, hp: 15, text: 'Cha in a clay bhar', where: 'in', u: 1, v: 0.15 },
-  { id: 'books', en: 'A.H. WHEELER', bn: 'বই', color: '#2f6b46', price: 5, text: 'Buy the newspaper', where: 'in', u: 1, v: 0.45 },
+  { id: 'books', en: 'A.H. WHEELER', bn: 'বই ও পত্রিকা', color: '#2f6b46', price: 5, text: 'Buy The Calcutta Chronicle', where: 'in', u: 1, v: 0.45 },
   { id: 'mishti', en: 'MISHTI', bn: 'মিষ্টি', color: '#d98a1f', price: 40, hp: 35, text: 'Rosogolla and sandesh', where: 'in', u: 1, v: -0.45 },
   { id: 'phuchka', en: 'PHUCHKA', bn: 'ফুচকা', color: '#7a3fa0', price: 30, hp: 30, text: 'Phuchka, six pieces', where: 'out', v: -0.12 },
   { id: 'jhalmuri', en: 'JHALMURI', bn: 'ঝালমুড়ি', color: '#c0392b', price: 20, hp: 25, text: 'A cone of jhalmuri', where: 'out', v: 0.12 },
   { id: 'fruit', en: 'FRUITS', bn: 'ফল', color: '#3c8d2f', price: 25, hp: 20, text: 'Cut fruit with chaat masala', where: 'out', v: 0.34 },
 ];
 const NEWS = [
-  'Headline: Kolkata Metro now runs under the Hooghly!',
-  'Headline: Eden Gardens sold out for the derby.',
-  'Headline: Puja pandal budgets break records again.',
-  'Headline: Trams to get a new lease of life.',
-  'Headline: Howrah Bridge gets new LED lights.',
+  'The Calcutta Chronicle: Underwater Metro shatters cross-river transit records!',
+  'The Calcutta Chronicle: 85,000 roar at Yuva Bharati as Kolkata Derby ends in 2-2 draw.',
+  'The Calcutta Chronicle: Citizens rally at Esplanade to defend century-old wooden trams.',
+  'The Calcutta Chronicle: Torrential cloudburst inundates Thanthania and College Street.',
+  'The Calcutta Chronicle: Kumartuli sculptors work through the night as festival magic nears.',
 ];
 
 function signTex(en, bn, color) {
@@ -204,7 +204,11 @@ export class Station {
       this.hud.notify('TICKET BOUGHT', 'Valid for 5 minutes on any train', '#f4c51c');
       this.hud.say(st.vendor, pick(LINES.ticketSold), 2.4);
     } else if (d.id === 'books') {
-      this.hud.notify('ANANDA BAZAR PATRIKA', NEWS[Math.floor(Math.random() * NEWS.length)], '#ffffff');
+      if (g.newspaper) {
+        g.newspaper.buyAndOpen();
+      } else {
+        this.hud.notify('THE CALCUTTA CHRONICLE', NEWS[Math.floor(Math.random() * NEWS.length)], '#ffffff');
+      }
     } else {
       g.player.hp = Math.min(100, g.player.hp + d.hp);
       this.hud.notify(d.en, `+${d.hp} health`, '#5dff9e');

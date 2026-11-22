@@ -120,6 +120,7 @@
       <div class="pause-sub">Click or press ESC to resume</div>
       <div class="pause-actions">
         <button id="pause-wardrobe" class="pause-wardrobe-btn">👗 WARDROBE &amp; OUTFITS (O)</button>
+        <button id="pause-newspaper" class="pause-newspaper-btn hidden">📰 READ THE CALCUTTA CHRONICLE</button>
       </div>
       <div class="sound">
         <span class="ql">SOUND</span>
@@ -263,6 +264,22 @@
           </div>
         </div>
         <div id="wardrobe-list" class="wardrobe-list"></div>
+      </div>
+    </div>
+
+    <div id="newspaper-modal" class="hidden">
+      <div class="newspaper-container">
+        <div class="newspaper-actions-bar">
+          <div class="news-act-left">
+            <span class="news-act-badge">📰 VINTAGE BROADSHEET</span>
+            <span class="news-act-sub">A.H. Wheeler &amp; Co. · Howrah Concourse</span>
+          </div>
+          <div class="news-act-right">
+            <button id="newspaper-buy-new" class="news-act-btn news-btn-buy" title="Buy a fresh edition with new headlines">🔄 FRESH EDITION (₹5)</button>
+            <button id="newspaper-close" class="news-act-btn news-btn-close" title="Fold &amp; Close Newspaper (ESC)">✕ FOLD PAPER (ESC)</button>
+          </div>
+        </div>
+        <div id="newspaper-content" class="newspaper-scrollable"></div>
       </div>
     </div>
 

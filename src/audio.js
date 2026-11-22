@@ -420,6 +420,14 @@ export class AudioEngine {
     src.stop(t + 0.8);
   }
 
+  /** Physical paper rustling sound for vintage newspaper unfolding/folding. */
+  paperRustle() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.burst(t, { type: 'bandpass', freq: 1100, endFreq: 420, q: 1.4, vol: 0.18, dur: 0.22 });
+    this.burst(t + 0.07, { type: 'highpass', freq: 2200, endFreq: 1100, q: 0.9, vol: 0.12, dur: 0.16 });
+  }
+
   /** Filtered noise burst routed to the master bus. */
   burst(t, { type = 'lowpass', freq = 1000, endFreq = null, q = 0.8, vol = 0.3, dur = 0.3 }) {
     const ctx = this.ctx;

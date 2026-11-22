@@ -36,6 +36,7 @@ import { Progress } from './progress.js';
 import { TaxiJobs } from './jobs.js';
 import { Weather } from './weather.js';
 import { WardrobeManager } from './wardrobe.js';
+import { Newspaper } from './newspaper.js';
 
 
 /* ---------- Quality presets ---------- */
@@ -86,7 +87,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 3200);
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, adda, rides, boards, progress, jobs, weather, wardrobe, cricket;
+let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, adda, rides, boards, progress, jobs, weather, wardrobe, cricket, newspaper;
 const vehicles = [];
 const audio = new AudioEngine();
 const voices = new Voices(audio);
@@ -204,8 +205,14 @@ const game = {
   get wardrobe() {
     return wardrobe;
   },
+  get newspaper() {
+    return newspaper;
+  },
   setWardrobe(open) {
     setWardrobe(open);
+  },
+  setNewspaper(open) {
+    setNewspaper(open);
   },
   setPaused(p) {
     setPaused(p);
@@ -717,6 +724,8 @@ async function boot() {
   wardrobe = new WardrobeManager(scene, world, hud, audio, game);
   wardrobe.buildStalls();
   wardrobe.initUI(player, gameplay);
+  newspaper = new Newspaper(game);
+  newspaper.initUI();
   progress = new Progress(hud, audio);
   jobs = new TaxiJobs(game, scene, world, progress);
   combat = new Combat(scene, world, fx, audio, game);
@@ -1046,6 +1055,26 @@ function setWardrobe(open) {
   }
 }
 
+function setNewspaper(open) {
+  if (open && state !== 'play' && state !== 'pause') return;
+  if (!open && state !== 'newspaper') return;
+  if (open && state === 'pause') {
+    setPaused(false);
+  }
+  state = open ? 'newspaper' : 'play';
+  if (open) {
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (audio.ctx) audio.ctx.suspend();
+    if (newspaper && !newspaper.active) newspaper.open();
+  } else {
+    input.keys.clear();
+    input.scroll = 0;
+    if (audio.ctx) audio.ctx.resume();
+    if (newspaper && newspaper.active) newspaper.close();
+    input.lock();
+  }
+}
+
 /* ---------- Photo Mode ---------- */
 const photoCam = {
   yaw: 0,
@@ -1347,6 +1376,9 @@ function loop() {
   } else if (!leaveOpen && state === 'wardrobe' && (input.hit('KeyO') || input.hit('Escape'))) {
     setWardrobe(false);
   }
+  if (!leaveOpen && state === 'newspaper' && input.hit('Escape')) {
+    setNewspaper(false);
+  }
   if ((state === 'play' && input.hit('KeyM')) || (state === 'map' && (input.hit('KeyM') || input.hit('Escape')))) setMap(state === 'play');
   if (state === 'map') {
     if (waypoint && !route) route = world.graph.route(player.focus.x, player.focus.z, waypoint.x, waypoint.z);
@@ -1355,6 +1387,12 @@ function loop() {
     return;
   }
   if (state === 'wardrobe') {
+    if (post && post.composer) post.composer.render(0);
+    else renderer.render(scene, camera);
+    input.endFrame();
+    return;
+  }
+  if (state === 'newspaper') {
     if (post && post.composer) post.composer.render(0);
     else renderer.render(scene, camera);
     input.endFrame();
