@@ -107,6 +107,7 @@ The short version of everything in the game. Details are in [Features](#-feature
 
 **Station life**
 - 🫖 **Howrah Station:** buy a ticket, eat cha, jhalmuri, phuchka and mishti, and dodge the TTE who fines you ₹250 for riding without a ticket.
+- 📰 **The Calcutta Chronicle Broadsheet:** Buy today's newspaper at the A.H. Wheeler stall (₹5) to open an authentic, interactive vintage broadsheet with procedurally generated headlines (Kolkata Derby updates, tram preservation debates, monsoon deluges, underwater Metro milestones), live weather & Ganga tide tables, Dada's satirical pocket cartoons, the Rosogolla commodity index, and humorous classifieds.
 - 🚌 **Dharmatala bus stand** with real routes to Howrah, Sealdah, Shobhabazar, Park Circus and more.
 
 **People**
@@ -121,7 +122,7 @@ The short version of everything in the game. Details are in [Features](#-feature
   - **Park Street Disco (104.2 FM):** Funky 118 BPM 80s Bollywood/Bangla disco slap-bass groove and 4-on-the-floor beat.
 - ☕ **The "Adda" & Street Bench Mechanic (E):** Walk up to wooden park benches and roadside tea stalls along Prinsep Ghat, Maidan, Victoria Memorial, and College Street to sit down, sip clay-bhar cha, regenerate health, accelerate time (12x timelapse) to watch sunsets, and listen to local philosophical dialogues.
 - 📸 **Heritage Photo Mode (P):** freeze the city in time, orbit the camera freely, adjust zoom, height and filters (Normal, Vintage, Monsoon, Golden, Noir), and download watermark-stamped high-res snapshots.
-- 🏆 **Progress that's saved:** places discovered, 19 achievements, earnings, deliveries and your best streak.
+- 🏆 **Progress that's saved:** places discovered, 23 achievements, earnings, deliveries and your best streak.
 - 🏎️ **Driving:** drifts, nitro, weight transfer, damage, fire and explosions.
 - 🔫 **Combat:** seven weapons, a punch and kick combo, headshots, and a weapon wheel in slow motion.
 - ❤️ **Health, ₹ money, ammo crates** and a hospital bill when you go down.
@@ -231,7 +232,7 @@ Modelled in code and placed on their real footprints:
 <details>
 <summary><b>Howrah Station</b></summary>
 
-- **Ticket window** (₹10, valid five minutes) and stalls on the concourse and forecourt: **cha**, **jhalmuri**, **phuchka**, **mishti** and fruit restore health; the **A.H. Wheeler** book stall sells the paper. Press **E** at a counter.
+- **Ticket window** (₹10, valid five minutes) and stalls on the concourse and forecourt: **cha**, **jhalmuri**, **phuchka**, **mishti** and fruit restore health; the **A.H. Wheeler** book stall sells *The Calcutta Chronicle* broadsheet (₹5). Press **E** at a counter.
 - **The TTE:** step onto the platforms without a ticket and the ticket examiner comes after you. Get caught and it's a ₹250 fine.
 - **Trains:** two EMU locals and a Rajdhani Express start from Howrah's real platform tracks, two more locals from Sealdah. Each runs out along the real line and back.
 - **Outside:** buses waiting at Howrah Bus Station, yellow taxis at the rank, ferries at Howrah Ghat.

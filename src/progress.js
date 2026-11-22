@@ -32,6 +32,7 @@ export const ACHIEVEMENTS = [
   { id: 'fashionista', name: 'Babu of Bengal', desc: 'Customise your outfit at New Market or College Street' },
   { id: 'gullyChamp', name: 'Para Champion', desc: 'Win a gully cricket match on the Maidan' },
   { id: 'edenHero', name: 'Eden Hero', desc: 'Win a match at Eden Gardens' },
+  { id: 'newspaper', name: 'Morning Reader', desc: 'Read The Calcutta Chronicle at Howrah Station' },
 ];
 
 const load = () => {
@@ -131,6 +132,7 @@ export class Progress {
     if (name === 'adda') this.unlock('addaPhilosopher');
     if (name === 'fastTravel') this.unlock('fastTraveler');
     if (name === 'fashionista') this.unlock('fashionista');
+    if (name === 'newspaper') this.unlock('newspaper');
     this.unlock(name === 'express' ? 'train' : name);
   }
 

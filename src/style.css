@@ -1444,3 +1444,543 @@ html, body {
   #cricket .ck-bug { left: 12px; top: 12px; min-width: 0; }
   #cricket .ck-title { font-size: 52px; }
 }
+
+/* ==========================================================================
+   The Calcutta Chronicle (Vintage Broadsheet Newspaper Modal)
+   ========================================================================== */
+
+#newspaper-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 8, 14, 0.88);
+  backdrop-filter: blur(10px);
+  z-index: 75;
+  padding: 16px;
+  overflow: hidden;
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.newspaper-container {
+  max-width: 1060px;
+  width: 100%;
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.95), 0 0 40px rgba(255, 211, 107, 0.08);
+  animation: paperUnfold 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes paperUnfold {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(18px) rotate(-0.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0) rotate(0deg);
+  }
+}
+
+.newspaper-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background: #14110d;
+  border-bottom: 2px solid #2d241c;
+  color: #e2d7c5;
+}
+
+.news-act-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.news-act-badge {
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 2px;
+  font-size: 22px;
+  color: var(--gold);
+  line-height: 1;
+}
+
+.news-act-sub {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13.5px;
+  color: #a39580;
+  letter-spacing: 0.5px;
+}
+
+.news-act-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.news-act-btn {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 1px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.news-btn-buy {
+  background: rgba(255, 211, 107, 0.14);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+}
+
+.news-btn-buy:hover {
+  background: var(--gold);
+  color: #14110d;
+  transform: scale(1.03);
+}
+
+.news-btn-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.news-btn-close:hover {
+  background: rgba(255, 95, 109, 0.2);
+  border-color: #ff5f6d;
+  color: #ff5f6d;
+}
+
+.newspaper-scrollable {
+  overflow-y: auto;
+  flex: 1;
+  background: #fbf6ec;
+}
+
+.newspaper-scrollable::-webkit-scrollbar {
+  width: 10px;
+}
+
+.newspaper-scrollable::-webkit-scrollbar-track {
+  background: #e8dec7;
+}
+
+.newspaper-scrollable::-webkit-scrollbar-thumb {
+  background: #b5a58a;
+  border-radius: 4px;
+}
+
+.newspaper-scrollable::-webkit-scrollbar-thumb:hover {
+  background: #8f7e65;
+}
+
+/* Broadsheet paper layout */
+.broadsheet-paper {
+  background: radial-gradient(circle at 50% 20%, #fbf6ec 0%, #f4ebd7 60%, #e9dfc7 100%);
+  color: #16120e;
+  padding: 28px 36px 36px 36px;
+  border: 1px solid #c9bda5;
+  font-family: 'Georgia', 'Times New Roman', 'Noto Serif Bengali', serif;
+  text-rendering: optimizeLegibility;
+}
+
+.news-top-banner {
+  display: grid;
+  grid-template-columns: 1.25fr 2.6fr 1.25fr;
+  gap: 16px;
+  border-top: 3px double #181512;
+  border-bottom: 3px double #181512;
+  padding: 12px 0 10px 0;
+  align-items: center;
+}
+
+.news-ear {
+  border: 1px solid #4a3e32;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.ear-title {
+  font-family: 'Georgia', serif;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #4a3e32;
+  padding-bottom: 3px;
+  margin-bottom: 3px;
+  color: #181512;
+}
+
+.ear-sub, .ear-est, .ear-motto, .ear-tide {
+  font-size: 10.5px;
+  color: #4a3e32;
+  line-height: 1.35;
+}
+
+.ear-motto {
+  font-weight: bold;
+  color: #8a1f18;
+  margin-top: 2px;
+}
+
+.ear-wx-val {
+  font-weight: bold;
+  font-size: 12.5px;
+  color: #181512;
+  margin: 3px 0;
+}
+
+.news-masthead-center {
+  text-align: center;
+}
+
+.news-bn-title {
+  font-family: 'Kohinoor Bangla', 'Bangla MN', 'Noto Serif Bengali', serif;
+  font-size: 26px;
+  font-weight: bold;
+  color: #8a1f18;
+  letter-spacing: 1px;
+  line-height: 1.1;
+}
+
+.news-main-title {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  margin: 2px 0;
+  line-height: 1.05;
+  text-transform: uppercase;
+  color: #15110d;
+}
+
+.news-latin-motto {
+  font-size: 10.5px;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  color: #4a3e32;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.news-dateline-bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-weight: bold;
+  text-transform: uppercase;
+  padding: 6px 4px;
+  border-bottom: 2px solid #181512;
+  margin-bottom: 18px;
+  letter-spacing: 0.5px;
+}
+
+.news-body-grid {
+  display: grid;
+  grid-template-columns: 2.15fr 1fr;
+  gap: 26px;
+}
+
+.news-main-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.news-section-tag {
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  background: #181512;
+  color: #fbf6ea;
+  padding: 3px 8px;
+  display: inline-block;
+  width: fit-content;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.news-lead-bn-head {
+  font-family: 'Kohinoor Bangla', 'Bangla MN', 'Noto Serif Bengali', serif;
+  font-size: 22px;
+  font-weight: bold;
+  color: #8a1f18;
+  margin: 0 0 4px 0;
+  line-height: 1.25;
+}
+
+.news-lead-en-head {
+  font-family: 'Georgia', serif;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: -0.3px;
+  margin: 0 0 8px 0;
+  color: #15110d;
+}
+
+.news-lead-deck {
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.4;
+  color: #382f27;
+  border-bottom: 1px solid #dcd1bc;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.news-lead-columns {
+  column-count: 2;
+  column-gap: 22px;
+  column-rule: 1px solid #dcd1bc;
+  text-align: justify;
+}
+
+.news-lead-columns p {
+  font-size: 13.5px;
+  line-height: 1.55;
+  margin: 0 0 10px 0;
+  text-indent: 1.4em;
+}
+
+.news-lead-columns p:first-of-type {
+  text-indent: 0;
+}
+
+.news-dropcap {
+  float: left;
+  font-size: 52px;
+  line-height: 44px;
+  padding: 4px 6px 0 0;
+  font-family: 'Georgia', serif;
+  font-weight: bold;
+  color: #15110d;
+}
+
+.news-ornate-divider {
+  text-align: center;
+  font-size: 15px;
+  letter-spacing: 8px;
+  color: #8a7a66;
+  margin: 18px 0 14px 0;
+}
+
+.news-two-col-stories {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.news-sub-story {
+  border-top: 1px solid #181512;
+  padding-top: 8px;
+}
+
+.news-sub-bn-head {
+  font-size: 14px;
+  font-weight: bold;
+  color: #8a1f18;
+  margin-bottom: 2px;
+}
+
+.news-sub-en-head {
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1.25;
+  text-transform: uppercase;
+  margin: 0 0 6px 0;
+  color: #15110d;
+}
+
+.news-sub-text {
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: justify;
+  margin: 0;
+  color: #27211b;
+}
+
+/* Sidebar Column */
+.news-sidebar-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-left: 1px solid #181512;
+  padding-left: 18px;
+}
+
+.news-box {
+  border: 1px solid #181512;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.news-box-title {
+  font-size: 11.5px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: center;
+  border-bottom: 1px solid #181512;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+  color: #181512;
+}
+
+.news-box-cartoon {
+  border: 2px solid #181512;
+  background: #fffcf4;
+  box-shadow: 3px 3px 0 #181512;
+}
+
+.news-cartoon-dialogue {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.ncd-bn {
+  font-weight: 600;
+  color: #181512;
+  margin-bottom: 4px;
+}
+
+.ncd-sep {
+  text-align: center;
+  font-size: 10px;
+  color: #8a7a66;
+  margin: 4px 0;
+}
+
+.ncd-en {
+  font-style: italic;
+  color: #382f27;
+}
+
+.news-rates-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.news-rates-table td {
+  padding: 3px 2px;
+  border-bottom: 1px dotted #a89a84;
+  color: #27211b;
+}
+
+.rate-val {
+  text-align: right;
+  font-weight: 700;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13.5px;
+  color: #181512;
+}
+
+.news-classified-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.classified-item {
+  font-size: 11.5px;
+  line-height: 1.35;
+  border-bottom: 1px dashed #c9bda5;
+  padding-bottom: 6px;
+  color: #27211b;
+}
+
+.classified-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.cl-tag {
+  font-weight: bold;
+  text-transform: uppercase;
+  color: #8a1f18;
+  margin-right: 4px;
+}
+
+.letter-title {
+  font-weight: bold;
+  font-size: 12px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  color: #181512;
+}
+
+.letter-text {
+  font-size: 12px;
+  line-height: 1.45;
+  font-style: italic;
+  margin: 0;
+  text-align: justify;
+  color: #27211b;
+}
+
+.news-footer-bar {
+  margin-top: 24px;
+  border-top: 2px solid #181512;
+  padding-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: #5a4e40;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Pause menu button */
+.pause-newspaper-btn {
+  padding: 10px 22px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 2px;
+  background: rgba(255, 211, 107, 0.14);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pause-newspaper-btn:hover {
+  background: var(--gold);
+  color: #14110d;
+  transform: scale(1.02);
+}
+
+@media (max-width: 860px) {
+  .news-top-banner {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .news-ear {
+    display: none;
+  }
+  .news-body-grid {
+    grid-template-columns: 1fr;
+  }
+  .news-sidebar-col {
+    border-left: none;
+    border-top: 1px solid #181512;
+    padding-left: 0;
+    padding-top: 18px;
+  }
+  .news-lead-columns {
+    column-count: 1;
+  }
+}
