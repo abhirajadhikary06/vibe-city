@@ -146,7 +146,8 @@ export class TaxiJobs {
     const g = this.game;
     const late = j.t > j.allowed;
     const condition = Math.max(0.4, (100 - (j.damage || 0)) / 100);
-    const fare = Math.round((this.cab.base + this.cab.perKm * j.km) * condition);
+    const cab = this.cab || COURIERS.bike;
+    const fare = Math.round((cab.base + cab.perKm * (j.km || 1)) * condition);
     const spare = clamp((j.allowed - j.t) / j.allowed, 0, 0.5);
     const tip = !late && spare > 0.05 ? Math.round(fare * spare * 0.9) : 0;
     this.streak++;
@@ -156,7 +157,7 @@ export class TaxiJobs {
     g.gameplay.addMoney(total);
     g.audio.pickup();
     g.hud.notify(`📦 DELIVERED! ${stars(starsCount)} · ₹${total}`, `${j.order.name} safely delivered to ${j.dest}${tip ? ` · speed bonus ₹${tip}` : ''}${bonus ? ` · streak ×${this.streak} +₹${bonus}` : ''}`, '#5dff9e');
-    this.progress.delivery({ paid: total, speedTip: tip, km: j.km, streak: this.streak, onTime: !late, stars: starsCount });
+    this.progress.delivery({ paid: total, speedTip: tip, km: j.km || 1, streak: this.streak, onTime: !late, stars: starsCount });
   }
 
   loseCourier(j, why) {
@@ -204,9 +205,10 @@ export class TaxiJobs {
 
   pay(j, v) {
     const g = this.game;
+    const cab = this.cab || CABS.taxi;
     const late = j.t > j.allowed;
     const n = clamp(5 - Math.min(3, j.knocks) - (late ? 1 : 0) - (j.t > j.allowed * 1.4 ? 1 : 0), 1, 5);
-    const fare = Math.round(this.cab.base + this.cab.perKm * j.km);
+    const fare = Math.round(cab.base + cab.perKm * (j.km || 1));
     // a good ride earns a tip, and up to half again for time to spare
     const spare = clamp((j.allowed - j.t) / j.allowed, 0, 0.5);
     const tip = n >= 4 ? Math.round(fare * (n === 5 ? 0.3 : 0.15) * (1 + spare)) : 0;
@@ -216,7 +218,7 @@ export class TaxiJobs {
     g.audio.pickup();
     g.hud.notify(`${stars(n)}  ₹${fare + tip + bonus}`, `Fare ₹${fare}${tip ? ` · tip ₹${tip}` : ''}${bonus ? ` · streak ×${this.streak} +₹${bonus}` : ''}`, '#ffd21f');
     g.hud.say(j.ch, pick(n >= 4 ? LINES.happy : late ? LINES.late : LINES.thanks), 2.6);
-    this.progress.fare({ paid: fare + tip + bonus, tip, stars: n, km: j.km, streak: this.streak });
+    this.progress.fare({ paid: fare + tip + bonus, tip, stars: n, km: j.km || 1, streak: this.streak });
   }
 
   lose(j, why) {
@@ -245,14 +247,14 @@ export class TaxiJobs {
     const v = pl.mode === 'driving' ? pl.vehicle : null;
     const ok = this.eligible(v);
     // a hint each time you get into a cab
-    if (v !== this.lastVehicle) {
+    if (v && v !== this.lastVehicle) {
       this.lastVehicle = v;
       this.hintT = ok && !this.on ? 7 : 0;
     }
     if (!ok) {
       if (this.on && this.job && this.job.state === 'ride') {
         const dDest = Math.hypot(pl.pos.x - this.job.dx, pl.pos.z - this.job.dz);
-        if (dDest < 48) {
+        if (dDest < 65) {
           this.alight(this.job, this.lastVehicle || v);
           this.pay(this.job, this.lastVehicle || v);
           this.finish();
@@ -262,15 +264,41 @@ export class TaxiJobs {
       }
       if (this.on && this.job && this.job.state === 'delivery') {
         const dDest = Math.hypot(pl.pos.x - this.job.dx, pl.pos.z - this.job.dz);
-        if (dDest < 52) {
+        if (dDest < 65) {
           this.payCourier(this.job, this.lastVehicle || v);
           this.finish();
           return;
         }
+        // Foot delivery: if player exited vehicle and is on foot or exiting, allow walking to destination
+        if (pl.mode === 'foot' || pl.mode === 'exiting') {
+          this.job.t += dt;
+          if (this.job.t > this.job.allowed * 2.2) {
+            this.loseCourier(this.job, 'Delivery cancelled: arrived far too late');
+            this.finish();
+            return;
+          }
+          if (dDest < 35 && (input.hit('KeyE') || dDest < 15)) {
+            this.payCourier(this.job, this.lastVehicle || v);
+            this.finish();
+            return;
+          }
+          const cabLabel = (this.cab || COURIERS.bike).label;
+          if (dDest < 35) {
+            g.hud.mission(`${cabLabel}<span class="cp">Deliver parcel to ${this.job.dest}: PRESS E</span><span class="t">${Math.round(dDest)} m</span>`);
+          } else if (dDest < 300) {
+            g.hud.mission(`${cabLabel}<span class="cp">Deliver to ${this.job.dest}</span><span class="t">${Math.round(dDest)} m</span>`);
+          } else {
+            this.loseCourier(this.job, 'You wandered too far from delivery');
+            this.finish();
+            return;
+          }
+          return;
+        }
         this.loseCourier(this.job, 'You left your delivery vehicle');
       }
-      if (this.on) this.stop(v && v.wrecked ? 'Vehicle is wrecked' : 'You left the vehicle');
-      else if (this.hintT > 0) {
+      if (this.on && (!this.job || this.job.state !== 'delivery')) {
+        this.stop(v && v.wrecked ? 'Vehicle is wrecked' : 'You left the vehicle');
+      } else if (this.hintT > 0) {
         this.hintT = 0;
         g.hud.mission(null);
       }
@@ -330,7 +358,7 @@ export class TaxiJobs {
         }
         const left = j.allowed - j.t;
         const dDest = Math.hypot(v.pos.x - j.dx, v.pos.z - j.dz);
-        if (dDest < 60) {
+        if (dDest < 65) {
           g.hud.mission(`${this.cab.label}<span class="cp">Deliver to ${j.dest}: PULL UP OR PRESS E/F</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
         } else {
           g.hud.mission(`${this.cab.label}<span class="cp">Deliver to ${j.dest}</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
@@ -340,7 +368,7 @@ export class TaxiJobs {
           this.finish();
           return;
         }
-        if (dDest < 42 && (v.speed < 3.5 || input.hit('KeyE') || input.hit('KeyF'))) {
+        if (dDest < 60 && (v.speed < 4.0 || input.hit('KeyE') || input.hit('KeyF'))) {
           this.payCourier(j, v);
           this.finish();
           return;
@@ -420,7 +448,7 @@ export class TaxiJobs {
         }
         const left = j.allowed - j.t;
         const dDest = Math.hypot(v.pos.x - j.dx, v.pos.z - j.dz);
-        if (dDest < 55) {
+        if (dDest < 65) {
           g.hud.mission(`${this.cab.label}<span class="cp">To ${j.dest}: PULL UP OR PRESS E/F</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
         } else {
           g.hud.mission(`${this.cab.label}<span class="cp">To ${j.dest}</span><span class="t" style="color:${left < 0 ? '#ff5f6d' : left < 20 ? '#ffd36b' : ''}">${left < 0 ? `LATE ${fmt(-left)}` : fmt(left)}</span>`);
@@ -434,7 +462,7 @@ export class TaxiJobs {
           }
           break;
         }
-        if (dDest < 38 && (v.speed < 3.0 || input.hit('KeyE') || input.hit('KeyF'))) {
+        if (dDest < 60 && (v.speed < 4.0 || input.hit('KeyE') || input.hit('KeyF'))) {
           this.alight(j, v);
           this.pay(j, v);
           this.finish();
