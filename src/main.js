@@ -297,7 +297,7 @@ const game = {
     const w = world.nearestSidewalk(p.x, p.z);
     player.revive(w.x, w.z, w.yaw);
     const fee = Math.min(gameplay.money, 100 + Math.floor(gameplay.money * 0.05));
-    if (fee > 0) gameplay.addMoney(-fee);
+    if (fee > 0) gameplay.addMoney(-fee, 'Hospital bill');
     hud.notify('BACK ON YOUR FEET', fee > 0 ? `Hospital bill -₹${fee}` : 'Take it easy', '#5dff9e');
   },
   endParty() {
@@ -793,7 +793,7 @@ async function boot() {
       audio.beep(false);
       return;
     }
-    gameplay.addMoney(-20);
+    gameplay.addMoney(-20, target.kind === 'metro' ? 'Metro fast-travel' : 'Ferry fast-travel');
     if (target.kind === 'metro') {
       audio.metroChime(0);
     } else {

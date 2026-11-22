@@ -87,13 +87,11 @@ export class Gameplay {
   }
 
   addMoney(v, note = null) {
+    if (!v) return;
     this.money += v;
-    this.hud.setMoney(this.money);
+    this.hud.setMoney(this.money, false, v, note);
     store.set('nt_money', this.money);
-    if (note) {
-      this.hud.notify(note, '', '#7dffb0');
-      this.audio.pickup();
-    }
+    if (v > 0) this.audio.pickup();
   }
 
   blips() {
@@ -125,9 +123,7 @@ export class Gameplay {
         p.active = false;
         p.g.visible = false;
         p.timer = 25;
-        this.addMoney(p.value);
-        this.audio.pickup();
-        this.hud.notify(`+₹${p.value}`, 'Cash collected', '#7dffb0');
+        this.addMoney(p.value, 'Cash pickup');
       }
     }
 

@@ -524,7 +524,7 @@ export class Cricket {
       this.hud.notify('NOT ENOUGH MONEY', `You need ₹${R.fee} to play`, '#ff5f6d');
       return;
     }
-    g.gameplay.addMoney(-R.fee);
+    g.gameplay.addMoney(-R.fee, `${R.name} stake`);
     this.V = V;
     this.R = R;
     this.active = true;
@@ -1662,12 +1662,12 @@ export class Cricket {
     if (ours.runs === theirs.runs) {
       title = 'MATCH TIED!';
       body = `Both sides on ${ours.runs}. Your ₹${R.fee} is returned.`;
-      g.gameplay.addMoney(R.fee);
+      g.gameplay.addMoney(R.fee, `${R.name} refund`);
     } else if (ours.runs > theirs.runs) {
       const by = b.bat === 0 ? `by ${Math.min(R.wickets, T[0].players.length - 1) - b.wkts} wicket${Math.min(R.wickets, T[0].players.length - 1) - b.wkts === 1 ? '' : 's'}` : `by ${ours.runs - theirs.runs} runs`;
       title = `${T[0].name.toUpperCase()} WIN!`;
       body = `Won ${by}. Prize money: <b style="color:#5dff9e">+₹${R.prize.toLocaleString('en-IN')}</b>`;
-      g.gameplay.addMoney(R.prize);
+      g.gameplay.addMoney(R.prize, `${R.name} prize`);
       if (g.progress) g.progress.event(this.V.kind === 'eden' ? 'edenHero' : 'gullyChamp');
       this.crowd(0.8, 3.5);
       this.cheer(this.cast.filter((c) => c.p && c.p.side === 0));

@@ -300,7 +300,7 @@ export class WardrobeManager {
       return;
     }
 
-    this.gameplay.addMoney(-outfit.price);
+    this.gameplay.addMoney(-outfit.price, outfit.name);
     if (!this.unlocked.includes(outfitId)) {
       this.unlocked.push(outfitId);
       this.saveUnlocked();

@@ -291,7 +291,7 @@ Modelled in code and placed on their real footprints:
 <details>
 <summary><b>Gameplay</b></summary>
 
-- **Money in ₹:** cash pickups on the pavements; spend it on fares, tickets, street food, and authentic Kolkata outfits.
+- **Money in ₹:** cash pickups on the pavements; spend it on fares, tickets, street food, and authentic Kolkata outfits. Eye-catching animated floating change popups (`+₹` green, `−₹` red with contextual labels) keep you informed of every transaction mid-drive.
 - **Wardrobe & Outfit Customizer (O):** visit heritage tailoring hubs at New Market and College Street (or press **O** on foot) to buy and equip culturally rich attire:
   - *Classic Kurta-Pajama & Dhoti (সোনালী পাঞ্জাবি ও ধুতি)*: Ivory tussar silk with gold zari border.
   - *Yellow Taxi Driver Uniform (ট্যাক্সি চালক খাকি)*: Khaki collared uniform with Kolkata yellow cab crest.

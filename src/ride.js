@@ -163,7 +163,7 @@ export class Rides {
   pay(amount, to) {
     const gp = this.game.gameplay;
     const paid = Math.min(amount, gp.money);
-    if (paid > 0) gp.addMoney(-paid);
+    if (paid > 0) gp.addMoney(-paid, `${to} fare`);
     this.game.audio.beep(true);
     this.game.hud.notify(paid >= amount ? `PAID ₹${paid}` : `PAID ₹${paid} OF ₹${amount}`, to, '#ffd36b');
     return paid >= amount;

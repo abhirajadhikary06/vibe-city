@@ -875,7 +875,7 @@ export class Player {
     g.hud.say(this.ch, convo.q, 1.8);
     if (g.peds.talk(n, this.pos, convo) && tip) {
       const amt = 20 + Math.floor(Math.random() * 6) * 10;
-      setTimeout(() => g.gameplay.addMoney(amt, `TIP +₹${amt}`), 4400);
+      setTimeout(() => g.gameplay.addMoney(amt, 'Street dance tip'), 4400);
     }
   }
 
