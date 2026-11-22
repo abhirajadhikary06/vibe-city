@@ -25,8 +25,15 @@ export class Gameplay {
     this.world = world;
     this.hud = hud;
     this.audio = audio;
-    // Pocket money for fares and food when you're broke
-    this.money = Math.max(store.get('nt_money', 0), 500);
+    // Pocket money for fares and food when you're broke + job earnings
+    let earned = 0;
+    try {
+      const p = JSON.parse(localStorage.getItem('kol_progress'));
+      if (p && p.earned) earned = p.earned;
+    } catch {
+      /* ignore */
+    }
+    this.money = Math.max(store.get('nt_money', 0), 500 + earned);
     hud.setMoney(this.money, true);
     const beamTex = T.beam();
 

@@ -627,6 +627,13 @@ export class Player {
       this.prompt = { key: 'E', text: cricketSpot.text };
     } else if (carromSpot) {
       this.prompt = { key: 'E', text: carromSpot.text };
+    } else if (g.jobs && g.jobs.on && g.jobs.job && g.jobs.job.kind === 'courier' && g.jobs.job.state === 'delivery') {
+      const dDest = Math.hypot(this.pos.x - g.jobs.job.dx, this.pos.z - g.jobs.job.dz);
+      if (dDest < 35) {
+        this.prompt = { key: 'E', text: `Deliver ${g.jobs.job.order.name}` };
+      } else if (nearPed && !gun) {
+        this.prompt = { key: 'E', text: 'Talk', key2: 'G', text2: 'Gesture' };
+      }
     } else if (nearPed && !gun) {
       this.prompt = { key: 'E', text: 'Talk', key2: 'G', text2: 'Gesture' };
     }
@@ -635,6 +642,14 @@ export class Player {
     } else if (input.hit('KeyV') && ride) {
       ride.act();
       return;
+    }
+    if (g.jobs && g.jobs.on && g.jobs.job && g.jobs.job.kind === 'courier' && g.jobs.job.state === 'delivery') {
+      const dDest = Math.hypot(this.pos.x - g.jobs.job.dx, this.pos.z - g.jobs.job.dz);
+      if (dDest < 35 && (input.hit('KeyE') || dDest < 15)) {
+        g.jobs.payCourier(g.jobs.job, g.jobs.lastVehicle);
+        g.jobs.finish();
+        return;
+      }
     }
     if (input.hit('KeyF') && nearCar && !this.aiming) {
       this.enter(nearCar);

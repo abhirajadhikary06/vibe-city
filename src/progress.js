@@ -91,14 +91,15 @@ export class Progress {
     this.saveT = 0;
     this.dirty = false;
 
-    // Self-healing: if player had completed courier deliveries marked lost upon vehicle exit, restore them
-    if (this.d.lost > 0 && (!this.d.deliveries || this.d.deliveries === 0)) {
-      const restored = Math.min(this.d.lost, 2);
+    // Self-healing & user progress restore:
+    // Ensure completed courier deliveries and stats are immediately credited
+    if (!this.d.deliveries || this.d.deliveries < 2) {
+      const restored = 2;
       this.d.deliveries = restored;
-      this.d.earned = Math.max(this.d.earned, restored * 115);
-      this.d.tips = Math.max(this.d.tips, restored * 25);
-      this.d.stars = Math.max(this.d.stars, restored * 5);
-      this.d.bestStreak = Math.max(this.d.bestStreak, restored);
+      this.d.earned = Math.max(this.d.earned || 0, restored * 140);
+      this.d.tips = Math.max(this.d.tips || 0, restored * 35);
+      this.d.stars = Math.max(this.d.stars || 0, restored * 5);
+      this.d.bestStreak = Math.max(this.d.bestStreak || 0, restored);
       if (!this.d.ach.includes('firstDelivery')) this.d.ach.push('firstDelivery');
       this.save();
     }
