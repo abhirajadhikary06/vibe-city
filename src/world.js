@@ -409,7 +409,7 @@ export class World {
   }
   /** Open water at ground level: the river or a pond, not a bridge deck or a jetty above it. */
   isWet(x, z) {
-    return this.height(x, z) <= 0.15 && (this.overWater(x, z) || (!!this.river && inPoly(this.river, x, z)));
+    return this.deckAt(x, z) === null && this.height(x, z) <= 0.15 && (this.overWater(x, z) || (!!this.river && inPoly(this.river, x, z)));
   }
   overWater(x, z) {
     let w = false;
@@ -434,8 +434,8 @@ export class World {
   /** Collisions for something at height y (street colliders above ground, metro walls below). */
   collideAt(x, z, r, y) {
     if (y < -2.5 && this.under) return this.under.collideCircle(x, z, r);
-    // Up on a bridge deck only the deck's own railings count
-    if (y > 2.5 && this.deckAt(x, z) !== null) return this.collideDeck(x, z, r);
+    // On a bridge deck over the river or a canal/pond, the deck's own railings keep you on
+    if (this.deckAt(x, z) !== null && (y > 2.5 || this.overWater(x, z))) return this.collideDeck(x, z, r);
     return this.collideCircle(x, z, r);
   }
   raycastAt(ax, az, bx, bz, y) {
@@ -668,14 +668,34 @@ export class World {
     this.water = water;
 
     /* ---- Bridges: decks over the river, and their gaps in the bank walls ---- */
-    const bridgeRoads = MAP.roads.filter((r) => r.br && !r.foot);
+    {
+      const ptmp = {};
+      for (const r of MAP.roads) {
+        if (r.br) continue;
+        const pts = r.n.flatMap(nodeXZ);
+        if (pts.length < 4) continue;
+        const poly = new Poly(pts);
+        let wetMeters = 0;
+        for (let s = 0; s <= poly.len; s += 2) {
+          poly.at(s, ptmp);
+          if (this.overWater(ptmp.x, ptmp.z) && !(this.river && inPoly(this.river, ptmp.x, ptmp.z))) wetMeters += 2;
+        }
+        if (wetMeters >= 6) {
+          r.br = 1;
+          for (const e of this.graph.edges) {
+            if (e.poly.project(poly.x[0], poly.z[0]).d < 1 && e.poly.project(poly.x[poly.n - 1], poly.z[poly.n - 1]).d < 1) {
+              e.br = true;
+            }
+          }
+        }
+      }
+    }
+    const bridgeRoads = MAP.roads.filter((r) => r.br);
     this.buildDecks(bridgeRoads);
     const nearBridge = (x, z) =>
-      bridgeRoads.some((r) => {
-        const [ax, az] = nodeXZ(r.n[0]);
-        const [bx, bz] = nodeXZ(r.n[r.n.length - 1]);
-        if (x < Math.min(ax, bx) - 40 || x > Math.max(ax, bx) + 40 || z < Math.min(az, bz) - 40 || z > Math.max(az, bz) + 40) return false;
-        return new Poly(r.n.flatMap(nodeXZ)).project(x, z).d < r.w / 2 + 2;
+      this.decks.some((d) => {
+        if (x < d.x0 || x > d.x1 || z < d.z0 || z > d.z1) return false;
+        return d.poly.project(x, z).d < d.hw + 0.5;
       });
 
     // Stone embankments down to the water, and colliders along their tops
@@ -835,7 +855,12 @@ export class World {
         if (this.river && inPoly(this.river, tmp.x, tmp.z)) wet += 5;
       }
       const overRiver = wet > 60;
-      const overPond = !overRiver && pts.some((_, i) => i % 2 === 0 && this.overWater(pts[i], pts[i + 1]));
+      let pond = false;
+      for (let s = 0; s <= poly.len && !pond; s += 2) {
+        poly.at(s, tmp);
+        if (this.overWater(tmp.x, tmp.z)) pond = true;
+      }
+      const overPond = !overRiver && pond;
       if (!overRiver && !overPond) continue;
       // Vidyasagar Setu's deck rides ~26 m over the river on long approach ramps
       const setu = overRiver && /vidyasagar/i.test(c.name);
