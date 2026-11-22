@@ -62,7 +62,7 @@ export class AudioEngine {
     comp.ratio.value = 4;
     comp.connect(ctx.destination);
     this.master = ctx.createGain();
-    this.master.gain.value = 0.8;
+    this.master.gain.setValueAtTime(0, ctx.currentTime);
     this.master.connect(comp);
 
     // Noise buffer
@@ -76,9 +76,9 @@ export class AudioEngine {
     this.engFilter.type = 'lowpass';
     this.engFilter.Q.value = 3;
     this.engGain = ctx.createGain();
-    this.engGain.gain.value = 0;
+    this.engGain.gain.setValueAtTime(0, ctx.currentTime);
     this.engAM = ctx.createGain();
-    this.engAM.gain.value = 0.7;
+    this.engAM.gain.setValueAtTime(0.7, ctx.currentTime);
     this.engFilter.connect(this.engAM).connect(this.engGain).connect(this.master);
     this.oscs = [
       ['sawtooth', 1, 0.5],
@@ -89,7 +89,7 @@ export class AudioEngine {
       const o = ctx.createOscillator();
       o.type = type;
       const gg = ctx.createGain();
-      gg.gain.value = g;
+      gg.gain.setValueAtTime(g, ctx.currentTime);
       o.connect(gg).connect(this.engFilter);
       o.start();
       return { o, mul };
@@ -97,7 +97,7 @@ export class AudioEngine {
     this.lfo = ctx.createOscillator();
     this.lfo.type = 'sine';
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.3;
+    lfoGain.gain.setValueAtTime(0.3, ctx.currentTime);
     this.lfo.connect(lfoGain).connect(this.engAM.gain);
     this.lfo.start();
 
@@ -108,17 +108,17 @@ export class AudioEngine {
 
     // Horn
     this.hornGain = ctx.createGain();
-    this.hornGain.gain.value = 0;
+    this.hornGain.gain.setValueAtTime(0, ctx.currentTime);
     this.hornGain.connect(this.master);
     this.hornOscs = [392, 494, 415].map((f, i) => {
       const o = ctx.createOscillator();
       o.type = 'square';
-      o.frequency.value = f;
+      o.frequency.setValueAtTime(f, ctx.currentTime);
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 1800;
+      lp.frequency.setValueAtTime(1800, ctx.currentTime);
       const g = ctx.createGain();
-      g.gain.value = i < 2 ? 1 : 0.7;
+      g.gain.setValueAtTime(i < 2 ? 1 : 0.7, ctx.currentTime);
       o.connect(lp).connect(g).connect(this.hornGain);
       o.start();
       return o;
@@ -129,18 +129,18 @@ export class AudioEngine {
     this.clatterLfo = ctx.createOscillator();
     this.clatterLfo.type = 'square';
     this.clatterDepth = ctx.createGain();
-    this.clatterDepth.gain.value = 0;
+    this.clatterDepth.gain.setValueAtTime(0, ctx.currentTime);
     this.clatterLfo.connect(this.clatterDepth).connect(this.clatter.g.gain);
     this.clatterLfo.start();
     // Electric traction: a motor whine and wheel rumble
     this.whineGain = ctx.createGain();
-    this.whineGain.gain.value = 0;
+    this.whineGain.gain.setValueAtTime(0, ctx.currentTime);
     this.whineGain.connect(this.master);
     this.whine = [1, 2.02].map((m) => {
       const o = ctx.createOscillator();
       o.type = m === 1 ? 'sine' : 'triangle';
       const g = ctx.createGain();
-      g.gain.value = m === 1 ? 0.6 : 0.25;
+      g.gain.setValueAtTime(m === 1 ? 0.6 : 0.25, ctx.currentTime);
       o.connect(g).connect(this.whineGain);
       o.start();
       return { o, m };
@@ -157,6 +157,12 @@ export class AudioEngine {
 
     this.initRadio();
     this.initDhak();
+
+    // Smoothly fade in master gain so there is zero initial pop or loud burst
+    if (!this.muted) {
+      this.master.gain.setValueAtTime(0, ctx.currentTime);
+      this.master.gain.setTargetAtTime(0.8, ctx.currentTime + 0.05, 0.35);
+    }
   }
 
   loopNoise(type, freq, q) {
@@ -165,10 +171,10 @@ export class AudioEngine {
     src.loop = true;
     const f = this.ctx.createBiquadFilter();
     f.type = type;
-    f.frequency.value = freq;
-    f.Q.value = q;
+    f.frequency.setValueAtTime(freq, this.ctx.currentTime);
+    f.Q.setValueAtTime(q, this.ctx.currentTime);
     const g = this.ctx.createGain();
-    g.gain.value = 0;
+    g.gain.setValueAtTime(0, this.ctx.currentTime);
     src.connect(f).connect(g).connect(this.master);
     src.start();
     return { g, f };
@@ -577,8 +583,11 @@ export class AudioEngine {
   initRadio() {
     const ctx = this.ctx;
     this.musicGain = ctx.createGain();
-    this.musicGain.gain.value = this.radioOn ? 0.22 : 0;
+    this.musicGain.gain.setValueAtTime(0, ctx.currentTime);
     this.musicGain.connect(this.master);
+    if (this.radioOn && !this.muted) {
+      this.musicGain.gain.setTargetAtTime(0.22, ctx.currentTime + 0.08, 0.4);
+    }
     const cur = this.currentStation;
     this.delay = ctx.createDelay(1);
     this.delay.delayTime.value = (60 / cur.bpm) * 0.75;

@@ -246,6 +246,102 @@ export function offsetLine(pts, off) {
   return out;
 }
 
+/**
+ * Round off sharp corners of a flat polyline [x0, z0, x1, z1, ...] using smooth
+ * cubic bezier fillets between consecutive segments, ensuring vehicles curve naturally.
+ */
+export function smoothPolyline(flat, maxFillet = 7.5) {
+  const n = flat.length / 2;
+  if (n <= 2) return flat.slice();
+
+  const out = [flat[0], flat[1]];
+
+  for (let i = 1; i < n - 1; i++) {
+    const px = flat[(i - 1) * 2];
+    const pz = flat[(i - 1) * 2 + 1];
+    const cx = flat[i * 2];
+    const cz = flat[i * 2 + 1];
+    const nx = flat[(i + 1) * 2];
+    const nz = flat[(i + 1) * 2 + 1];
+
+    const dx1 = cx - px;
+    const dz1 = cz - pz;
+    const len1 = Math.hypot(dx1, dz1);
+
+    const dx2 = nx - cx;
+    const dz2 = nz - cz;
+    const len2 = Math.hypot(dx2, dz2);
+
+    if (len1 < 0.5 || len2 < 0.5) {
+      out.push(cx, cz);
+      continue;
+    }
+
+    const ux1 = dx1 / len1;
+    const uz1 = dz1 / len1;
+    const ux2 = dx2 / len2;
+    const uz2 = dz2 / len2;
+
+    const dot = ux1 * ux2 + uz1 * uz2;
+
+    // Collinear or near-straight (less than ~6 deg bend) or hairpin reverse (> 170 deg)
+    if (dot > 0.995 || dot < -0.98) {
+      out.push(cx, cz);
+      continue;
+    }
+
+    // Limit fillet radius to at most 42% of adjacent segment lengths to prevent overlap
+    const R = Math.min(maxFillet, len1 * 0.42, len2 * 0.42);
+    if (R < 1.0) {
+      out.push(cx, cz);
+      continue;
+    }
+
+    // Fillet start point A on incoming segment and B on outgoing segment
+    const ax = cx - ux1 * R;
+    const az = cz - uz1 * R;
+    const bx = cx + ux2 * R;
+    const bz = cz + uz2 * R;
+
+    // Cubic bezier control points with standard circle factor ~0.5523
+    const factor = R * 0.5523;
+    const cp1x = ax + ux1 * factor;
+    const cp1z = az + uz1 * factor;
+    const cp2x = bx - ux2 * factor;
+    const cp2z = bz - uz2 * factor;
+
+    // Sample subdivisions along the curve (4 to 6 subdivisions depending on corner angle)
+    const steps = dot < 0.2 ? 6 : 4;
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps;
+      const u = 1 - t;
+      const uu = u * u;
+      const tt = t * t;
+      const uuu = uu * u;
+      const ttt = tt * t;
+
+      const x = uuu * ax + 3 * uu * t * cp1x + 3 * u * tt * cp2x + ttt * bx;
+      const z = uuu * az + 3 * uu * t * cp1z + 3 * u * tt * cp2z + ttt * bz;
+
+      const lastX = out[out.length - 2];
+      const lastZ = out[out.length - 1];
+      if (Math.hypot(x - lastX, z - lastZ) > 0.05) {
+        out.push(x, z);
+      }
+    }
+  }
+
+  const endX = flat[(n - 1) * 2];
+  const endZ = flat[(n - 1) * 2 + 1];
+  const lastX = out[out.length - 2];
+  const lastZ = out[out.length - 1];
+  if (Math.hypot(endX - lastX, endZ - lastZ) > 0.05) {
+    out.push(endX, endZ);
+  }
+
+  return out;
+}
+
 /* ---------- Binary heap for route-finding ---------- */
 class Heap {
   constructor() {

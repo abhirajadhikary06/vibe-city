@@ -12,36 +12,42 @@ const BUS_SHARE = 0.25;
 const FIXED_COLOR = { taxi: 0xf2c21b, ambassador: [0xf4f4f0, 0xf4f4f0, 0x1d1f24, 0xe8e2d0], rickshaw: [0x2b4a8a, 0xffffff], schoolbus: 0xf2b705, truck: [0xd8682a, 0x2f6b46, 0x1b4f9a] };
 
 function evalSeg(seg, t, out) {
-  const { a, b, c } = seg;
-  if (!c) {
-    out.x = a.x + (b.x - a.x) * t;
-    out.z = a.z + (b.z - a.z) * t;
-    out.tx = b.x - a.x;
-    out.tz = b.z - a.z;
-  } else {
-    const u = 1 - t;
-    out.x = u * u * a.x + 2 * u * t * c.x + t * t * b.x;
-    out.z = u * u * a.z + 2 * u * t * c.z + t * t * b.z;
-    out.tx = 2 * u * (c.x - a.x) + 2 * t * (b.x - c.x);
-    out.tz = 2 * u * (c.z - a.z) + 2 * t * (b.z - c.z);
-  }
+  const { p0, p1, p2, p3 } = seg;
+  const u = 1 - t;
+  const uu = u * u;
+  const tt = t * t;
+  const uuu = uu * u;
+  const ttt = tt * t;
+
+  out.x = uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x;
+  out.z = uuu * p0.z + 3 * uu * t * p1.z + 3 * u * tt * p2.z + ttt * p3.z;
+
+  const dx = 3 * uu * (p1.x - p0.x) + 6 * u * t * (p2.x - p1.x) + 3 * tt * (p3.x - p2.x);
+  const dz = 3 * uu * (p1.z - p0.z) + 6 * u * t * (p2.z - p1.z) + 3 * tt * (p3.z - p2.z);
+  const dl = Math.hypot(dx, dz) || 1e-6;
+  out.tx = dx / dl;
+  out.tz = dz / dl;
 }
-function curveLen(a, c, b) {
+
+function curveLen(p0, p1, p2, p3) {
   let len = 0;
-  let px = a.x;
-  let pz = a.z;
+  let px = p0.x;
+  let pz = p0.z;
   for (let i = 1; i <= 8; i++) {
     const t = i / 8;
     const u = 1 - t;
-    const x = u * u * a.x + 2 * u * t * c.x + t * t * b.x;
-    const z = u * u * a.z + 2 * u * t * c.z + t * t * b.z;
+    const uu = u * u;
+    const tt = t * t;
+    const x = uu * u * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + tt * t * p3.x;
+    const z = uu * u * p0.z + 3 * uu * t * p1.z + 3 * u * tt * p2.z + tt * t * p3.z;
     len += Math.hypot(x - px, z - pz);
     px = x;
     pz = z;
   }
   return len;
 }
-const trimOf = (lane) => Math.min(6, lane.len * 0.3);
+
+const trimOf = (lane) => Math.min(6.5, lane.len * 0.32);
 
 /**
  * AI traffic on the real street graph (keeping left, obeying one-way streets).
@@ -232,17 +238,19 @@ export class Traffic {
     if (!pick) return;
     const nl = pick.e.lanes[pick.dir];
     const t1 = nl.at(trimOf(nl), {});
-    const a = { x: t0.x, z: t0.z };
-    const b = { x: t1.x, z: t1.z };
-    // Control point where the two lanes' lines meet; the midpoint if they don't
-    let c = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
-    const den = t0.tx * t1.tz - t0.tz * t1.tx;
-    if (Math.abs(den) > 0.15) {
-      const k = ((b.x - a.x) * t1.tz - (b.z - a.z) * t1.tx) / den;
-      const m = ((b.x - a.x) * t0.tz - (b.z - a.z) * t0.tx) / den;
-      if (k > 0 && m > 0 && k < 25 && m < 25) c = { x: a.x + t0.tx * k, z: a.z + t0.tz * k };
-    }
-    car.seg = { a, b, c, len: Math.max(0.5, curveLen(a, c, b)) };
+    const p0 = { x: t0.x, z: t0.z };
+    const p3 = { x: t1.x, z: t1.z };
+    const chord = Math.hypot(p3.x - p0.x, p3.z - p0.z);
+
+    const dot = t0.tx * t1.tx + t0.tz * t1.tz;
+    const handleL = chord * (dot < 0 ? 0.44 : 0.38);
+    const p1 = { x: p0.x + t0.tx * handleL, z: p0.z + t0.tz * handleL };
+    const p2 = { x: p3.x - t1.tx * handleL, z: p3.z - t1.tz * handleL };
+
+    const isHeavy = car.def && car.def.mass > 3;
+    const turnSpeed = dot < 0 ? (isHeavy ? 3.0 : 3.8) : dot < 0.7 ? (isHeavy ? 4.2 : 5.0) : 6.5;
+
+    car.seg = { p0, p1, p2, p3, len: Math.max(0.5, curveLen(p0, p1, p2, p3)), turnSpeed };
     car.s = 0;
     car.next = pick;
   }
@@ -345,9 +353,14 @@ export class Traffic {
       car.panicT -= dt;
       const roadSpeed = Math.min(car.e.speed * car.cruise, car.def.top * 0.85);
       const cruise = car.panicT > 0 ? Math.min(car.def.top * 0.6, roadSpeed * 1.8) : roadSpeed;
-      let target = car.seg ? Math.min(cruise, 6.5) : cruise;
+      let target = car.seg ? Math.min(cruise, car.seg.turnSpeed || 5.0) : cruise;
       // ease off before the junction
-      if (!car.seg) target = Math.min(target, 6.5 + (car.sEnd - car.s) * 0.6);
+      if (!car.seg) {
+        const distToJunc = car.sEnd - car.s;
+        if (distToJunc < 24) {
+          target = Math.min(target, 4.5 + Math.max(0, distToJunc) * 0.45);
+        }
+      }
       target *= clamp((block - 1.6) / 8, 0, 1);
       car.speed = car.speed < target ? Math.min(target, car.speed + 4 * dt) : Math.max(target, car.speed - 14 * dt);
       car.honkT -= dt;
