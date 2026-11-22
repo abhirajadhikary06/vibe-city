@@ -121,9 +121,10 @@ The short version of everything in the game. Details are in [Features](#-feature
   - **AIR Kolkata (657 kHz AM):** Akashvani classical sitar & flute drone, morning raga meend, and vintage AM crackle.
   - **Park Street Disco (104.2 FM):** Funky 118 BPM 80s Bollywood/Bangla disco slap-bass groove and 4-on-the-floor beat.
 - ☕ **The "Adda" & Street Bench Mechanic (E):** Walk up to wooden park benches and roadside tea stalls along Prinsep Ghat, Maidan, Victoria Memorial, and College Street to sit down, sip clay-bhar cha, regenerate health, accelerate time (12x timelapse) to watch sunsets, and listen to local philosophical dialogues.
+- 🔴 **Kolkata Adda Carrom (E):** Challenge local uncle champions to authentic carrom games beside adda benches at Esplanade, College Square, and Allen Park. Features sub-stepped 2D disc physics, authentic Queen cover rules, baseline striker sliding (A/D), mouse aiming, hold-to-charge striker flicks (SPACE), AI opponents with Bengali commentary, ₹20 stakes to win ₹50, and the *Carrom King* achievement.
 - 🪔 **Durga Puja / Festive Mode:** Toggle festive illuminations in the pause menu (**FESTIVE: ON / OFF**). Dresses Howrah Bridge and Park Street with thousands of colourful, twinkling fairy light swags and hanging light curtains, paired with a dynamic procedural Web Audio **dhak** drum rhythm (*dha – kur-kur – ta – dha*) that grows louder as you approach festive areas.
 - 📸 **Heritage Photo Mode (P):** freeze the city in time, orbit the camera freely, adjust zoom, height and filters (Normal, Vintage, Monsoon, Golden, Noir), and download watermark-stamped high-res snapshots.
-- 🏆 **Progress that's saved:** places discovered, 23 achievements, earnings, deliveries and your best streak.
+- 🏆 **Progress that's saved:** places discovered, 24 achievements, earnings, deliveries and your best streak.
 - 🏎️ **Driving:** drifts, nitro, weight transfer, damage, fire and explosions.
 - 🔫 **Combat:** seven weapons, a punch and kick combo, headshots, and a weapon wheel in slow motion.
 - ❤️ **Health, ₹ money, ammo crates** and a hospital bill when you go down.

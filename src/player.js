@@ -297,6 +297,10 @@ export class Player {
       if (g.cricket) g.cricket.update(dt, T, input);
       return;
     }
+    if (this.mode === 'carrom') {
+      if (g.carrom) g.carrom.update(dt, T, input);
+      return;
+    }
     if (this.mode === 'driving') {
       const v = this.vehicle;
       v.update(dt, inp, g.night);
@@ -575,6 +579,7 @@ export class Player {
     const addaSpot = !this.underground && g.adda ? g.adda.near(this.pos) : null;
     const wardrobeSpot = !this.underground && g.wardrobe ? g.wardrobe.near(this.pos) : null;
     const cricketSpot = !this.underground && g.cricket ? g.cricket.near(this.pos) : null;
+    const carromSpot = !this.underground && g.carrom ? g.carrom.near(this.pos) : null;
     // V: ride as a passenger (hire a taxi, auto or rickshaw; board a bus, train, tram, metro or ferry)
     const ride = !this.aiming && g.rides ? g.rides.offer(this) : null;
     // Metro fare gate: ride (pay and go through) or don't (it stays shut)
@@ -620,6 +625,8 @@ export class Player {
       this.prompt = { key: 'E', text: wardrobeSpot.text };
     } else if (cricketSpot) {
       this.prompt = { key: 'E', text: cricketSpot.text };
+    } else if (carromSpot) {
+      this.prompt = { key: 'E', text: carromSpot.text };
     } else if (nearPed && !gun) {
       this.prompt = { key: 'E', text: 'Talk', key2: 'G', text2: 'Gesture' };
     }
@@ -646,6 +653,9 @@ export class Player {
       wardrobeSpot.act(this);
     } else if (input.hit('KeyE') && cricketSpot) {
       cricketSpot.act(this);
+      return;
+    } else if (input.hit('KeyE') && carromSpot) {
+      carromSpot.act(this);
       return;
     } else if (input.hit('KeyE') && nearPed && !gun) {
       this.talkTo(nearPed);
