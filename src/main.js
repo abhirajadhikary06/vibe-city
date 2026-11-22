@@ -22,6 +22,7 @@ import { MapView, routeLength } from './mapview.js';
 import { Station } from './station.js';
 import { AddaManager } from './adda.js';
 import { Cricket } from './cricket.js';
+import { Carrom } from './carrom.js';
 import { Voices } from './voice.js';
 import { Rides } from './ride.js';
 import { Interiors, interiorTarget, setInteriorNight } from './interiors.js';
@@ -88,7 +89,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 3200);
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, adda, rides, boards, progress, jobs, weather, wardrobe, cricket, newspaper, festive;
+let world, day, fx, post, hud, gameplay, traffic, peds, player, rail, combat, metro, riverTraffic, mapView, station, adda, rides, boards, progress, jobs, weather, wardrobe, cricket, newspaper, festive, carrom;
 const vehicles = [];
 const audio = new AudioEngine();
 const voices = new Voices(audio);
@@ -215,6 +216,9 @@ const game = {
   },
   get cricket() {
     return cricket;
+  },
+  get carrom() {
+    return carrom;
   },
   get adda() {
     return adda;
@@ -383,6 +387,7 @@ function updateCamera(dt) {
     return;
   }
   if (cricket && cricket.active && cricket.camera(camera, dt)) return;
+  if (carrom && carrom.active && carrom.camera(camera, dt)) return;
   if (adda && adda.active) {
     camera.position.copy(adda.camPos);
     camera.lookAt(adda.camLook);
@@ -643,6 +648,8 @@ async function boot() {
   station.game = game;
   adda = new AddaManager(scene, world, hud, audio);
   cricket = new Cricket(game, scene, world, hud, audio);
+  carrom = new Carrom(game, scene, world, hud, audio);
+  carrom.init();
   rides = new Rides(game, scene, world);
   const sp = station.spawn || [(BOUNDS.x0 + BOUNDS.x1) / 2, (BOUNDS.z0 + BOUNDS.z1) / 2];
   world.spawn = { x: sp[0], z: sp[1] };
@@ -1358,6 +1365,7 @@ const blipsFn = () => {
   const b = gameplay.blips();
   b.push(...jobs.blips());
   if (cricket) b.push(...cricket.blips());
+  if (carrom) b.push(...carrom.blips());
   if (!player.underground) b.push(...localPois());
   if (waypoint) b.push({ x: waypoint.x, z: waypoint.z, color: '#ff3fa4', r: 9, always: true, label: '★' });
   return b;
@@ -1424,7 +1432,7 @@ function loop() {
   if ((state === 'play' && input.hit('KeyM')) || (state === 'map' && (input.hit('KeyM') || input.hit('Escape')))) setMap(state === 'play');
   if (state === 'map') {
     if (waypoint && !route) route = world.graph.route(player.focus.x, player.focus.z, waypoint.x, waypoint.z);
-    mapView.draw(player, [...gameplay.blips(), ...(cricket ? cricket.blips() : []), ...(player.underground ? [] : mapPois)], waypoint, route, player.vehicle && player.mode !== 'foot' ? vehicleHeading(player.vehicle) : player.yaw);
+    mapView.draw(player, [...gameplay.blips(), ...(cricket ? cricket.blips() : []), ...(carrom ? carrom.blips() : []), ...(player.underground ? [] : mapPois)], waypoint, route, player.vehicle && player.mode !== 'foot' ? vehicleHeading(player.vehicle) : player.yaw);
     input.endFrame();
     return;
   }

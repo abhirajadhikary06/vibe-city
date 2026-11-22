@@ -1442,6 +1442,33 @@ html, body {
 #cricket .ck-buttons { margin-top: 18px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 #cricket .ck-buttons button { cursor: pointer; padding: 9px 18px; border: 0; border-radius: 8px; background: var(--cyan); color: var(--ink); font: 700 16px 'Rajdhani', sans-serif; letter-spacing: 1px; }
 #cricket .ck-buttons button:hover { background: #fff; }
+
+/* ---------- Carrom ---------- */
+#carrom { position: fixed; inset: 0; pointer-events: none; z-index: 80; font-family: 'Rajdhani', system-ui, sans-serif; color: #fff; }
+#carrom kbd { display: inline-block; min-width: 20px; padding: 0 5px; margin: 0 2px; border-radius: 4px; background: var(--gold); color: var(--ink); font: 700 13px 'Rajdhani', sans-serif; text-align: center; }
+#carrom .cm-bug { position: absolute; left: 24px; top: 20px; min-width: 320px; padding: 12px 18px; border-radius: 10px; background: rgba(11, 13, 20, 0.85); border-left: 4px solid var(--gold); text-shadow: 0 1px 2px #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); backdrop-filter: blur(8px); }
+#carrom .cm-match { font: 14px 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: 2px; opacity: 0.8; color: var(--cyan); }
+#carrom .cm-score-row { margin-top: 6px; display: flex; gap: 14px; font-size: 16px; font-weight: 700; align-items: center; }
+#carrom .cm-side { display: flex; align-items: center; gap: 6px; }
+#carrom .cm-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+#carrom .cm-dot.white { background: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.8); }
+#carrom .cm-dot.black { background: #222; border: 1px solid #777; }
+#carrom .cm-queen-status { margin-top: 6px; font-size: 14px; font-weight: 600; opacity: 0.9; }
+#carrom .cm-turn-badge { display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 4px; font-size: 13px; font-weight: 700; letter-spacing: 1.5px; }
+#carrom .cm-turn-badge.player { background: var(--green); color: var(--ink); box-shadow: 0 0 10px rgba(93,255,158,0.5); }
+#carrom .cm-turn-badge.ai { background: var(--gold); color: var(--ink); box-shadow: 0 0 10px rgba(255,211,107,0.5); }
+#carrom .cm-say { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); font-size: 21px; font-weight: 700; color: #ffe14d; text-shadow: 0 2px 8px rgba(0,0,0,0.9); white-space: nowrap; padding: 6px 16px; border-radius: 8px; background: rgba(11,13,20,0.78); backdrop-filter: blur(6px); border: 1px solid rgba(255,211,107,0.3); }
+#carrom .cm-meter-wrap { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); width: 340px; text-align: center; }
+#carrom .cm-meter { width: 100%; height: 16px; border-radius: 8px; background: rgba(11, 13, 20, 0.85); border: 2px solid rgba(255, 255, 255, 0.65); overflow: hidden; box-shadow: 0 0 14px rgba(0,0,0,0.6); }
+#carrom .cm-meter-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #38f3ff, #ffe14d, #ff5f6d); border-radius: 6px; transition: width 0.04s linear; }
+#carrom .cm-meter-label { font-size: 13px; font-weight: 700; letter-spacing: 2px; margin-top: 5px; opacity: 0.85; text-shadow: 0 1px 4px #000; }
+#carrom .cm-help { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: 92vw; padding: 6px 14px; border-radius: 8px; background: rgba(11, 13, 20, 0.75); font-size: 14px; font-weight: 600; text-align: center; border: 1px solid rgba(255,255,255,0.14); backdrop-filter: blur(6px); }
+#carrom .cm-modal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(480px, 92vw); padding: 26px 28px; border-radius: 14px; background: rgba(11, 13, 20, 0.94); border: 2px solid var(--gold); text-align: center; pointer-events: auto; box-shadow: 0 0 32px rgba(255,211,107,0.3); }
+#carrom .cm-mtitle { font: 40px 'Bebas Neue', sans-serif; letter-spacing: 2px; line-height: 1; }
+#carrom .cm-mtext { margin-top: 10px; font-size: 17px; line-height: 1.45; }
+#carrom .cm-buttons { margin-top: 20px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+#carrom .cm-buttons button { cursor: pointer; padding: 10px 20px; border: 0; border-radius: 8px; background: var(--cyan); color: var(--ink); font: 700 16px 'Rajdhani', sans-serif; letter-spacing: 1px; transition: all 0.15s ease; }
+#carrom .cm-buttons button:hover { background: #fff; transform: translateY(-1px); }
 @media (max-width: 640px) {
   #cricket .ck-bug { left: 12px; top: 12px; min-width: 0; }
   #cricket .ck-title { font-size: 52px; }
