@@ -338,6 +338,43 @@ export class AudioEngine {
     });
   }
 
+  /* ---------- Carrom Sounds ---------- */
+  carromClack(vol = 1) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime;
+    const v = Math.min(0.65, 0.15 + vol * 0.45);
+    // Sharp wooden disc impact transient
+    this.tone(1480, 0.035, 'triangle', v * 0.75, 720, 0);
+    this.tone(3200, 0.02, 'sine', v * 0.35, 1200, 0);
+    this.burst(t, { type: 'bandpass', freq: 2800, q: 3.5, vol: v * 0.6, dur: 0.035 });
+  }
+
+  carromBumper(vol = 1) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime;
+    const v = Math.min(0.55, 0.12 + vol * 0.38);
+    // Lower wooden cushion thud
+    this.tone(340, 0.05, 'triangle', v * 0.8, 120, 0);
+    this.burst(t, { type: 'lowpass', freq: 650, q: 1.2, vol: v * 0.5, dur: 0.045 });
+  }
+
+  carromPocket() {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime;
+    // Satisfying piece dropping into net pocket
+    this.tone(220, 0.08, 'sine', 0.35, 90, 0);
+    this.burst(t, { type: 'bandpass', freq: 480, q: 1.8, vol: 0.3, dur: 0.07 });
+  }
+
+  carromFlick(power = 1) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime;
+    const v = Math.min(0.5, 0.15 + power * 0.35);
+    // Finger snap/flick
+    this.tone(1800, 0.025, 'triangle', v * 0.6, 450, 0);
+    this.burst(t, { type: 'highpass', freq: 2400, q: 2.0, vol: v * 0.45, dur: 0.025 });
+  }
+
   /** The player's horn: a car horn, a bus's air horn, a bell on the rickshaw and tram, the train's horn. */
   horn(on, kind = null) {
     if (!this.ctx) return;
