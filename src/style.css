@@ -418,9 +418,9 @@ html, body {
   cursor: pointer;
 }
 #quality button.on { background: var(--cyan); color: #081018; border-color: var(--cyan); box-shadow: 0 0 16px rgba(56, 243, 255, 0.5); }
-.sound, .timeset { margin-top: 14px; display: flex; gap: 10px; justify-content: center; align-items: center; position: relative; z-index: 2; }
-.sound .ql, .timeset .ql { letter-spacing: 3px; font-size: 14px; opacity: 0.7; margin-right: 6px; }
-.sound button, .timeset button {
+.sound, .timeset, .festiveset { margin-top: 14px; display: flex; gap: 10px; justify-content: center; align-items: center; position: relative; z-index: 2; }
+.sound .ql, .timeset .ql, .festiveset .ql { letter-spacing: 3px; font-size: 14px; opacity: 0.7; margin-right: 6px; }
+.sound button, .timeset button, .festiveset button {
   font-family: 'Rajdhani', sans-serif;
   font-weight: 700;
   font-size: 15px;
@@ -431,8 +431,10 @@ html, body {
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 4px;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 .sound button.on, .timeset button.on { background: var(--cyan); color: #081018; border-color: var(--cyan); box-shadow: 0 0 16px rgba(56, 243, 255, 0.5); }
+.festiveset button.on { background: var(--gold); color: #14110d; border-color: var(--gold); box-shadow: 0 0 18px rgba(255, 211, 107, 0.6); }
 .gh-link {
   margin-top: 14px;
   display: inline-flex;

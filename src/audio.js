@@ -48,6 +48,7 @@ export class AudioEngine {
     this.stepT = 0;
     this.hornWas = false;
     this.amb = { hornT: 3, crowT: 8, modT: 0 };
+    this.initDhak();
   }
 
   init() {
@@ -153,6 +154,7 @@ export class AudioEngine {
     this.rainPatter = this.loopNoise('bandpass', 520, 0.6);
 
     this.initRadio();
+    this.initDhak();
   }
 
   loopNoise(type, freq, q) {
@@ -802,6 +804,110 @@ export class AudioEngine {
       for (const m of chord.slice(1, 4)) {
         this.note(m + 12, t, this.stepDur * 0.75, 'sawtooth', 0.045, 2200, true);
       }
+    }
+  }
+
+  /* ---------- Durga Puja Dhak Drum Rhythm ---------- */
+  initDhak() {
+    this.dhakStep = 0;
+    this.dhakCycle = 0;
+    this.dhakNextT = 0;
+    this.dhakVol = 0;
+  }
+
+  dhakStroke(t, stroke, vol) {
+    if (!this.ctx || vol <= 0.001) return;
+    const now = this.ctx.currentTime;
+    const delay = Math.max(0, t - now);
+    const v = Math.min(0.65, vol);
+
+    if (stroke === 'dha') {
+      // Primary open hit: resonant skin drop with cane stick crack
+      this.tone(152, 0.28, 'triangle', v * 0.85, 84, delay);
+      this.tone(76, 0.32, 'sine', v * 0.5, 48, delay);
+      this.burst(t, { type: 'bandpass', freq: 2200, q: 2.0, vol: v * 0.45, dur: 0.04 });
+    } else if (stroke === 'kur') {
+      // Snappy cane-stick rim click
+      this.tone(480, 0.035, 'sine', v * 0.25, 360, delay);
+      this.burst(t, { type: 'highpass', freq: 3400, q: 1.8, vol: v * 0.38, dur: 0.035 });
+    } else if (stroke === 'ta') {
+      // Crisp damped slap on secondary skin
+      this.tone(250, 0.08, 'triangle', v * 0.65, 135, delay);
+      this.burst(t, { type: 'bandpass', freq: 1850, q: 1.4, vol: v * 0.5, dur: 0.05 });
+    } else if (stroke === 'kashor') {
+      // High brass bell / gong accompaniment (কাঁসর ঘণ্টা)
+      this.tone(2840, 0.45, 'sine', v * 0.16, null, delay);
+      this.tone(4260, 0.35, 'sine', v * 0.1, null, delay);
+    }
+  }
+
+  updateDhak(dt, dist, enabled) {
+    if (!this.ctx) return;
+    if (!enabled || this.muted || !this.radioOn) {
+      this.dhakVol = 0;
+      return;
+    }
+
+    // Louder near Howrah Bridge / Park Street, quieter elsewhere
+    const targetVol = dist < 180 ? 0.42 : dist < 850 ? lerp(0.42, 0.08, (dist - 180) / 670) : 0.05;
+    this.dhakVol = damp(this.dhakVol || 0, targetVol, 4, dt);
+    if (this.dhakVol < 0.005) return;
+
+    const t = this.ctx.currentTime;
+    if (!this.dhakNextT || this.dhakNextT < t) this.dhakNextT = t + 0.05;
+
+    const stepDur = 60 / 134 / 4; // ~134 BPM 16th note (~0.112s)
+    while (this.dhakNextT < t + 0.18) {
+      const s = this.dhakStep;
+      const bar = this.dhakCycle % 4;
+      const flourish = bar === 3;
+      const hitT = this.dhakNextT + (Math.random() - 0.5) * 0.008; // subtle micro-jitter for organic hand feel
+      const hitV = this.dhakVol * (0.88 + Math.random() * 0.24);
+
+      if (!flourish) {
+        // Classic "Dha - kur-kur - ta - Dha" Durga Puja rhythm
+        if (s === 0) {
+          this.dhakStroke(hitT, 'dha', hitV * 1.1);
+          this.dhakStroke(hitT, 'kashor', hitV);
+        } else if (s === 2) {
+          this.dhakStroke(hitT, 'ta', hitV * 0.6);
+        } else if (s === 4 || s === 5) {
+          this.dhakStroke(hitT, 'kur', hitV * 0.7);
+        } else if (s === 6) {
+          this.dhakStroke(hitT, 'ta', hitV * 0.9);
+        } else if (s === 8) {
+          this.dhakStroke(hitT, 'dha', hitV * 1.05);
+          this.dhakStroke(hitT, 'kashor', hitV);
+        } else if (s === 10) {
+          this.dhakStroke(hitT, 'ta', hitV * 0.6);
+        } else if (s === 12 || s === 13) {
+          this.dhakStroke(hitT, 'kur', hitV * 0.7);
+        } else if (s === 14) {
+          this.dhakStroke(hitT, 'ta', hitV * 0.95);
+        }
+      } else {
+        // 4th bar festive roll flourish (kuru-kuru-kuru-kuru dha-dha!)
+        if (s === 0) {
+          this.dhakStroke(hitT, 'dha', hitV * 1.15);
+          this.dhakStroke(hitT, 'kashor', hitV * 1.2);
+        } else if (s === 2) {
+          this.dhakStroke(hitT, 'ta', hitV * 0.75);
+        } else if (s >= 4 && s <= 7) {
+          this.dhakStroke(hitT, 'kur', hitV * (0.7 + (s - 4) * 0.1));
+        } else if (s === 8) {
+          this.dhakStroke(hitT, 'dha', hitV * 1.1);
+          this.dhakStroke(hitT, 'kashor', hitV);
+        } else if (s === 10 || s === 11) {
+          this.dhakStroke(hitT, 'kur', hitV * 0.85);
+        } else if (s === 12 || s === 14) {
+          this.dhakStroke(hitT, 'dha', hitV * 1.1);
+          if (s === 14) this.dhakStroke(hitT, 'kashor', hitV * 1.2);
+        }
+      }
+
+      this.dhakStep = (this.dhakStep + 1) % 16;
+      if (this.dhakStep === 0) this.dhakCycle++;
+      this.dhakNextT += stepDur;
     }
   }
 }
