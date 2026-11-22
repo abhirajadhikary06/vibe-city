@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Character } from './character.js';
 import { LINES, pick } from './lines.js';
-import { MAP, Poly, offsetLine, routeLength } from './geo.js';
+import { MAP, Poly, offsetLine, smoothPolyline, routeLength } from './geo.js';
 import { inTiles } from './world.js';
 import { routePlan, nearestLink, planPath, busHeading } from './busroutes.js';
 import { railSeats } from './interiors.js';
@@ -256,13 +256,14 @@ export class Rides {
     }, 1200);
   }
 
-  /** Drive along a street route, keeping to the left lane. */
+  /** Drive along a street route, keeping to the left lane with smoothly filleted turns. */
   follow(pts) {
     const r = this.ride;
     const flat = pts.flat();
     // a lane to the left of the centre line (India keeps left), except on the rickshaw's lanes
     const lane = r.kind === 'rickshaw' ? 2.4 : r.kind === 'bus' ? 2.6 : 2.0;
-    const path = new Poly(offsetLine(flat, lane));
+    const maxFillet = r.kind === 'rickshaw' ? 4.5 : r.kind === 'bus' ? 9.0 : 7.5;
+    const path = new Poly(smoothPolyline(offsetLine(flat, lane), maxFillet));
     r.path = path;
     r.s = path.project(r.v.pos.x, r.v.pos.z).s;
     r.nextStop = r.kind === 'bus' ? r.s + 420 : Infinity;
@@ -584,7 +585,8 @@ export class Rides {
     const look = clamp(r.speed * 1.8, 8, 30);
     P.at(Math.min(P.len, r.s + look), q);
     const turn = 1 - (ax * q.tx + az * q.tz);
-    vmax = Math.min(vmax, 3.5 + (1 - clamp(turn * 1.6, 0, 1)) * (vmax - 3.5));
+    const minCorner = r.kind === 'rickshaw' ? 2.0 : r.kind === 'bus' ? 2.8 : r.kind === 'auto' ? 3.2 : 3.6;
+    vmax = Math.min(vmax, minCorner + (1 - clamp(turn * 1.6, 0, 1)) * (vmax - minCorner));
     // stop at the end, or where asked, or at the next bus stop
     const left = P.len - r.s;
     if (r.state === 'stopping') vmax = Math.min(vmax, Math.max(0, r.speed - 6 * dt));
@@ -693,7 +695,7 @@ export class Rides {
       v.pos.z = q.z;
       const yaw = Math.atan2(q.tx, q.tz);
       const prev = v.yaw;
-      v.yaw = dampAngle(v.yaw, yaw, 8, dt);
+      v.yaw = dampAngle(v.yaw, yaw, 10, dt);
       v.steer = clamp(-((v.yaw - prev) / Math.max(dt, 1e-3)) * 0.25, -0.5, 0.5);
     }
     v.pos.y = damp(v.pos.y, this.world.groundAt(v.pos.x, v.pos.z, v.pos.y), 12, dt);
